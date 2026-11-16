@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { version } from '$app/env';
   import { goto } from '$app/navigation';
-  import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from 'maplibre-gl';
+  import type { ExpressionSpecification, GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from 'maplibre-gl';
   import 'maplibre-gl/dist/maplibre-gl.css';
   import { conditions } from '#lib/conditions.svelte.ts';
   import { settings } from '#lib/settings.svelte.ts';
@@ -11,7 +11,7 @@
   import PlaceSearch from '#lib/components/PlaceSearch.svelte';
   import SkyTimeline, { type KeyMark } from '#lib/components/SkyTimeline.svelte';
   import { page } from '$app/state';
-  import { skyPositions, sunTimes } from '#lib/sun.ts';
+  import { moonTimes, skyPositions, sunTimes } from '#lib/sun.ts';
   import { londonMidnight } from '#lib/time.ts';
   import type { StartPoint } from '#lib/settings.svelte.ts';
   import ResultsList, { type Pick } from '#lib/components/ResultsList.svelte';
@@ -96,11 +96,37 @@
     const n = Number(page.url.searchParams.get('hill'));
     return (n && ranking.hillsByNumber.get(n)) || best;
   });
+  /** Where the sun and moon lines start: a pin you drag, else the selected hill. */
+  let pin = $state<{ lat: number; lon: number; name: string } | null>(null);
+  // Selecting another hill brings the pin back to it.
+  $effect(() => {
+    void page.url.searchParams.get('hill');
+    pin = null;
+  });
   const skyPlace = $derived(
-    selectedHill
-      ? { lat: selectedHill.hill.lat, lon: selectedHill.hill.lon, name: selectedHill.hill.name }
-      : { lat: 56.8, lon: -4.2, name: 'the Highlands' },
+    pin ??
+      (selectedHill
+        ? { lat: selectedHill.hill.lat, lon: selectedHill.hill.lon, name: selectedHill.hill.name }
+        : { lat: 56.8, lon: -4.2, name: 'the Highlands' }),
   );
+  let mapZoom = $state(6);
+  let pinMarker: import('maplibre-gl').Marker | null = null;
+
+  /** Name a dropped pin after the nearest hill within 3 km, if there is one. */
+  function pinName(lat: number, lon: number): string {
+    let bestName: string | null = null;
+    let bestD = 3;
+    for (const h of conditions.data?.hills ?? []) {
+      const dLat = (h.lat - lat) * 111;
+      const dLon = (h.lon - lon) * 111 * Math.cos((lat * Math.PI) / 180);
+      const d = Math.hypot(dLat, dLon);
+      if (d < bestD) {
+        bestD = d;
+        bestName = h.name;
+      }
+    }
+    return bestName ? `the pin near ${bestName}` : 'the pin';
+  }
   const skyDayStart = $derived(londonMidnight(settings.dayOffset, conditions.now));
   const skySun = $derived(sunTimes(skyPlace.lat, skyPlace.lon, settings.dayOffset, conditions.now));
   const keyTimeOf = (r: { byModel: { model: string; keyHour: { time: number } | null }[]; referenceModel: string | null }) =>
@@ -120,32 +146,53 @@
     skyTime = t && t >= start && t <= start + 86_400_000 ? t : (skySun.sunrise ?? start + 8 * 3_600_000);
   });
 
-  /** Sun and moon bearing lines from the place, about 25 km long. */
-  function rays(lat: number, lon: number, time: number) {
-    const p = skyPositions(time, lat, lon);
+  /**
+   * Bearing lines from the pin: where the sun and moon rise and set today, and where they
+   * are at the timeline's time. Drawn about 170 px long whatever the zoom.
+   */
+  function rays(lat: number, lon: number, time: number, zoom: number) {
+    const metresPerPixel = (40_075_016.686 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
+    const km = (170 * metresPerPixel) / 1000;
     const R = 6371;
-    const line = (az: number, km: number) => {
+    const end = (az: number, scale = 1) => {
       const b = (az * Math.PI) / 180;
-      const d = km / R;
+      const d = (km * scale) / R;
       const φ1 = (lat * Math.PI) / 180;
       const λ1 = (lon * Math.PI) / 180;
       const φ2 = Math.asin(Math.sin(φ1) * Math.cos(d) + Math.cos(φ1) * Math.sin(d) * Math.cos(b));
       const λ2 = λ1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(φ1), Math.cos(d) - Math.sin(φ1) * Math.sin(φ2));
-      return [
-        [lon, lat],
-        [(λ2 * 180) / Math.PI, (φ2 * 180) / Math.PI],
-      ];
+      return [(λ2 * 180) / Math.PI, (φ2 * 180) / Math.PI];
     };
+    const sun = sunTimes(lat, lon, settings.dayOffset, conditions.now);
+    const moon = moonTimes(lat, lon, skyDayStart);
+    const now = skyPositions(time, lat, lon);
+    const at = (t: number) => skyPositions(t, lat, lon);
+    const lines: { kind: string; label: string; az: number; up: boolean }[] = [];
+    if (moon.rise) lines.push({ kind: 'moonrise', label: `Moonrise ${formatTime(moon.rise)}`, az: at(moon.rise).moon.azDeg, up: true });
+    if (moon.set) lines.push({ kind: 'moonset', label: `Moonset ${formatTime(moon.set)}`, az: at(moon.set).moon.azDeg, up: true });
+    if (sun.sunrise) lines.push({ kind: 'sunrise', label: `Sunrise ${formatTime(sun.sunrise)}`, az: at(sun.sunrise).sun.azDeg, up: true });
+    if (sun.sunset) lines.push({ kind: 'sunset', label: `Sunset ${formatTime(sun.sunset)}`, az: at(sun.sunset).sun.azDeg, up: true });
+    lines.push({ kind: 'moon', label: `Moon ${formatTime(time)}`, az: now.moon.azDeg, up: now.moon.altDeg >= 0 });
+    lines.push({ kind: 'sun', label: `Sun ${formatTime(time)}`, az: now.sun.azDeg, up: now.sun.altDeg >= 0 });
     return {
       type: 'FeatureCollection' as const,
-      features: [
-        { body: 'moon', ...p.moon },
-        { body: 'sun', ...p.sun },
-      ].map((b) => ({
-        type: 'Feature' as const,
-        geometry: { type: 'LineString' as const, coordinates: line(b.azDeg, 25) },
-        properties: { body: b.body, up: b.altDeg >= 0 ? 1 : 0 },
-      })),
+      features: lines.flatMap((l) => {
+        // Current positions reach a little further, so their labels clear the others.
+        const scale = l.kind === 'sun' || l.kind === 'moon' ? 1.15 : 1;
+        const props = { kind: l.kind, label: l.label, up: l.up ? 1 : 0 };
+        return [
+          {
+            type: 'Feature' as const,
+            geometry: { type: 'LineString' as const, coordinates: [[lon, lat], end(l.az, scale)] },
+            properties: props,
+          },
+          {
+            type: 'Feature' as const,
+            geometry: { type: 'Point' as const, coordinates: end(l.az, scale) },
+            properties: props,
+          },
+        ];
+      }),
     };
   }
 
@@ -235,16 +282,37 @@
         m.addSource('start', { type: 'geojson', data: empty });
         m.addSource('found', { type: 'geojson', data: empty });
         m.addSource('rays', { type: 'geojson', data: empty });
+        const RAY_COLOUR = [
+          'match', ['get', 'kind'],
+          'sunrise', '#e3a22e',
+          'sunset', '#c4502a',
+          'sun', '#d9a13b',
+          'moonrise', '#7f8fa3',
+          'moonset', '#46546a',
+          '#6d7a88',
+        ] as unknown as string;
+        const isNow: ExpressionSpecification = ['in', ['get', 'kind'], ['literal', ['sun', 'moon']]];
+        // Rise and set: solid lines, fixed for the day.
         m.addLayer({
-          id: 'rays',
+          id: 'rays-day',
           type: 'line',
           source: 'rays',
+          filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', isNow]],
+          layout: { 'line-cap': 'round' },
+          paint: { 'line-color': RAY_COLOUR, 'line-width': 2.5, 'line-opacity': 0.9 },
+        });
+        // Now, from the timeline: thicker and dashed; faint when below the horizon.
+        m.addLayer({
+          id: 'rays-now',
+          type: 'line',
+          source: 'rays',
+          filter: ['all', ['==', ['geometry-type'], 'LineString'], isNow],
           layout: { 'line-cap': 'round' },
           paint: {
-            'line-color': ['match', ['get', 'body'], 'sun', '#d9a13b', '#6d7a88'],
-            'line-width': ['match', ['get', 'body'], 'sun', 3, 2],
-            'line-opacity': ['case', ['==', ['get', 'up'], 1], 0.95, 0.35],
-            'line-dasharray': [2, 1.5],
+            'line-color': RAY_COLOUR,
+            'line-width': 4,
+            'line-opacity': ['case', ['==', ['get', 'up'], 1], 1, 0.35],
+            'line-dasharray': [1.6, 1.2],
           },
         });
         m.addLayer({
@@ -325,6 +393,46 @@
         } catch (e) {
           console.warn('Hill labels unavailable', e);
         }
+        try {
+          m.addLayer({
+            id: 'ray-labels',
+            type: 'symbol',
+            source: 'rays',
+            filter: ['==', ['geometry-type'], 'Point'],
+            layout: {
+              'text-field': ['get', 'label'],
+              'text-font': ['Noto Sans Regular'],
+              'text-size': 12,
+              'text-offset': [0, -0.9],
+              'text-allow-overlap': true,
+            },
+            paint: { 'text-color': RAY_COLOUR, 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 },
+          });
+        } catch (e) {
+          console.warn('Sun and moon labels unavailable', e);
+        }
+
+        // The pin the lines start from: drag it anywhere.
+        const el = document.createElement('div');
+        el.className = 'sky-pin';
+        el.title = 'Drag to see the sun and moon from here';
+        el.innerHTML =
+          '<svg viewBox="0 0 24 32" width="24" height="32" aria-hidden="true"><path d="M12 1C6 1 1.5 5.5 1.5 11.2 1.5 19 12 31 12 31s10.5-12 10.5-19.8C22.5 5.5 18 1 12 1z" fill="#1b2731" stroke="#fff" stroke-width="1.5"/><circle cx="12" cy="11" r="4.2" fill="#d9a13b"/></svg>';
+        pinMarker = new maplibre.Marker({ element: el, draggable: true, anchor: 'bottom' })
+          .setLngLat([skyPlace.lon, skyPlace.lat]);
+        const onDrag = () => {
+          const ll = pinMarker!.getLngLat();
+          pin = { lat: Math.round(ll.lat * 1e4) / 1e4, lon: Math.round(ll.lng * 1e4) / 1e4, name: 'the pin' };
+        };
+        pinMarker.on('dragstart', () => (pinDragging = true));
+        pinMarker.on('drag', onDrag);
+        pinMarker.on('dragend', () => {
+          pinDragging = false;
+          onDrag();
+          pin = { ...pin!, name: pinName(pin!.lat, pin!.lon) };
+        });
+        mapZoom = m.getZoom();
+        m.on('zoom', () => (mapZoom = m.getZoom()));
         m.on('click', 'targets', (e) => {
           if (picking) return;
           const f = e.features?.[0];
@@ -369,8 +477,28 @@
   });
 
   $effect(() => {
-    const data = skyOpen ? rays(skyPlace.lat, skyPlace.lon, skyTime) : empty;
+    const data = skyOpen ? rays(skyPlace.lat, skyPlace.lon, skyTime, mapZoom) : empty;
     if (map && loaded) setSource('rays', data);
+  });
+
+  // Keep the pin on the place, and only on the map while the timeline is open. Re-adding
+  // the marker mid-drag would cut the drag short, so it's added once and left alone then.
+  let pinDragging = false;
+  let pinOnMap = false;
+  $effect(() => {
+    const p = skyPlace;
+    const open = skyOpen;
+    if (!map || !loaded || !pinMarker) return;
+    if (!open) {
+      if (pinOnMap) pinMarker.remove();
+      pinOnMap = false;
+      return;
+    }
+    if (!pinDragging) pinMarker.setLngLat([p.lon, p.lat]);
+    if (!pinOnMap) {
+      pinMarker.addTo(map);
+      pinOnMap = true;
+    }
   });
 
   $effect(() => {
@@ -450,7 +578,7 @@
       <span aria-hidden="true"><i style="background: var(--maybe)"></i>Maybe</span>
       <span aria-hidden="true"><i style="background: var(--no)"></i>No</span>
       {#if settings.start}<span aria-hidden="true"><i class="start-dot"></i>Start</span>{/if}
-      {#if skyOpen}<span aria-hidden="true"><i class="ray sun"></i>Sun</span><span aria-hidden="true"><i class="ray moon"></i>Moon</span>{/if}
+      {#if skyOpen}<span class="muted">Drag the pin to move the sun and moon lines</span>{/if}
       <button class="link" onclick={() => (skyOpen = !skyOpen)} aria-pressed={skyOpen}>
         {skyOpen ? 'Hide sun and moon' : 'Sun and moon'}
       </button>
@@ -667,15 +795,12 @@
   .bottom.with-panel {
     right: 414px;
   }
-  .legend .ray {
-    width: 14px;
-    height: 0;
-    border-radius: 0;
-    border-top: 3px dashed #d9a13b;
-    vertical-align: 3px;
+  .map-page :global(.sky-pin) {
+    cursor: grab;
+    filter: drop-shadow(0 2px 3px rgb(20 29 36 / 0.35));
   }
-  .legend .ray.moon {
-    border-top: 2px dashed #6d7a88;
+  .map-page :global(.sky-pin:active) {
+    cursor: grabbing;
   }
   .legend {
     display: flex;
