@@ -9,3 +9,4 @@ data/generated
 .env
 *.tsbuildinfo
 coverage
+docs/

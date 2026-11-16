@@ -124,13 +124,25 @@ export function periodWindow(
   }
 }
 
-/** What to be in place for. */
-export type Moment = 'blue' | 'golden' | 'sun';
+/**
+ * What to be in place for. Blue and golden hour apply to mornings and evenings alike;
+ * sunrise means morning conditions only, sunset evening ones only.
+ */
+export type Moment = 'blue' | 'golden' | 'sunrise' | 'sunset';
 
-export const MOMENT_LABELS: Record<Light, Record<Moment, string>> = {
-  sunrise: { blue: 'Blue hour', golden: 'Golden hour', sun: 'Sunrise' },
-  sunset: { blue: 'Blue hour', golden: 'Golden hour', sun: 'Sunset' },
+export const MOMENT_LABELS: Record<Moment, string> = {
+  blue: 'Blue hour',
+  golden: 'Golden hour',
+  sunrise: 'Sunrise',
+  sunset: 'Sunset',
 };
+
+/** Whether a part of the day fits the chosen moment. */
+export function periodFitsMoment(period: Period, moment: Moment): boolean {
+  if (moment === 'sunrise') return period !== 'evening';
+  if (moment === 'sunset') return period !== 'morning';
+  return true;
+}
 
 /**
  * The instant to be in place. Morning: blue hour begins at civil dawn, golden hour at
@@ -150,13 +162,17 @@ export function targetTime(
     return { at: keyHour ?? window.start, label: 'the best hour' };
   }
   const l: Light = period === 'morning' ? 'sunrise' : 'sunset';
+  // Sunrise and sunset each only reach this far for their own part of the day.
+  const key = moment === 'sunrise' || moment === 'sunset' ? 'sun' : moment;
   const pick =
     l === 'sunrise'
-      ? { blue: sun.civilDawn, golden: sun.goldenStart, sun: sun.sunrise }[moment]
-      : { blue: sun.eveningBlueStart, golden: sun.eveningGoldenStart, sun: sun.sunset }[moment];
+      ? { blue: sun.civilDawn, golden: sun.goldenStart, sun: sun.sunrise }[key]
+      : { blue: sun.eveningBlueStart, golden: sun.eveningGoldenStart, sun: sun.sunset }[key];
   const fallback = l === 'sunrise' ? sun.sunrise : sun.sunset;
   const at = pick ?? fallback ?? window.start;
-  return { at, label: MOMENT_LABELS[l][moment].toLowerCase() };
+  const label =
+    key === 'sun' ? (l === 'sunrise' ? 'sunrise' : 'sunset') : MOMENT_LABELS[key].toLowerCase();
+  return { at, label };
 }
 
 export interface BodyPosition {

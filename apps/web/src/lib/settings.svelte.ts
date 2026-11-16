@@ -92,6 +92,8 @@ function load(): Settings {
     delete raw.light;
     // The drive limit was in minutes; it's in miles now.
     delete raw.maxDriveMinutes;
+    // "Sunrise or sunset" was one choice; it's two now.
+    if ((raw.moment as string) === 'sun') raw.moment = 'golden';
     return { ...DEFAULT_SETTINGS, ...raw };
   } catch {
     return { ...DEFAULT_SETTINGS };

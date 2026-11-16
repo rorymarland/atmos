@@ -14,7 +14,7 @@
   import { page } from '$app/state';
   import { moonTimes, skyPositions, sunTimes } from '#lib/sun.ts';
   import { londonMidnight } from '#lib/time.ts';
-  import type { StartPoint } from '#lib/settings.svelte.ts';
+  import { filtersChanged, resetFilters, type StartPoint } from '#lib/settings.svelte.ts';
   import { loadSearchHills } from '#lib/static-data.ts';
   import type { Hill } from '@atmos/engine';
   import ResultsList, { type Pick } from '#lib/components/ResultsList.svelte';
@@ -96,6 +96,17 @@
 
   const hillOpen = $derived(page.url.searchParams.has('hill'));
 
+  /** Reset the search and close any open hill. */
+  function resetAll() {
+    resetFilters();
+    pin = null;
+    if (hillOpen) {
+      const url = new URL(page.url.href);
+      url.searchParams.delete('hill');
+      goto(url, { replace: true, reset: false });
+    }
+  }
+
   // A link or reload straight to a hill that isn't on the lists: find it in the search data.
   $effect(() => {
     const n = Number(page.url.searchParams.get('hill'));
@@ -174,7 +185,7 @@
    * are at the timeline's time. The lines run off the edge of the map; each label sits a
    * set distance along its line, so they stay put and readable at any zoom.
    */
-  function rays(lat: number, lon: number, time: number, zoom: number) {
+  function rays(lat: number, lon: number, time: number, zoom: number, withNow = true) {
     const metresPerPixel = (40_075_016.686 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
     const km = (pixels: number) => Math.min(800, (pixels * metresPerPixel) / 1000);
     const R = 6371;
@@ -196,8 +207,11 @@
     if (moon.set) lines.push({ kind: 'moonset', label: `Moonset ${formatTime(moon.set)}`, az: at(moon.set).moon.azDeg, up: true });
     if (sun.sunrise) lines.push({ kind: 'sunrise', label: `Sunrise ${formatTime(sun.sunrise)}`, az: at(sun.sunrise).sun.azDeg, up: true });
     if (sun.sunset) lines.push({ kind: 'sunset', label: `Sunset ${formatTime(sun.sunset)}`, az: at(sun.sunset).sun.azDeg, up: true });
-    lines.push({ kind: 'moon', label: `Moon ${formatTime(time)}`, az: now.moon.azDeg, up: now.moon.altDeg >= 0 });
-    lines.push({ kind: 'sun', label: `Sun ${formatTime(time)}`, az: now.sun.azDeg, up: now.sun.altDeg >= 0 });
+    // The current sun and moon follow the timeline, so they only show while it's open.
+    if (withNow) {
+      lines.push({ kind: 'moon', label: `Moon ${formatTime(time)}`, az: now.moon.azDeg, up: now.moon.altDeg >= 0 });
+      lines.push({ kind: 'sun', label: `Sun ${formatTime(time)}`, az: now.sun.azDeg, up: now.sun.altDeg >= 0 });
+    }
     return {
       type: 'FeatureCollection' as const,
       features: lines.flatMap((l) => {
@@ -541,7 +555,9 @@
   });
 
   $effect(() => {
-    const data = skyOpen ? rays(skyPlace.lat, skyPlace.lon, skyTime, mapZoom) : empty;
+    // Rise and set lines stay with the pin whenever it shows; the current ones need the timeline.
+    const pinShown = skyOpen || hillOpen || pin !== null;
+    const data = pinShown ? rays(skyPlace.lat, skyPlace.lon, skyTime, mapZoom, skyOpen) : empty;
     if (map && loaded) setSource('rays', data);
   });
 
@@ -655,7 +671,15 @@
     <aside class="panel" aria-label="Where to go">
       <header class="panel-head">
         <h1>{hillOpen ? 'Hill' : 'Where to go'}</h1>
-        <button class="hide" onclick={() => (panelOpen = false)} aria-label="Hide the panel">Hide</button>
+        <div class="head-buttons">
+          <button
+            class="hide"
+            onclick={resetAll}
+            disabled={!filtersChanged() && !hillOpen}
+            title="Put the search back to its defaults and close any open hill. Home and start point stay."
+          >Reset filters</button>
+          <button class="hide" onclick={() => (panelOpen = false)} aria-label="Hide the panel">Hide</button>
+        </div>
       </header>
       <div class="panel-body">
         {#if hillOpen}
@@ -763,6 +787,14 @@
   .panel-head h1 {
     font-size: 1.25rem;
     font-stretch: 75%;
+  }
+  .head-buttons {
+    display: flex;
+    gap: 6px;
+  }
+  .hide:disabled {
+    opacity: 0.45;
+    cursor: default;
   }
   .hide {
     border: 1px solid var(--line);

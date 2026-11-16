@@ -1,10 +1,8 @@
 <script lang="ts">
   /** Day, what to look for and when; the trip plan (start, moment, limits); hill filters. */
   import { NATION_LABELS, type Nation } from '@atmos/engine';
-  import { goto } from '$app/navigation';
-  import { page } from '$app/state';
   import { conditions } from '#lib/conditions.svelte.ts';
-  import { filtersChanged, resetFilters, settings } from '#lib/settings.svelte.ts';
+  import { settings } from '#lib/settings.svelte.ts';
   import { MOMENT_LABELS, PERIOD_LABELS, type Moment, type Period } from '#lib/sun.ts';
   import { dayLabel } from '#lib/time.ts';
 
@@ -29,11 +27,10 @@
   const ticked = $derived(conditions.ticked);
   const days = [0, 1, 2, 3, 4];
   const lists = $derived(conditions.data?.lists ?? []);
-  const moments: Moment[] = ['blue', 'golden', 'sun'];
+  const moments: Moment[] = ['blue', 'golden', 'sunrise', 'sunset'];
   const upTimes = ['03:00', '03:30', '04:00', '04:30', '05:00', '05:30', '06:00', '06:30', '07:00', '08:00', '09:00'];
   const driveMiles = [10, 20, 30, 50, 75, 100, 150, 200, 300];
   const lightPeriods = $derived(settings.periods.filter((p) => p === 'morning' || p === 'evening'));
-  const changed = $derived(filtersChanged());
 
   const atHome = $derived(
     Boolean(settings.home && settings.start && settings.home.lat === settings.start.lat && settings.home.lon === settings.start.lon),
@@ -51,7 +48,7 @@
       n === 0 ? 'nothing ticked' : n === 1 ? conditions.label([...ticked][0]!).toLowerCase() : `${n} conditions`;
     const where = settings.countries.length ? ` in ${settings.countries.map((c) => NATION_LABELS[c]).join(' or ')}` : '';
     const parts = [`${day}${when}${where}, ${what}`];
-    if (lightPeriods.length) parts.push(`there for ${MOMENT_LABELS.sunrise[settings.moment].toLowerCase()}`);
+    if (lightPeriods.length) parts.push(`there for ${MOMENT_LABELS[settings.moment].toLowerCase()}`);
     if (settings.start && settings.earliestUp) parts.push(`up no earlier than ${settings.earliestUp}`);
     if (settings.start && settings.maxDriveMiles) parts.push(`within ${settings.maxDriveMiles} miles’ drive`);
     if (settings.start) parts.push(`from ${atHome ? 'home' : settings.start.label}`);
@@ -87,16 +84,6 @@
     const next = has ? settings.countries.filter((x) => x !== n) : [...settings.countries, n];
     // All four ticked is the same as the whole UK.
     settings.countries = next.length === NATIONS.length ? [] : next;
-  }
-
-  /** Reset the search and close any open hill. */
-  function resetAll() {
-    resetFilters();
-    if (page.url.searchParams.has('hill')) {
-      const url = new URL(page.url.href);
-      url.searchParams.delete('hill');
-      goto(url, { replace: true, reset: false });
-    }
   }
 
   function toggleCondition(id: string) {
@@ -154,9 +141,7 @@
 <div class="controls">
   <div class="summary-row">
     <p class="summary">{summary}</p>
-    <button class="reset" onclick={resetAll} disabled={!changed} title="Put the search back to its defaults. Home and start point stay.">
-      Reset filters
-    </button>
+
   </div>
 
   <div class="chips wrap" role="group" aria-label="Day">
@@ -176,6 +161,7 @@
 
   <details class="look" bind:open={lookOpen}>
     <summary>Look for <span class="small muted">{ticked.size} ticked, {settings.periods.length === 4 ? 'any time' : settings.periods.map((p) => PERIOD_LABELS[p].toLowerCase()).join(', ')}</span></summary>
+    <div class="section-body">
     <div class="quick small">
       <button class="link" onclick={() => setAll(true)}>All photo conditions</button>
       <button class="link" onclick={() => setAll(false)}>None</button>
@@ -204,10 +190,12 @@
         {/each}
       </div>
     </div>
+  </div>
   </details>
 
 <details class="plan" bind:open={tripOpen}>
     <summary>Your trip <span class="small muted">{settings.start ? `from ${atHome ? 'home' : settings.start.label}` : 'no start point'}</span></summary>
+    <div class="section-body">
 
     <div class="row">
       <span class="label">From</span>
@@ -233,7 +221,7 @@
         <div class="chips" role="group" aria-label="At dawn and dusk, be there for">
           {#each moments as m (m)}
             <button class="chip" aria-pressed={settings.moment === m} onclick={() => (settings.moment = m)}>
-              {m === 'sun' ? (lightPeriods.length === 2 ? 'Sunrise or sunset' : lightPeriods[0] === 'morning' ? 'Sunrise' : 'Sunset') : MOMENT_LABELS.sunrise[m]}
+              {MOMENT_LABELS[m]}
             </button>
           {/each}
         </div>
@@ -255,6 +243,7 @@
         {#each driveMiles as d (d)}<option value={d}>{d} miles</option>{/each}
       </select>
     </label>
+  </div>
   </details>
 
   <details class="filters">
@@ -292,19 +281,6 @@
     gap: 10px;
     align-items: flex-start;
     justify-content: space-between;
-  }
-  .reset {
-    flex: none;
-    border: 1px solid var(--line);
-    background: var(--surface);
-    border-radius: 6px;
-    padding: 3px 9px;
-    font-size: 0.8rem;
-    color: var(--ink);
-  }
-  .reset:disabled {
-    opacity: 0.45;
-    cursor: default;
   }
   .look {
     margin: 0;
@@ -358,6 +334,12 @@
     background: var(--surface);
     display: grid;
     gap: 7px;
+  }
+  /* Safari ignores display: grid on <details>, so the spacing lives on an inner box. */
+  .section-body {
+    display: grid;
+    gap: 10px;
+    padding-top: 8px;
   }
   .look > summary,
   .plan > summary {

@@ -1,46 +1,67 @@
-# Atmos
+<p align="center">
+  <img src="docs/logo.svg" alt="Atmos logo" width="96" height="96">
+</p>
 
-**Atmos. Find the conditions. Capture the moment.**
+<h1 align="center">Atmos</h1>
 
-Atmos ranks UK regions, hills and personal photo spots for the next five days against a chosen
-profile: hill walking, cloud inversion, golden-hour sky, still reflections, valley mist, astro/aurora
-or snow on the tops. Every verdict (GO / MAYBE / NO) comes with the reasons behind it and how far the
-weather models agree.
+<p align="center"><strong>Find the conditions. Capture the moment.</strong></p>
 
-It is a fully static web app: the browser fetches forecasts directly from free public APIs, and the
-host only serves files. It runs as an nginx container on a home NAS and could later sit on any free
-static host.
+<p align="center">
+  Where to go in the UK for landscape photography and hill walking over the next five days,<br>
+  when to leave, and why.
+</p>
+
+<p align="center">
+  <img src="docs/images/overview.png" alt="The Atmos map with the search panel, the best bet ringed, sun and moon lines from the pin, and the timeline" width="900">
+</p>
 
 > **A guide, not a safety service.** Always check the [Met Office mountain forecast](https://www.metoffice.gov.uk/weather/specialist-forecasts/mountain)
 > and [MWIS](https://www.mwis.org.uk/) before going onto the hills.
 
-## Status
+## What it does
 
-The map is the home page, with a collapsible panel for the search and the results, a search box
-for hills, places and postcodes, and a sun and moon timeline along the bottom. Every hill is
-scored for every condition, morning, daytime, evening and night:
+- **Scores every hill for every condition.** About 2,200 UK hills (Munros, Corbetts, Grahams,
+  Donalds, Hewitts, Nuttalls, Wainwrights and Marilyns) are scored morning, daytime, evening and
+  night, from Met Office and ECMWF forecasts.
+- **Ranks them by a photo score.** Tick the conditions and times you care about; each hill gets
+  a score out of 100 from its best three, and the list sorts best to worst. The best bet is ringed
+  on the map.
+- **Explains every verdict.** Pick a hill to see each condition with its weather reasons, how
+  closely the models agree, and the air above the valley.
+- **Plans the trip.** Set a home, say what to be there for (blue hour, golden hour, sunrise or
+  sunset), the earliest you'll get up and how far you'll drive. Each hill gets a rough get-up and
+  leave time, with a Google Maps link for the real route.
+- **Shows the sun and moon.** A draggable pin draws sunrise, sunset, moonrise and moonset bearings;
+  the timeline adds the sun and moon now, and you scrub it through the day.
+- **Finds anywhere.** Search hills, UK places and postcodes. Every other UK hill in the database
+  (mostly Tumps, such as Ben A'an) can be searched and scored without cluttering the map.
 
-| Group           | Conditions                                                           |
+| Condition group | Conditions                                                           |
 | --------------- | -------------------------------------------------------------------- |
-| Light and sky   | Golden-hour sky, dramatic light (showers, broken cloud), clear air   |
+| Light and sky   | Golden-hour sky, dramatic light, clear air and long views            |
 | Cloud and water | Cloud inversion, valley mist, still reflections, waterfalls in spate |
 | Winter          | Snow on the tops, hoar frost                                         |
 | Night           | Milky Way and stars, aurora (NOAA Kp forecast)                       |
-| On foot         | Hill walking (not part of the photo score unless ticked)             |
+| On foot         | Hill walking (not in the photo score unless ticked)                  |
 
-Tick the conditions and times of day you care about; each hill gets a photo score out of 100
-from its best three (the best counts most), and the list sorts best to worst. Summit conditions
-(inversion, snow, clear air, walking) are judged at each summit's height; the rest come from the
-zone's valley forecast and are shared by nearby hills. Every other UK hill in the DoBIH CSV (mostly Tumps, such as Ben A'an) is searchable but not mapped or
-ranked: `search-hills.json` loads the first time the search box is used, and picking one scores
-it on its own. The detail sheet breaks every condition
-down with its reasons. Thresholds and weights are in `config/profiles.yaml`.
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/hill-map.png" alt="A hill open in the panel, with the sun and moon lines from its pin"></td>
+    <td width="50%"><img src="docs/images/results.png" alt="The best bet with leave times and the ranked list"></td>
+  </tr>
+  <tr>
+    <td>A hill's conditions in the panel, with the sun and moon from its pin.</td>
+    <td>The best bet, when to leave, and the ranked list.</td>
+  </tr>
+</table>
 
-Trip planning: set a home by postcode or place name (Settings), choose what to be in place for
-(blue hour, golden hour, sunrise or sunset), the earliest you're willing to get up and the longest
-drive. Every area then gets a rough get-up and leave time, and places that would need an earlier
-start are listed separately. Drive times are estimates from straight-line distance and typical
-road speeds; walk-ins use Naismith's rule. The Google Maps link gives the real route.
+## How it works
+
+A fully static site: the browser fetches forecasts directly from free, keyless public APIs, and
+the host only serves files. Summit conditions (inversion, snow, clear air, walking) are judged at
+each summit's height from the vertical profile; the rest come from the area's valley forecast.
+Thresholds and weights live in `config/profiles.yaml`. Drive times are estimates from
+straight-line distance and typical road speeds; walk-ins use Naismith's rule.
 
 ## Repository layout
 
@@ -106,8 +127,8 @@ To build the image from a checkout instead:
 | [Postcodes.io](https://postcodes.io/) (OS, Royal Mail and ONS data)                                  | Finding home from a postcode           | OGL v3.0                                      |
 | [GeoNames](https://www.geonames.org/) via Open-Meteo geocoding                                       | Finding home from a place name         | CC BY 4.0                                     |
 | [NOAA SWPC](https://www.swpc.noaa.gov/)                                                              | Kp forecast for the aurora             | Public domain                                 |
-| [AuroraWatch UK](https://aurorawatch.lancs.ac.uk/), Lancaster University                             | Aurora alert status (planned)          | Non-commercial use only; credit and link      |
-| [OpenStreetMap](https://www.openstreetmap.org/copyright) via [OpenFreeMap](https://openfreemap.org/) | Basemap (planned)                      | ODbL                                          |
+| [OpenStreetMap](https://www.openstreetmap.org/copyright) via [OpenFreeMap](https://openfreemap.org/) | Basemap                                | ODbL                                          |
+| [Mapterhorn](https://mapterhorn.com/attribution)                                                     | Hillshade terrain                      | Open data; see the attribution page           |
 
 ## Licence
 
