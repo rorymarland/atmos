@@ -11,23 +11,30 @@ columns:
   country: Country
   county: County
 
-# DoBIH country codes to consider. "I" covers the whole island of Ireland; Irish hills
-# are then kept only if their county is in Northern Ireland (see below).
-# Isle of Man and the Channel Islands are not part of the UK and are left out.
-countries:
-  scotland: S
-  england: E
-  wales: W
-  ireland: I
+# DoBIH country codes. A hill counts as UK if its code is made only of UK letters,
+# which includes border hills such as "ES" (on the England-Scotland border).
+# "I" covers the whole island of Ireland; Irish hills are kept only if a council
+# district in their County field is in Northern Ireland (see below).
+# Isle of Man (M) and the Channel Islands (C) are not part of the UK and are left out.
+ukCountryLetters: [S, E, W]
+irelandCountryCode: I
 
-northernIrelandCounties:
-  - Antrim
-  - Armagh
-  - Down
-  - Fermanagh
-  - Londonderry
-  - Derry
-  - Tyrone
+# DoBIH records Irish hills by local council area. These are Northern Ireland's 11
+# council districts (2015 onwards). A hill on a boundary lists two areas in its County
+# field; it is kept if the field contains any of these names in full. (Matching on the
+# full name matters: several names contain commas themselves.)
+northernIrelandCouncils:
+  - Antrim and Newtownabbey
+  - Ards and North Down
+  - Armagh City, Banbridge and Craigavon
+  - Belfast
+  - Causeway Coast and Glens
+  - Derry City and Strabane
+  - Fermanagh and Omagh
+  - Lisburn and Castlereagh
+  - Mid and East Antrim
+  - Mid Ulster
+  - Newry, Mourne and Down
 
 # The agreed lists. `column` is the DoBIH classification column (1 = on the list).
 # Order matters: it sets each list's bit in the hill mask, so only append.

@@ -15,13 +15,9 @@ export const hillListsConfigSchema = z.strictObject({
     country: z.string(),
     county: z.string(),
   }),
-  countries: z.strictObject({
-    scotland: z.string(),
-    england: z.string(),
-    wales: z.string(),
-    ireland: z.string(),
-  }),
-  northernIrelandCounties: z.array(z.string()).min(1),
+  ukCountryLetters: z.array(z.string().length(1)).min(1),
+  irelandCountryCode: z.string().min(1),
+  northernIrelandCouncils: z.array(z.string().min(1)).min(1),
   lists: z
     .array(z.strictObject({ id: z.string(), label: z.string(), column: z.string() }))
     .min(1)
@@ -69,15 +65,13 @@ export function parseDobih(csv: string, config: HillListsConfig): ParseResult {
   }
 
   const lists: HillList[] = config.lists.map((l, bit) => ({ id: l.id, label: l.label, bit }));
-  const ukCountries = new Set([
-    config.countries.scotland,
-    config.countries.england,
-    config.countries.wales,
-  ]);
-  const niCounties = config.northernIrelandCounties.map((c) => c.toLowerCase());
+  const ukLetters = new Set(config.ukCountryLetters);
+  // "S", "E", "W" and border codes such as "ES": every letter must be a UK one.
+  const isUkCode = (code: string) => code.length > 0 && [...code].every((c) => ukLetters.has(c));
+  const niCouncils = config.northernIrelandCouncils.map((c) => c.toLowerCase());
   const isNorthernIreland = (county: string) => {
     const c = county.toLowerCase();
-    return niCounties.some((ni) => c === ni || c.split(/[\s/,]+/).includes(ni));
+    return niCouncils.some((ni) => c.includes(ni));
   };
 
   const stats = { rows: rows.length, kept: 0, notUk: 0, notOnList: 0, invalid: 0 };
@@ -87,8 +81,8 @@ export function parseDobih(csv: string, config: HillListsConfig): ParseResult {
   for (const row of rows) {
     const country = row[col.country] ?? '';
     const inUk =
-      ukCountries.has(country) ||
-      (country === config.countries.ireland && isNorthernIreland(row[col.county] ?? ''));
+      isUkCode(country) ||
+      (country === config.irelandCountryCode && isNorthernIreland(row[col.county] ?? ''));
     if (!inUk) {
       stats.notUk++;
       continue;
