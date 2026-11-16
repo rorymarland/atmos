@@ -400,6 +400,10 @@
             `https://api.open-meteo.com/v1/elevation?latitude=${LAT}&longitude=${LON}`,
           ],
           [
+            'KNMI HARMONIE Europe (third model)',
+            `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&models=knmi_harmonie_arome_europe&hourly=cloud_cover_low,temperature_850hPa&forecast_days=3`,
+          ],
+          [
             'NOAA OVATION aurora nowcast',
             'https://services.swpc.noaa.gov/json/ovation_aurora_latest.json',
           ],
