@@ -20,6 +20,9 @@ importers:
       csv-parse:
         specifier: ^7.0.3
         version: 7.0.3
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
       eslint:
         specifier: ^10.15.0
         version: 10.15.0

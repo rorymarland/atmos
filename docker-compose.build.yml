@@ -1,0 +1,13 @@
+# For development: build the image from this checkout instead of pulling it.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# Put the DoBIH CSV in the repository root (or change the volume below).
+
+services:
+  atmos:
+    image: atmos:local
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: docker/Dockerfile

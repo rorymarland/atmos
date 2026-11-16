@@ -26,9 +26,17 @@ export interface Settings {
 
 const KEY = 'atmos.settings';
 
+/** Defaults from /defaults.js (see static/defaults.js), validated. */
+function runtimeDefaults(): { theme: 'light' | 'dark'; wind: 'kmh' | 'mph' } {
+  const d = (typeof window !== 'undefined' && window.__ATMOS_DEFAULTS__) || {};
+  return {
+    theme: d.theme === 'dark' ? 'dark' : 'light',
+    wind: d.wind === 'mph' ? 'mph' : 'kmh',
+  };
+}
+
 export const DEFAULT_SETTINGS: Settings = {
-  theme: __ATMOS_DEFAULTS__.theme,
-  wind: __ATMOS_DEFAULTS__.wind,
+  ...runtimeDefaults(),
   profile: 'inversion',
   dayOffset: 1,
   light: 'sunrise',

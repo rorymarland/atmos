@@ -32,17 +32,21 @@ const { values: args } = parseArgs({
   args: argv,
   options: {
     hills: { type: 'string' },
+    // Folder searched for the CSV when --hills isn't given.
+    raw: { type: 'string', default: join(ROOT, 'data/raw') },
+    // Folder holding profiles.yaml, zones.yaml, hill-lists.yaml and attributions.yaml.
+    config: { type: 'string', default: join(ROOT, 'config') },
     'dobih-version': { type: 'string' },
     out: { type: 'string', default: join(ROOT, 'data/generated') },
   },
 });
 
-const source = findDobihCsv(join(ROOT, 'data/raw'), args.hills);
+const source = findDobihCsv(args.raw!, args.hills);
 if (!source.path) {
   console.error(
     `Can't find the DoBIH CSV: ${source.problem}.\n` +
       'Download the csv version from https://www.hills-database.co.uk/downloads.html ' +
-      'and put it in data/raw/ (see data/raw/README.md).',
+      `and put it in ${args.raw} (see data/raw/README.md).`,
   );
   process.exit(1);
 }
@@ -59,7 +63,7 @@ if (!dobihVersion || !/^\d+(\.\d+)*$/.test(dobihVersion)) {
 }
 
 const readYaml = (file: string): unknown =>
-  parseYaml(readFileSync(join(ROOT, 'config', file), 'utf8'));
+  parseYaml(readFileSync(join(args.config!, file), 'utf8'));
 
 // Scoring profiles: validate against the engine, then ship as JSON.
 const profiles = parseScoringConfig(readYaml('profiles.yaml'));

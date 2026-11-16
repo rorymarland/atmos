@@ -23,14 +23,14 @@
   });
 
   const NAV = [
-    { href: '/', label: 'Today' },
-    { href: '/map', label: 'Map' },
+    { href: '/', label: 'Map' },
     { href: '/settings', label: 'Settings' },
     { href: '/about', label: 'About' },
   ];
+  const onMap = $derived(page.url.pathname === '/');
 </script>
 
-<div class="shell">
+<div class="shell" class:on-map={onMap}>
   <header class="top">
     <a href="/" class="brand" aria-label="Atmos home">
       <span class="name">Atmos</span>
@@ -50,12 +50,14 @@
     {@render children()}
   </main>
 
+  {#if !onMap}
   <footer class="small muted">
     A guide, not a safety service. Always check the
     <a href="https://www.metoffice.gov.uk/weather/specialist-forecasts/mountain" target="_blank" rel="noopener">Met Office mountain forecast</a>
     and <a href="https://www.mwis.org.uk/" target="_blank" rel="noopener">MWIS</a> before going onto the hills.
     <a href="/about">Data sources</a>.
   </footer>
+  {/if}
 </div>
 
 <DetailSheet />
@@ -66,12 +68,17 @@
     display: flex;
     flex-direction: column;
   }
+  .shell.on-map {
+    height: 100dvh;
+    overflow: hidden;
+  }
   .top {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    padding: 14px 20px;
+    height: 57px;
+    padding: 0 20px;
     border-bottom: 1px solid var(--line);
     background: var(--paper);
   }
@@ -115,29 +122,16 @@
     border-top: 1px solid var(--line);
   }
 
-  /* Phones: tagline goes, navigation moves to a bottom bar within thumb reach. */
+  /* Phones: the tagline goes; the header stays one compact row. */
   @media (max-width: 640px) {
     .tagline {
       display: none;
     }
-    nav {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      z-index: 5;
-      justify-content: space-around;
-      background: var(--surface);
-      border-top: 1px solid var(--line);
-      padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    .top {
+      padding: 10px 12px;
     }
     nav a {
-      flex: 1;
-      text-align: center;
-      padding: 8px 4px;
-    }
-    footer {
-      padding-bottom: 84px;
+      padding: 6px 8px;
     }
   }
 </style>
