@@ -99,6 +99,8 @@ export interface HillResult {
   driveMinutes: number | null;
   /** Worth going only with an earlier start: the best condition that needs one. */
   needsEarlier: ConditionTrip | null;
+  /** Picked from the search (e.g. a Tump): scored, but not on the map or in the list. */
+  searchOnly: boolean;
 }
 
 export interface Ranking {
@@ -129,6 +131,7 @@ interface Evaluated {
   sun: SunTimes;
   valleyM: number;
   conditions: ConditionResult[];
+  searchOnly: boolean;
 }
 
 class Conditions {
@@ -140,6 +143,9 @@ class Conditions {
   progress = $state<{ done: number; total: number } | null>(null);
   error = $state<string | null>(null);
   now = $state(Date.now());
+  /** A hill picked from the search that isn't on the chosen lists, scored on its own. */
+  extra = $state.raw<Hill | null>(null);
+  #refreshAgain = false;
 
   async init() {
     if (this.data) return;
@@ -190,6 +196,7 @@ class Conditions {
   neededZones = $derived.by(() => {
     const data = this.data;
     if (!data) return [];
+    const extraZone = this.extra?.zone ?? -1;
     const start = settings.start;
     const maxDrive = start ? settings.maxDriveMinutes : null;
     const ids = new Set(
@@ -197,12 +204,18 @@ class Conditions {
         .filter((h) => maxDrive === null || estimateDrive(start!, h).minutes <= maxDrive)
         .map((h) => h.zone),
     );
+    if (extraZone >= 0) ids.add(extraZone);
     return data.zones.filter((_, i) => ids.has(i));
   });
 
   async refresh(force = false) {
     const zones = this.neededZones;
-    if (zones.length === 0 || this.loading) return;
+    if (zones.length === 0) return;
+    if (this.loading) {
+      // The zones changed mid-fetch: go again for any new ones when this one finishes.
+      this.#refreshAgain = true;
+      return;
+    }
     this.loading = true;
     this.error = null;
     // The Kp forecast is only for the aurora: a failure there mustn't stop the rest.
@@ -229,6 +242,10 @@ class Conditions {
       this.loading = false;
       this.progress = null;
       await kp;
+      if (this.#refreshAgain) {
+        this.#refreshAgain = false;
+        void this.refresh();
+      }
     }
   }
 
@@ -248,7 +265,11 @@ class Conditions {
       { sun: SunTimes; nextSun: SunTimes; valley: ConditionResult[]; valleyM: number }
     >();
 
-    for (const hill of this.listedHills) {
+    const listed = this.listedHills;
+    const extra = this.extra;
+    const addExtra = extra !== null && !listed.some((h) => h.number === extra.number);
+    const hills = addExtra ? [...listed, extra] : listed;
+    for (const hill of hills) {
       const zone = data.zones[hill.zone]!;
       const forecasts = this.forecasts.get(zone.id);
       if (!forecasts || forecasts.length === 0) continue;
@@ -301,6 +322,7 @@ class Conditions {
         sun: z.sun,
         valleyM: z.valleyM,
         conditions: [...summit, ...z.valley],
+        searchOnly: addExtra && hill === extra,
       });
     }
     return out;
@@ -386,8 +408,10 @@ class Conditions {
 
     const hills: HillResult[] = [];
     let windowPassed = false;
+    const searched: HillResult[] = [];
     for (const h of this.planned) {
-      if (maxDrive !== null && h.driveMinutes !== null && h.driveMinutes > maxDrive) continue;
+      const tooFar = maxDrive !== null && h.driveMinutes !== null && h.driveMinutes > maxDrive;
+      if (tooFar && !h.searchOnly) continue;
       const candidates = h.conditions.filter(
         (c) => ticked.has(c.profileId) && periods.has(c.period),
       );
@@ -404,7 +428,8 @@ class Conditions {
         early && !worthGoing(verdict) && (early.result.score ?? 0) > (best?.result.score ?? 0)
           ? early
           : null;
-      hills.push({ ...h, counted, score, verdict, best, needsEarlier });
+      const result = { ...h, counted, score, verdict, best, needsEarlier };
+      (h.searchOnly ? searched : hills).push(result);
     }
 
     const byScore = (a: HillResult, b: HillResult) =>
@@ -429,7 +454,7 @@ class Conditions {
             (b.needsEarlier!.trip!.plan.wakeAt ?? 0) - (a.needsEarlier!.trip!.plan.wakeAt ?? 0),
         ),
       rest: hills.filter((h) => !worthGoing(h.verdict) && !h.needsEarlier),
-      hillsByNumber: new Map(hills.map((h) => [h.hill.number, h])),
+      hillsByNumber: new Map([...hills, ...searched].map((h) => [h.hill.number, h])),
       total: hills.length,
       windowPassed,
     };

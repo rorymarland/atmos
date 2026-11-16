@@ -33,6 +33,8 @@ export type UnzonedHill = Omit<Hill, 'zone'>;
 export interface ParseResult {
   lists: HillList[];
   hills: UnzonedHill[];
+  /** UK hills on none of the lists (mostly Tumps): searchable, but not mapped or ranked. */
+  others: UnzonedHill[];
   stats: { rows: number; kept: number; notUk: number; notOnList: number; invalid: number };
 }
 
@@ -77,6 +79,7 @@ export function parseDobih(csv: string, config: HillListsConfig): ParseResult {
 
   const stats = { rows: rows.length, kept: 0, notUk: 0, notOnList: 0, invalid: 0 };
   const hills: UnzonedHill[] = [];
+  const others: UnzonedHill[] = [];
   const col = config.columns;
 
   for (const row of rows) {
@@ -92,11 +95,6 @@ export function parseDobih(csv: string, config: HillListsConfig): ParseResult {
     config.lists.forEach((l, bit) => {
       if (isFlagSet(row[l.column])) mask |= 1 << bit;
     });
-    if (mask === 0) {
-      stats.notOnList++;
-      continue;
-    }
-
     const number = Number(row[col.number]);
     const lat = Number(row[col.latitude]);
     const lon = Number(row[col.longitude]);
@@ -107,7 +105,8 @@ export function parseDobih(csv: string, config: HillListsConfig): ParseResult {
       continue;
     }
 
-    hills.push({
+    if (mask === 0) stats.notOnList++;
+    (mask === 0 ? others : hills).push({
       number,
       name,
       lat: round(lat, 5),
@@ -120,7 +119,8 @@ export function parseDobih(csv: string, config: HillListsConfig): ParseResult {
 
   stats.kept = hills.length;
   hills.sort((a, b) => b.metres - a.metres || a.number - b.number);
-  return { lists, hills, stats };
+  others.sort((a, b) => b.metres - a.metres || a.number - b.number);
+  return { lists, hills, others, stats };
 }
 
 /** DoBIH marks list membership with 1; tolerate "1.0", "Y" and similar. */

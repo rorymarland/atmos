@@ -127,12 +127,17 @@
           <p class="muted small">
             {Math.round(hillResult.hill.metres)} m{#if lists.length}, {lists.join(', ')}{/if}. {hillResult.zone.name}.
           </p>
+          {#if hillResult.searchOnly}
+            <p class="small muted">Not on your hill lists (most of these are Tumps), so it only appears when you search for it. It isn’t in the results or the best bet.</p>
+          {/if}
         {/if}
       </div>
     </header>
 
     {#if !hillResult}
-      <p class="muted">No forecast for this hill with the current day and filters.</p>
+      <p class="muted">
+        {#if conditions.loading}Fetching the forecast for this hill…{:else}No forecast for this hill with the current day and filters.{/if}
+      </p>
     {:else}
       <section class="verdict">
         <VerdictMark verdict={hillResult.verdict} confidence={hillResult.best?.result.confidence ?? null} size="large" />

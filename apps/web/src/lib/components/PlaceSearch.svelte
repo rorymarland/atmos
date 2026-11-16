@@ -5,18 +5,30 @@
    */
   import { conditions } from '#lib/conditions.svelte.ts';
   import { suggestPlaces } from '#lib/geocode.ts';
+  import { loadSearchHills } from '#lib/static-data.ts';
+  import type { Hill } from '@atmos/engine';
   import type { StartPoint } from '#lib/settings.svelte.ts';
 
   let {
     onHill,
     onPlace,
   }: {
-    onHill: (hill: { number: number; lat: number; lon: number }) => void;
+    /** `other` is set for hills not on the lists (mostly Tumps), which aren't loaded yet. */
+    onHill: (hill: { number: number; lat: number; lon: number; other?: Hill }) => void;
     onPlace: (place: StartPoint) => void;
   } = $props();
 
   type Suggestion =
-    | { kind: 'hill'; key: string; label: string; detail: string; number: number; lat: number; lon: number }
+    | {
+        kind: 'hill';
+        key: string;
+        label: string;
+        detail: string;
+        number: number;
+        lat: number;
+        lon: number;
+        other?: Hill;
+      }
     | { kind: 'place'; key: string; label: string; detail: string; place: StartPoint };
 
   let query = $state('');
@@ -25,31 +37,41 @@
   let open = $state(false);
   let active = $state(0);
   let input: HTMLInputElement | undefined = $state();
+  /** Every other UK hill, fetched the first time the box is used. */
+  let others = $state.raw<Hill[]>([]);
+  function loadOthers() {
+    if (others.length === 0) void loadSearchHills().then((h) => (others = h));
+  }
 
   const hills = $derived.by((): Suggestion[] => {
     const q = query.trim().toLowerCase();
     const data = conditions.data;
     if (q.length < 2 || !data) return [];
-    const starts: Suggestion[] = [];
-    const contains: Suggestion[] = [];
-    for (const h of data.hills) {
-      if (h.zone < 0) continue;
-      const name = h.name.toLowerCase();
-      const i = name.indexOf(q);
-      if (i < 0) continue;
-      const s: Suggestion = {
-        kind: 'hill',
-        key: `h${h.number}`,
-        label: h.name,
-        detail: `${Math.round(h.metres)} m, ${data.zones[h.zone]?.name ?? ''}`,
-        number: h.number,
-        lat: h.lat,
-        lon: h.lon,
-      };
-      (i === 0 ? starts : contains).push(s);
-      if (starts.length >= 5) break;
-    }
-    return [...starts, ...contains].slice(0, 5);
+    // Listed hills first, then the rest; names starting with the query before the others.
+    const find = (list: Hill[], other: boolean, max: number): Suggestion[] => {
+      const starts: Suggestion[] = [];
+      const contains: Suggestion[] = [];
+      for (const h of list) {
+        if (h.zone < 0) continue;
+        const i = h.name.toLowerCase().indexOf(q);
+        if (i < 0) continue;
+        const s: Suggestion = {
+          kind: 'hill',
+          key: `h${h.number}`,
+          label: h.name,
+          detail: `${Math.round(h.metres)} m, ${other ? 'not on your lists, ' : ''}${data.zones[h.zone]?.name ?? ''}`,
+          number: h.number,
+          lat: h.lat,
+          lon: h.lon,
+          ...(other ? { other: h } : {}),
+        };
+        (i === 0 ? starts : contains).push(s);
+        if (starts.length >= max) break;
+      }
+      return [...starts, ...contains].slice(0, max);
+    };
+    const listed = find(data.hills, false, 5);
+    return [...listed, ...find(others, true, 7 - listed.length)];
   });
 
   const suggestions = $derived<Suggestion[]>([
@@ -60,6 +82,7 @@
   let timer: ReturnType<typeof setTimeout> | undefined;
   let controller: AbortController | undefined;
   function onInput() {
+    loadOthers();
     open = true;
     active = 0;
     clearTimeout(timer);
@@ -86,7 +109,7 @@
   function choose(s: Suggestion) {
     open = false;
     query = s.label;
-    if (s.kind === 'hill') onHill({ number: s.number, lat: s.lat, lon: s.lon });
+    if (s.kind === 'hill') onHill({ number: s.number, lat: s.lat, lon: s.lon, ...(s.other ? { other: s.other } : {}) });
     else onPlace(s.place);
     input?.blur();
   }
@@ -118,7 +141,10 @@
     bind:value={query}
     oninput={onInput}
     onkeydown={onKey}
-    onfocus={() => (open = query.trim().length >= 2)}
+    onfocus={() => {
+      loadOthers();
+      open = query.trim().length >= 2;
+    }}
     onblur={() => setTimeout(() => (open = false), 150)}
     type="search"
     placeholder="Search hills, places or postcodes"

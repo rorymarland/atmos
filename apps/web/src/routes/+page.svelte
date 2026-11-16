@@ -15,6 +15,8 @@
   import { moonTimes, skyPositions, sunTimes } from '#lib/sun.ts';
   import { londonMidnight } from '#lib/time.ts';
   import type { StartPoint } from '#lib/settings.svelte.ts';
+  import { loadSearchHills } from '#lib/static-data.ts';
+  import type { Hill } from '@atmos/engine';
   import ResultsList, { type Pick } from '#lib/components/ResultsList.svelte';
   import VerdictMark from '#lib/components/VerdictMark.svelte';
 
@@ -91,6 +93,17 @@
   }
 
   const hillOpen = $derived(page.url.searchParams.has('hill'));
+
+  // A link or reload straight to a hill that isn't on the lists: find it in the search data.
+  $effect(() => {
+    const n = Number(page.url.searchParams.get('hill'));
+    const data = conditions.data;
+    if (!n || !data || data.hillsByNumber.has(n) || conditions.extra?.number === n) return;
+    void loadSearchHills().then((others) => {
+      const h = others.find((x) => x.number === n);
+      if (h) conditions.extra = h;
+    });
+  });
   const openHill = $derived(
     hillOpen ? ranking.hillsByNumber.get(Number(page.url.searchParams.get('hill'))) : undefined,
   );
@@ -211,8 +224,10 @@
   function flyTo(lat: number, lon: number, zoom: number) {
     map?.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), zoom), padding: mapPadding(), speed: 1.4 });
   }
-  function onSearchHill(h: { number: number; lat: number; lon: number }) {
+  function onSearchHill(h: { number: number; lat: number; lon: number; other?: Hill }) {
     found = null;
+    // Not on the lists: score it on its own, without adding it to the map or results.
+    if (h.other) conditions.extra = h.other;
     select({ lat: h.lat, lon: h.lon, href: `?hill=${h.number}`, zoom: 11 });
   }
   function onSearchPlace(p: StartPoint) {
