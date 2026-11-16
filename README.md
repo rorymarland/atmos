@@ -38,7 +38,7 @@ Requires Node 22 and pnpm (via Corepack: `corepack enable`).
 ```sh
 pnpm install
 pnpm check          # lint, format check, typecheck, tests
-pnpm build:data     # needs data/raw/DoBIH.csv, see data/raw/README.md
+pnpm build:data --dobih-version 18.3   # needs data/raw/DoBIH.csv, see data/raw/README.md
 ```
 
 ## Data and attribution

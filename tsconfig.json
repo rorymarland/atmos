@@ -7,5 +7,12 @@
     "types": ["node"]
   },
   "include": ["vitest.config.ts"],
-  "references": []
+  "references": [
+    {
+      "path": "packages/engine"
+    },
+    {
+      "path": "scripts"
+    }
+  ]
 }

@@ -2,3 +2,4 @@ LICENSE
 pnpm-lock.yaml
 data/generated/
 data/raw/
+config/zones.yaml

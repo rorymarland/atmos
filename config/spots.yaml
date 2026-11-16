@@ -1,0 +1,15 @@
+# Personal photo spots: the source of truth. Spots added in the app are stored in the
+# browser and can be exported to this format.
+#
+# Fields:
+#   id, name               unique id and display name
+#   lat, lon               where you stand
+#   elevationM             metres AMSL (optional; filled from the elevation API if omitted)
+#   subjectBearing         degrees true from the spot to the main subject (0 = north)
+#   bestLight              sunrise | sunset | either
+#   overlooksInversion     true if it looks over a valley that fills with cloud
+#   walkInKm               approximate walk from parking
+#   parking                { lat, lon } of the usual parking spot (optional)
+#   notes                  free text (optional)
+
+spots: []
