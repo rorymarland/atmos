@@ -1,9 +1,11 @@
 /**
  * Builds the app's static data from config/ and the DoBIH CSV into data/generated/.
  *
- *   pnpm build:data --dobih-version 18.6 [--hills data/raw/DoBIH.csv] [--out data/generated]
+ *   pnpm build:data [--hills <csv>] [--dobih-version 18.6] [--out data/generated]
  *
- * DOBIH_VERSION in the environment works in place of --dobih-version.
+ * Without --hills, uses data/raw/DoBIH.csv, or the only .csv in data/raw (so the download
+ * can keep its original name). The version comes from --dobih-version, then the
+ * DOBIH_VERSION environment variable, then the file name (DoBIH_v18_6.csv -> 18.6).
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -17,6 +19,7 @@ import {
   type ZonesFile,
 } from '@atmos/engine';
 import { decodeCsv, hillListsConfigSchema, parseDobih } from './lib/hills.js';
+import { findDobihCsv, versionFromFilename } from './lib/source.js';
 import { assignZones, parseZones } from './lib/zones.js';
 
 const ROOT = resolve(import.meta.dirname, '..');
@@ -28,16 +31,29 @@ if (argv[0] === '--') argv.shift();
 const { values: args } = parseArgs({
   args: argv,
   options: {
-    hills: { type: 'string', default: join(ROOT, 'data/raw/DoBIH.csv') },
+    hills: { type: 'string' },
     'dobih-version': { type: 'string' },
     out: { type: 'string', default: join(ROOT, 'data/generated') },
   },
 });
 
-const dobihVersion = args['dobih-version'] ?? process.env.DOBIH_VERSION;
+const source = findDobihCsv(join(ROOT, 'data/raw'), args.hills);
+if (!source.path) {
+  console.error(
+    `Can't find the DoBIH CSV: ${source.problem}.\n` +
+      'Download the csv version from https://www.hills-database.co.uk/downloads.html ' +
+      'and put it in data/raw/ (see data/raw/README.md).',
+  );
+  process.exit(1);
+}
+const hillsPath = source.path;
+
+const dobihVersion =
+  args['dobih-version'] || process.env.DOBIH_VERSION || versionFromFilename(hillsPath);
 if (!dobihVersion || !/^\d+(\.\d+)*$/.test(dobihVersion)) {
   console.error(
-    'Pass the DoBIH version you downloaded, e.g. --dobih-version 18.6 (or set DOBIH_VERSION)',
+    `Can't tell which DoBIH version ${hillsPath} is. Pass --dobih-version 18.6, ` +
+      'set DOBIH_VERSION, or keep the version in the file name (e.g. DoBIH_v18_6.csv).',
   );
   process.exit(1);
 }
@@ -55,10 +71,10 @@ const zonesFile: ZonesFile = { zones: zonesConfig.zones };
 // Hills.
 let csvBytes: Uint8Array;
 try {
-  csvBytes = readFileSync(args.hills!);
+  csvBytes = readFileSync(hillsPath);
 } catch {
   console.error(
-    `Can't read ${args.hills}. See data/raw/README.md for how to download the DoBIH CSV.`,
+    `Can't read ${hillsPath}. See data/raw/README.md for how to download the DoBIH CSV.`,
   );
   process.exit(1);
 }
@@ -93,7 +109,7 @@ const written = [
 ];
 
 const s = parsed.stats;
-console.log(`DoBIH v${dobihVersion}: ${s.rows} rows read`);
+console.log(`DoBIH v${dobihVersion} (${hillsPath}): ${s.rows} rows read`);
 console.log(
   `  kept ${s.kept} UK hills on the agreed lists ` +
     `(skipped ${s.notUk} outside the UK, ${s.notOnList} on no agreed list, ${s.invalid} invalid)`,
