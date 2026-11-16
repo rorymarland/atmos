@@ -81,7 +81,7 @@
 
   function clearStart() {
     settings.start = null;
-    settings.maxDriveMinutes = null;
+    settings.maxDriveMiles = null;
     latText = '';
     lonText = '';
     message = 'Start point cleared.';

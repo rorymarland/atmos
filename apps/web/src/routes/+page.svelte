@@ -24,6 +24,8 @@
   const VERDICT_COLOURS = { go: '#2f7a50', maybe: '#b98318', no: '#a3412b', nodata: '#8a979f' };
   const RANK = { go: 3, maybe: 2, no: 1, nodata: 0 } as const;
   const empty = { type: 'FeatureCollection' as const, features: [] };
+  /** Rings for the best bet and hovered hills. */
+  const RING_BLUE = '#1d6fe0';
   const UK_BOUNDS: [[number, number], [number, number]] = [
     [-8.2, 49.9],
     [1.8, 60.9],
@@ -364,17 +366,33 @@
             'circle-opacity': ['case', ['==', ['get', 'out'], 1], 0.4, ['==', ['get', 'verdict'], 'no'], 0.55, 0.95],
           },
         });
-        m.addLayer({
-          id: 'highlight',
-          type: 'circle',
-          source: 'highlight',
-          paint: {
-            'circle-radius': 14,
-            'circle-color': 'rgba(0,0,0,0)',
-            'circle-stroke-color': '#d9a13b',
-            'circle-stroke-width': 3,
-          },
-        });
+        // The best bet (always) and whatever's hovered in the list: a bright blue ring on a
+        // white halo, which stands out from the green, amber and red points and the map.
+        m.addSource('best', { type: 'geojson', data: empty });
+        for (const id of ['best', 'highlight']) {
+          m.addLayer({
+            id: `${id}-halo`,
+            type: 'circle',
+            source: id,
+            paint: {
+              'circle-radius': 16,
+              'circle-color': 'rgba(0,0,0,0)',
+              'circle-stroke-color': '#ffffff',
+              'circle-stroke-width': 7,
+            },
+          });
+          m.addLayer({
+            id,
+            type: 'circle',
+            source: id,
+            paint: {
+              'circle-radius': 16,
+              'circle-color': 'rgba(29,111,224,0.12)',
+              'circle-stroke-color': RING_BLUE,
+              'circle-stroke-width': 3.5,
+            },
+          });
+        }
         m.addLayer({
           id: 'found',
           type: 'circle',
@@ -488,7 +506,6 @@
           }
           // A click on a hill opens it (above); anywhere else moves the sun and moon pin.
           if (m.queryRenderedFeatures(e.point, { layers: ['targets'] }).length) return;
-          if (!skyOpen) skyOpen = true;
           pin = { lat, lon, name: pinName(lat, lon) };
         });
         m.on('mouseenter', 'targets', () => (m.getCanvas().style.cursor = 'pointer'));
@@ -510,6 +527,11 @@
   });
 
   $effect(() => {
+    const b = best;
+    if (map && loaded) setSource('best', b ? point(b.hill.lat, b.hill.lon) : empty);
+  });
+
+  $effect(() => {
     const s = settings.start;
     if (map && loaded) setSource('start', s ? point(s.lat, s.lon) : empty);
   });
@@ -523,13 +545,14 @@
     if (map && loaded) setSource('rays', data);
   });
 
-  // Keep the pin on the place, and only on the map while the timeline is open. Re-adding
-  // the marker mid-drag would cut the drag short, so it's added once and left alone then.
+  // Keep the pin on the place. It shows while the timeline is open, and also whenever a hill
+  // is open or you've placed it, timeline or not. Re-adding the marker mid-drag would cut
+  // the drag short, so it's added once and left alone then.
   let pinDragging = false;
   let pinOnMap = false;
   $effect(() => {
     const p = skyPlace;
-    const open = skyOpen;
+    const open = skyOpen || hillOpen || pin !== null;
     if (!map || !loaded || !pinMarker) return;
     if (!open) {
       if (pinOnMap) pinMarker.remove();
@@ -603,7 +626,7 @@
 
   <div class="bottom" class:with-panel={panelOpen && !narrow}>
     {#if skyOpen}
-      <div bind:clientHeight={skyHeight}>
+      <div class="sky-wrap" bind:clientHeight={skyHeight}>
         <SkyTimeline
           lat={skyPlace.lat}
           lon={skyPlace.lon}
@@ -619,6 +642,7 @@
       <span aria-hidden="true"><i style="background: var(--go)"></i>Go</span>
       <span aria-hidden="true"><i style="background: var(--maybe)"></i>Maybe</span>
       <span aria-hidden="true"><i style="background: var(--no)"></i>No</span>
+      {#if best}<span aria-hidden="true"><i class="best-ring"></i>Best bet</span>{/if}
       {#if settings.start}<span aria-hidden="true"><i class="start-dot"></i>Start</span>{/if}
       {#if skyOpen}<span class="muted">Click the map or drag the pin to move the sun and moon lines</span>{/if}
       <button class="link" onclick={() => (skyOpen = !skyOpen)} aria-pressed={skyOpen}>
@@ -840,7 +864,7 @@
   .bottom > * {
     pointer-events: auto;
   }
-  .bottom > div:first-child {
+  .bottom > .sky-wrap {
     justify-self: stretch;
   }
   .bottom.with-panel {
@@ -869,6 +893,12 @@
     border-radius: 50%;
     margin-right: 5px;
     vertical-align: -1px;
+  }
+  .legend .best-ring {
+    background: transparent;
+    box-shadow:
+      0 0 0 2.5px #1d6fe0 inset,
+      0 0 0 1.5px #fff;
   }
   .legend .start-dot {
     background: #1b2731;
