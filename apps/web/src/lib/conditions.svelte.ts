@@ -1,50 +1,101 @@
 /**
  * Fetches zone forecasts and scores every hill (or zone) for the chosen profile, day and
- * light. Shared by the Today, Map and detail views.
+ * light, then plans the trip to each: when to get up, leave and arrive. Shared by the map,
+ * the panel and the detail sheet.
  */
 import {
   distanceMiles,
+  estimateDrive,
+  estimateSummitWalk,
   evaluateTarget,
   hillIsOnList,
+  planTrip,
   profileAt,
   rankResults,
   saturatedLayers,
+  tripProblem,
   type Hill,
+  type LatLon,
   type Layer,
   type ModelForecast,
   type TargetResult,
+  type TripPlan,
+  type TripProblem,
+  type Verdict,
   type Zone,
 } from '@atmos/engine';
 import { fetchZoneForecasts, ForecastError } from '@atmos/data-client';
 import { forecastCache, newestFetch } from './cache';
 import { settings } from './settings.svelte';
 import { SUMMIT_PROFILES, loadStaticData, type StaticData } from './static-data';
-import { profileWindow, sunTimes, type LightWindow, type SunTimes } from './sun';
+import {
+  lightFor,
+  profileWindow,
+  sunTimes,
+  targetTime,
+  type LightWindow,
+  type SunTimes,
+} from './sun';
 import { londonMidnight } from './time';
+
+const MINUTE = 60_000;
+/** Valley profiles (sky, reflections): a short walk from the car to the viewpoint. */
+const VIEWPOINT_WALK_MINUTES = 15;
+
+export interface Trip {
+  plan: TripPlan;
+  driveMinutes: number;
+  roadMiles: number;
+  walkMinutes: number;
+  /** e.g. "golden hour". */
+  targetLabel: string;
+  /** Why it doesn't fit the limits, or null. */
+  problem: TripProblem | null;
+}
 
 export interface HillResult {
   hill: Hill;
   zone: Zone;
   result: TargetResult;
   miles: number | null;
+  trip: Trip | null;
 }
 
 export interface ZoneResult {
   zone: Zone;
-  /** Zone verdict: its best hill (summit profiles) or the zone itself (valley profiles). */
+  /** Zone verdict: its best reachable hill (summit profiles) or the zone itself (valley profiles). */
   result: TargetResult;
+  /** Hills best first; reachable ones ahead of those that don't fit the limits. */
   hills: HillResult[];
   goCount: number;
   window: LightWindow;
   sun: SunTimes;
   miles: number | null;
+  /** The plan for the zone's headline hill (or viewpoint). */
+  trip: Trip | null;
 }
 
 export interface Ranking {
+  /** Worth going and reachable within the limits, best first. */
+  go: ZoneResult[];
+  /** Worth going, but only by getting up too early (or leaving now has passed). */
+  tooEarly: ZoneResult[];
+  /** Verdict NO. */
+  avoid: ZoneResult[];
+  /** Every zone, for the map. */
   zones: ZoneResult[];
   hillsByNumber: Map<number, HillResult>;
   summitProfile: boolean;
   windowPassed: boolean;
+}
+
+const ORDER: Record<Verdict, number> = { go: 0, maybe: 1, no: 2, nodata: 3 };
+const worthGoing = (v: Verdict) => v === 'go' || v === 'maybe';
+
+/** UTC instant of a local "HH:MM" on the outing's day. */
+function localTime(dayStart: number, hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number);
+  return dayStart + ((h ?? 0) * 60 + (m ?? 0)) * MINUTE;
 }
 
 class Conditions {
@@ -65,20 +116,20 @@ class Conditions {
     }
   }
 
-  /** Hills passing the list, height and distance filters. */
+  /** Hills passing the list, height and drive-time filters. */
   filteredHills = $derived.by(() => {
     const data = this.data;
     if (!data) return [];
     const lists = data.lists.filter(
       (l) => settings.lists.length === 0 || settings.lists.includes(l.id),
     );
+    const start = settings.start;
+    const maxDrive = start ? settings.maxDriveMinutes : null;
     return data.hills.filter((h) => {
       if (h.zone < 0) return false;
       if (h.metres < settings.minHeight) return false;
       if (!lists.some((l) => hillIsOnList(h, l))) return false;
-      if (settings.maxMiles !== null && settings.start) {
-        if (distanceMiles(settings.start, h) > settings.maxMiles) return false;
-      }
+      if (maxDrive !== null && start && estimateDrive(start, h).minutes > maxDrive) return false;
       return true;
     });
   });
@@ -121,6 +172,9 @@ class Conditions {
   ranking: Ranking = $derived.by(() => {
     const data = this.data;
     const empty: Ranking = {
+      go: [],
+      tooEarly: [],
+      avoid: [],
       zones: [],
       hillsByNumber: new Map(),
       summitProfile: true,
@@ -130,8 +184,16 @@ class Conditions {
 
     const profileId = settings.profile;
     const summitProfile = SUMMIT_PROFILES.has(profileId);
+    const light = lightFor(profileId, settings.light);
     const dayStart = londonMidnight(settings.dayOffset, this.now);
     const opts = { now: this.now };
+    const start = settings.start;
+    const limits = {
+      earliestWake: settings.earliestUp ? localTime(dayStart, settings.earliestUp) : null,
+      maxDriveMinutes: null, // already applied as a filter
+      now: this.now,
+    };
+
     const hillsByZone = new Map<number, Hill[]>();
     for (const h of this.filteredHills) {
       const list = hillsByZone.get(h.zone) ?? [];
@@ -149,17 +211,40 @@ class Conditions {
       if (!forecasts || forecasts.length === 0) continue;
       const p = zone.forecastPoint;
       const sun = sunTimes(p.lat, p.lon, settings.dayOffset, this.now);
-      const window = profileWindow(profileId, settings.light, sun, dayStart);
+      const window = profileWindow(profileId, light, sun, dayStart);
       if (window.end < this.now) windowPassed = true;
-      const miles = settings.start ? distanceMiles(settings.start, p) : null;
+      const target = targetTime(profileId, light, settings.moment, sun, window);
+      const valleyM = forecasts[0]!.groundElevationM;
+
+      const tripTo = (to: LatLon, walkMinutes: number): Trip | null => {
+        if (!start) return null;
+        const drive = estimateDrive(start, to);
+        const plan = planTrip({
+          target: target.at,
+          driveMinutes: drive.minutes,
+          walkMinutes,
+          earlyMinutes: settings.earlyMinutes,
+          readyMinutes: settings.readyMinutes,
+        });
+        return {
+          plan,
+          driveMinutes: drive.minutes,
+          roadMiles: drive.roadMiles,
+          walkMinutes,
+          targetLabel: target.label,
+          problem: tripProblem(plan, drive.minutes, limits),
+        };
+      };
 
       let hillResults: HillResult[] = [];
       let zoneResult: TargetResult;
+      let zoneTrip: Trip | null;
       if (summitProfile) {
         hillResults = hills.map((hill) => ({
           hill,
           zone,
-          miles: settings.start ? distanceMiles(settings.start, hill) : null,
+          miles: start ? distanceMiles(start, hill) : null,
+          trip: tripTo(hill, estimateSummitWalk(hill.metres, valleyM, settings.pace).minutes),
           result: evaluateTarget(
             forecasts,
             window,
@@ -169,44 +254,68 @@ class Conditions {
             opts,
           ),
         }));
+        // Reachable hills first, then verdict, then score.
         const ranked = rankResults(hillResults.map((h) => h.result));
-        hillResults.sort((a, b) => ranked.indexOf(a.result) - ranked.indexOf(b.result));
-        zoneResult = hillResults[0]!.result;
+        const rank = new Map(ranked.map((r, i) => [r, i]));
+        hillResults.sort(
+          (a, b) =>
+            Number(Boolean(a.trip?.problem)) - Number(Boolean(b.trip?.problem)) ||
+            rank.get(a.result)! - rank.get(b.result)!,
+        );
+        // The headline is the best reachable hill worth going to, if there is one.
+        const headline =
+          hillResults.find((h) => !h.trip?.problem && worthGoing(h.result.verdict)) ??
+          [...hillResults].sort((a, b) => rank.get(a.result)! - rank.get(b.result)!)[0]!;
+        hillResults = [headline, ...hillResults.filter((h) => h !== headline)];
+        zoneResult = headline.result;
+        zoneTrip = headline.trip;
       } else {
         zoneResult = evaluateTarget(
           forecasts,
           window,
-          { id: zone.id, name: zone.name, altitudeM: forecasts[0]!.groundElevationM },
+          { id: zone.id, name: zone.name, altitudeM: valleyM },
           profileId,
           data.config,
           opts,
         );
+        zoneTrip = tripTo(p, VIEWPOINT_WALK_MINUTES);
       }
       for (const h of hillResults) hillsByNumber.set(h.hill.number, h);
       zones.push({
         zone,
         result: zoneResult,
         hills: hillResults,
-        goCount: hillResults.filter((h) => h.result.verdict === 'go').length,
+        goCount: hillResults.filter((h) => h.result.verdict === 'go' && !h.trip?.problem).length,
         window,
         sun,
-        miles,
+        miles: start ? distanceMiles(start, p) : null,
+        trip: zoneTrip,
       });
     }
 
     // Best verdict first, then score; among equals, the nearest first when a start is set.
-    const order = rankResults(zones.map((z) => z.result));
-    const rank = new Map(order.map((r, i) => [r, i]));
-    const near = (z: ZoneResult) => z.hills[0]?.miles ?? z.miles ?? 0;
+    const near = (z: ZoneResult) => z.trip?.driveMinutes ?? z.miles ?? 0;
     zones.sort((a, b) => {
-      const va = { go: 0, maybe: 1, no: 2, nodata: 3 }[a.result.verdict];
-      const vb = { go: 0, maybe: 1, no: 2, nodata: 3 }[b.result.verdict];
-      if (va !== vb) return va - vb;
+      const dv = ORDER[a.result.verdict] - ORDER[b.result.verdict];
+      if (dv !== 0) return dv;
       const ds = (b.result.score ?? -1) - (a.result.score ?? -1);
       if (Math.abs(ds) > 0.02) return ds;
-      return near(a) - near(b) || rank.get(a.result)! - rank.get(b.result)!;
+      return near(a) - near(b);
     });
-    return { zones, hillsByNumber, summitProfile, windowPassed };
+
+    const isGo = (z: ZoneResult) => worthGoing(z.result.verdict);
+    return {
+      go: zones.filter((z) => isGo(z) && !z.trip?.problem),
+      // Too early (or too late to leave): sorted by how early you'd have to be up.
+      tooEarly: zones
+        .filter((z) => isGo(z) && z.trip?.problem)
+        .sort((a, b) => (b.trip?.plan.wakeAt ?? 0) - (a.trip?.plan.wakeAt ?? 0)),
+      avoid: zones.filter((z) => z.result.verdict === 'no'),
+      zones,
+      hillsByNumber,
+      summitProfile,
+      windowPassed,
+    };
   });
 
   forecastsFor(zoneId: string): ModelForecast[] {

@@ -21,6 +21,12 @@ choosing a profile, day, filters and start point and for the ranked areas; a det
 every hill or zone. Four profiles so far: hill walking, cloud inversion, golden-hour
 sky and still reflections.
 
+Trip planning: set a home by postcode or place name (Settings), choose what to be in place for
+(blue hour, golden hour, sunrise or sunset), the earliest you're willing to get up and the longest
+drive. Every area then gets a rough get-up and leave time, and places that would need an earlier
+start are listed separately. Drive times are estimates from straight-line distance and typical
+road speeds; walk-ins use Naismith's rule. The Google Maps link gives the real route.
+
 ## Repository layout
 
 ```
@@ -82,6 +88,8 @@ To build the image from a checkout instead:
 | ---------------------------------------------------------------------------------------------------- | -------------------------------------- | --------------------------------------------- |
 | [Open-Meteo](https://open-meteo.com/) (UK Met Office, ECMWF, DWD ICON models)                        | Forecasts, fetched live by the browser | CC BY 4.0; free API is for non-commercial use |
 | [Database of British and Irish Hills](https://www.hills-database.co.uk/) (DoBIH)                     | Hill names, heights, positions, lists  | CC BY 4.0                                     |
+| [Postcodes.io](https://postcodes.io/) (OS, Royal Mail and ONS data)                                  | Finding home from a postcode           | OGL v3.0                                      |
+| [GeoNames](https://www.geonames.org/) via Open-Meteo geocoding                                       | Finding home from a place name         | CC BY 4.0                                     |
 | [AuroraWatch UK](https://aurorawatch.lancs.ac.uk/), Lancaster University                             | Aurora alert status (planned)          | Non-commercial use only; credit and link      |
 | [OpenStreetMap](https://www.openstreetmap.org/copyright) via [OpenFreeMap](https://openfreemap.org/) | Basemap (planned)                      | ODbL                                          |
 

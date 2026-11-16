@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { explain, googleMapsDirectionsUrl, hillIsOnList } from '@atmos/engine';
+  import { explain, formatDuration, googleMapsDirectionsUrl, hillIsOnList } from '@atmos/engine';
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { conditions, keyHourProfile } from '#lib/conditions.svelte.ts';
   import { settings } from '#lib/settings.svelte.ts';
   import { modelLabel } from '#lib/static-data.ts';
-  import { formatTime } from '#lib/time.ts';
+  import { formatClock, formatTime, londonMidnight } from '#lib/time.ts';
   import AirColumn from './AirColumn.svelte';
   import HourStrip from './HourStrip.svelte';
   import VerdictMark from './VerdictMark.svelte';
@@ -37,6 +37,9 @@
     hillResult ? { lat: hillResult.hill.lat, lon: hillResult.hill.lon } : zoneResult?.zone.forecastPoint,
   );
   const title = $derived(hillResult?.hill.name ?? zoneResult?.zone.name ?? '');
+  const trip = $derived(hillResult ? hillResult.trip : zoneResult?.trip ?? null);
+  const dayStart = $derived(londonMidnight(settings.dayOffset, conditions.now));
+  const clock = (ms: number) => formatClock(ms, dayStart);
 
   let dialog: HTMLDialogElement | undefined = $state();
 
@@ -84,6 +87,31 @@
           {#if reference?.keyHour}Key hour {formatTime(reference.keyHour.time)}.{/if}
         </p>
       </section>
+      <section class="plan">
+        <h3>Your trip</h3>
+        {#if trip}
+          <ol class="timeline">
+            <li><span class="t">{clock(trip.plan.wakeAt)}</span> Get up</li>
+            <li class="leave"><span class="t">{clock(trip.plan.leaveAt)}</span> Leave {settings.start?.label === settings.home?.label && settings.home ? 'home' : settings.start?.label}</li>
+            <li><span class="t">{clock(trip.plan.parkAt)}</span> Park, after about {formatDuration(trip.driveMinutes)} and {Math.round(trip.roadMiles)} miles</li>
+            <li><span class="t">{clock(trip.plan.arriveAt)}</span> In place, after a {formatDuration(trip.walkMinutes)} {hillResult ? 'walk up' : 'walk'}</li>
+            <li><span class="t">{clock(trip.plan.target)}</span> {trip.targetLabel.charAt(0).toUpperCase() + trip.targetLabel.slice(1)}</li>
+          </ol>
+          {#if trip.problem === 'too-early'}
+            <p class="small warn">That means getting up before {settings.earliestUp}.</p>
+          {:else if trip.problem === 'too-late'}
+            <p class="small warn">You’d already need to have left.</p>
+          {/if}
+          <p class="small muted">
+            Rough estimates: the drive from straight-line distance with typical road speeds, the walk
+            {hillResult ? 'by Naismith’s rule from the valley floor' : 'a short stroll from parking'}. Check the
+            real route below.
+          </p>
+        {:else}
+          <p class="small muted">Set a start point or <a href="/settings#home">your home</a> to see when to leave.</p>
+        {/if}
+      </section>
+
 
       <section>
         <h3>Why</h3>
@@ -121,7 +149,7 @@
       <section class="sun">
         <h3>Sun</h3>
         <dl>
-          {#each [['Dawn', zoneResult.sun.civilDawn], ['Sunrise', zoneResult.sun.sunrise], ['Sunset', zoneResult.sun.sunset], ['Dusk', zoneResult.sun.civilDusk]] as const as [label, t] (label)}
+          {#each [['Dawn', zoneResult.sun.civilDawn], ['Golden hour', zoneResult.sun.goldenStart], ['Sunrise', zoneResult.sun.sunrise], ['Sunset', zoneResult.sun.sunset], ['Blue hour', zoneResult.sun.eveningBlueStart], ['Dusk', zoneResult.sun.civilDusk]] as const as [label, t] (label)}
             <div><dt>{label}</dt><dd>{t ? formatTime(t) : 'none'}</dd></div>
           {/each}
         </dl>
@@ -149,6 +177,31 @@
 </dialog>
 
 <style>
+  .timeline {
+    list-style: none;
+    padding: 0 0 0 12px;
+    margin: 4px 0 8px;
+    border-left: 2px solid var(--line);
+    display: grid;
+    gap: 5px;
+  }
+  .timeline .t {
+    display: inline-block;
+    min-width: 5.6em;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .timeline .leave {
+    font-weight: 700;
+  }
+  .timeline .leave .t {
+    text-decoration: underline 3px var(--gold);
+    text-underline-offset: 5px;
+  }
+  .warn {
+    color: var(--no);
+    font-weight: 600;
+  }
   dialog {
     border: none;
     padding: 0 20px 28px;

@@ -399,6 +399,12 @@
             'Open-Meteo elevation',
             `https://api.open-meteo.com/v1/elevation?latitude=${LAT}&longitude=${LON}`,
           ],
+          ['postcodes.io postcode', 'https://api.postcodes.io/postcodes/EH11YZ'],
+          ['postcodes.io outcode', 'https://api.postcodes.io/outcodes/EH45'],
+          [
+            'Open-Meteo place search',
+            'https://geocoding-api.open-meteo.com/v1/search?name=Peebles&count=5&language=en&countryCode=GB',
+          ],
         ];
         for (const [name, url, as] of others) {
           const r = await get(url, as);

@@ -1,8 +1,9 @@
 /**
- * User settings, kept in this browser's localStorage. Build-time defaults come from
- * the environment (see vite.config.ts).
+ * User settings, kept in this browser's localStorage. Display defaults come from
+ * /defaults.js, which the container writes from .env at start-up.
  */
-import type { Light } from './sun';
+import type { Pace } from '@atmos/engine';
+import type { Light, Moment } from './sun';
 
 export interface StartPoint {
   lat: number;
@@ -19,9 +20,26 @@ export interface Settings {
   /** Hill list ids to include; empty means all. */
   lists: string[];
   minHeight: number;
-  /** Straight-line miles from the start point; null means any distance. */
+  /** Retired: distance filtering is by estimated drive time now. Kept so old saves load. */
   maxMiles: number | null;
+  /** Where today's trip starts from. Usually home, but can be anywhere. */
   start: StartPoint | null;
+  /** Home, set by postcode or place name; "Use home" puts it back as the start point. */
+  home: StartPoint | null;
+
+  // Trip planning
+  /** What to be in place for: blue hour, golden hour, or sunrise/sunset. */
+  moment: Moment;
+  /** Don't plan trips that need getting up before this local time ("04:00"), or null. */
+  earliestUp: string | null;
+  /** Longest acceptable drive, minutes, or null for any. */
+  maxDriveMinutes: number | null;
+  /** Getting up to leaving, minutes. */
+  readyMinutes: number;
+  /** Arrive this many minutes before the moment. */
+  earlyMinutes: number;
+  /** Walking pace for walk-in estimates. */
+  pace: Pace;
 }
 
 const KEY = 'atmos.settings';
@@ -44,6 +62,13 @@ export const DEFAULT_SETTINGS: Settings = {
   minHeight: 0,
   maxMiles: null,
   start: null,
+  home: null,
+  moment: 'golden',
+  earliestUp: null,
+  maxDriveMinutes: null,
+  readyMinutes: 30,
+  earlyMinutes: 15,
+  pace: 'steady',
 };
 
 function load(): Settings {
