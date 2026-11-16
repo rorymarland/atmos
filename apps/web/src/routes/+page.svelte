@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { version } from '$app/env';
   import { goto } from '$app/navigation';
   import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from 'maplibre-gl';
   import 'maplibre-gl/dist/maplibre-gl.css';
@@ -97,7 +98,10 @@
         import('maplibre-gl/dist/maplibre-gl-worker.mjs?url'),
       ]);
       if (destroyed) return;
-      maplibre.setWorkerUrl(worker.default);
+      // The worker's file name only changes when MapLibre does, and immutable assets are
+      // cached for a year. A per-build query string means a browser that once cached a bad
+      // copy (served with the wrong MIME type before the nginx fix) fetches it afresh.
+      maplibre.setWorkerUrl(`${worker.default}?v=${encodeURIComponent(version)}`);
       const m = new maplibre.Map({
         container,
         style: 'https://tiles.openfreemap.org/styles/liberty',
