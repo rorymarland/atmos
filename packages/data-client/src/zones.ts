@@ -29,6 +29,8 @@ export const ZONE_REQUEST: Omit<ForecastRequest, 'points'> = {
     'cloudCoverHigh',
     'visibility',
     'pressureMsl',
+    'freezingLevelHeight',
+    'showers',
   ],
   // Roughly 100, 300, 550, 750, 1,000 and 1,450 m: where UK inversions and summits sit.
   // ECMWF only publishes 1000, 925 and 850 of these; the Met Office has them all.

@@ -6,7 +6,20 @@ describe('scoring config', () => {
   it('accepts config/profiles.yaml', () => {
     const config = loadRealConfig();
     expect(Object.keys(config.profiles).sort()).toEqual(
-      ['inversion', 'reflections', 'sky', 'walking'].sort(),
+      [
+        'astro',
+        'aurora',
+        'clarity',
+        'dramatic',
+        'frost',
+        'inversion',
+        'mist',
+        'reflections',
+        'sky',
+        'snow',
+        'walking',
+        'waterfalls',
+      ].sort(),
     );
   });
 

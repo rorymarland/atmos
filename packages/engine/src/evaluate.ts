@@ -1,7 +1,7 @@
 /**
  * Scoring: one hour, one time window, then across models with a confidence level.
  */
-import { createHourContext } from './context.js';
+import { createHourContext, type HourExtras } from './context.js';
 import { rampOf, type ProfileConfig, type ScoringConfig } from './config.js';
 import { PROFILE_DEFINITIONS } from './profiles/index.js';
 import { rampScore } from './ramp.js';
@@ -87,9 +87,10 @@ export function evaluateHour(
   target: Target,
   profileId: string,
   config: ScoringConfig,
+  extras: HourExtras = {},
 ): HourResult {
   const { definition, profileConfig } = profileParts(profileId, config);
-  const ctx = createHourContext(forecast, i, target);
+  const ctx = createHourContext(forecast, i, target, extras);
 
   const factors: FactorResult[] = Object.entries(definition.factors).map(([id, def]) => {
     const factorConfig = profileConfig.factors[id]!;
@@ -145,10 +146,11 @@ export function evaluateWindow(
   target: Target,
   profileId: string,
   config: ScoringConfig,
+  extras: HourExtras = {},
 ): WindowResult {
   const { profileConfig } = profileParts(profileId, config);
   const hours = hoursInWindow(forecast, window).map((i) =>
-    evaluateHour(forecast, i, target, profileId, config),
+    evaluateHour(forecast, i, target, profileId, config, extras),
   );
   const withData = hours.filter((h) => h.score !== null);
   if (withData.length === 0) {
@@ -193,6 +195,7 @@ function aggregate(
 export interface EvaluateOptions {
   /** "Now", epoch ms, for the confidence horizon. */
   now: number;
+  extras?: HourExtras;
 }
 
 /**
@@ -207,7 +210,9 @@ export function evaluateTarget(
   config: ScoringConfig,
   options: EvaluateOptions,
 ): TargetResult {
-  const byModel = forecasts.map((f) => evaluateWindow(f, window, target, profileId, config));
+  const byModel = forecasts.map((f) =>
+    evaluateWindow(f, window, target, profileId, config, options.extras),
+  );
   const scored = byModel.filter((r) => r.score !== null);
 
   if (scored.length === 0) {

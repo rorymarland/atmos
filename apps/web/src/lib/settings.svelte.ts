@@ -3,7 +3,7 @@
  * /defaults.js, which the container writes from .env at start-up.
  */
 import type { Pace } from '@atmos/engine';
-import type { Light, Moment } from './sun';
+import type { Moment, Period } from './sun';
 
 export interface StartPoint {
   lat: number;
@@ -14,9 +14,13 @@ export interface StartPoint {
 export interface Settings {
   theme: 'light' | 'dark';
   wind: 'kmh' | 'mph';
-  profile: string;
   dayOffset: number;
-  light: Light;
+  /** Condition ids that count towards the photo score; null means every photo condition. */
+  conditions: string[] | null;
+  /** Parts of the day to consider. */
+  periods: Period[];
+  /** Results order. */
+  sort: 'best' | 'worst' | 'nearest' | 'highest';
   /** Hill list ids to include; empty means all. */
   lists: string[];
   minHeight: number;
@@ -55,9 +59,10 @@ function runtimeDefaults(): { theme: 'light' | 'dark'; wind: 'kmh' | 'mph' } {
 
 export const DEFAULT_SETTINGS: Settings = {
   ...runtimeDefaults(),
-  profile: 'inversion',
   dayOffset: 1,
-  light: 'sunrise',
+  conditions: null,
+  periods: ['morning', 'day', 'evening', 'night'],
+  sort: 'best',
   lists: [],
   minHeight: 0,
   maxMiles: null,
@@ -73,7 +78,13 @@ export const DEFAULT_SETTINGS: Settings = {
 
 function load(): Settings {
   try {
-    const raw = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<Settings>;
+    const raw = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<Settings> & {
+      profile?: unknown;
+      light?: unknown;
+    };
+    // Retired fields from the one-condition-at-a-time version.
+    delete raw.profile;
+    delete raw.light;
     return { ...DEFAULT_SETTINGS, ...raw };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -93,6 +104,36 @@ export function watchSettings(): void {
     }
     document.documentElement.dataset.theme = snapshot.theme;
   });
+}
+
+/** Puts the search filters back to their defaults; home, start point and display stay. */
+export function resetFilters(): void {
+  const d = DEFAULT_SETTINGS;
+  Object.assign(settings, {
+    conditions: d.conditions,
+    periods: [...d.periods],
+    sort: d.sort,
+    lists: [],
+    minHeight: d.minHeight,
+    moment: d.moment,
+    earliestUp: d.earliestUp,
+    maxDriveMinutes: d.maxDriveMinutes,
+  });
+}
+
+/** Whether any search filter differs from its default. */
+export function filtersChanged(): boolean {
+  const d = DEFAULT_SETTINGS;
+  return (
+    settings.conditions !== null ||
+    settings.periods.length !== d.periods.length ||
+    settings.sort !== d.sort ||
+    settings.lists.length > 0 ||
+    settings.minHeight !== d.minHeight ||
+    settings.moment !== d.moment ||
+    settings.earliestUp !== d.earliestUp ||
+    settings.maxDriveMinutes !== d.maxDriveMinutes
+  );
 }
 
 export function exportSettings(): string {

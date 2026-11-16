@@ -61,3 +61,81 @@ export async function findPlace(query: string): Promise<StartPoint[]> {
     label: [r.name, r.admin2 ?? r.admin1].filter(Boolean).join(', '),
   }));
 }
+
+const POSTCODE_START = /^[A-Z]{1,2}\d/i;
+
+/**
+ * Suggestions while typing: postcodes (postcodes.io autocomplete, then one bulk lookup
+ * for coordinates) and UK place names (Open-Meteo geocoding, fuzzy from 3 letters).
+ */
+export async function suggestPlaces(query: string, signal?: AbortSignal): Promise<StartPoint[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const out: StartPoint[] = [];
+
+  if (POSTCODE_START.test(q)) {
+    try {
+      const ac = await fetch(
+        `https://api.postcodes.io/postcodes/${encodeURIComponent(q)}/autocomplete?limit=5`,
+        { signal },
+      );
+      const codes = ac.ok ? ((await ac.json()) as { result: string[] | null }).result : null;
+      if (codes?.length) {
+        const bulk = await fetch('https://api.postcodes.io/postcodes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ postcodes: codes }),
+          signal,
+        });
+        if (bulk.ok) {
+          const body = (await bulk.json()) as {
+            result: {
+              result: {
+                postcode: string;
+                latitude: number | null;
+                longitude: number | null;
+              } | null;
+            }[];
+          };
+          for (const r of body.result) {
+            const p = r.result;
+            if (p && p.latitude !== null && p.longitude !== null) {
+              out.push({ lat: round4(p.latitude), lon: round4(p.longitude), label: p.postcode });
+            }
+          }
+        }
+      } else {
+        // Maybe a whole district ("EH45") rather than the start of a postcode.
+        out.push(...(await findPlace(q).catch(() => [])));
+      }
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') throw e;
+    }
+  }
+
+  if (q.length >= 3 && out.length < 5) {
+    const params = new URLSearchParams({ name: q, count: '6', language: 'en', countryCode: 'GB' });
+    const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${params}`, { signal });
+    if (res.ok) {
+      const body = (await res.json()) as {
+        results?: {
+          name: string;
+          latitude: number;
+          longitude: number;
+          admin1?: string;
+          admin2?: string;
+        }[];
+      };
+      for (const r of body.results ?? []) {
+        out.push({
+          lat: round4(r.latitude),
+          lon: round4(r.longitude),
+          label: [r.name, r.admin2 ?? r.admin1].filter(Boolean).join(', '),
+        });
+      }
+    }
+  }
+  return out;
+}
+
+const round4 = (x: number) => Math.round(x * 1e4) / 1e4;

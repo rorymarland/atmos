@@ -8,13 +8,18 @@
 </script>
 
 <script lang="ts">
-  /** Best bet, areas worth going to, those that need an earlier start, and Avoid. */
+  /** The best bet, then every hill by photo score, with those that need an earlier start. */
   import { explain, formatDuration } from '@atmos/engine';
-  import { conditions, keyHourProfile, type Trip, type ZoneResult } from '#lib/conditions.svelte.ts';
+  import {
+    conditions,
+    type ConditionTrip,
+    type HillResult,
+    type Trip,
+  } from '#lib/conditions.svelte.ts';
   import { settings } from '#lib/settings.svelte.ts';
   import { modelLabel } from '#lib/static-data.ts';
-  import { dayLabel, formatClock, formatTime, londonMidnight } from '#lib/time.ts';
-  import AltitudeGauge from './AltitudeGauge.svelte';
+  import { PERIOD_LABELS } from '#lib/sun.ts';
+  import { dayLabel, formatClock, londonMidnight } from '#lib/time.ts';
   import VerdictMark from './VerdictMark.svelte';
 
   let {
@@ -23,49 +28,57 @@
   }: { onSelect: (p: Pick) => void; onHover: (p: { lat: number; lon: number } | null) => void } =
     $props();
 
+  const PAGE = 30;
   const ranking = $derived(conditions.ranking);
-  const usable = $derived(ranking.go);
+  const worth = $derived(ranking.go);
   const tooEarly = $derived(ranking.tooEarly);
-  const avoid = $derived(ranking.avoid);
+  const rest = $derived(ranking.rest);
+  const best = $derived(settings.sort === 'best' ? (worth[0] ?? null) : null);
+  const listed = $derived(best ? worth.slice(1) : worth);
+  let shown = $state(PAGE);
+  let restShown = $state(PAGE);
+  $effect(() => {
+    // Back to the first page whenever the search changes.
+    void ranking;
+    shown = PAGE;
+    restShown = PAGE;
+  });
+
   const dayStart = $derived(londonMidnight(settings.dayOffset, conditions.now));
   const clock = (ms: number) => formatClock(ms, dayStart);
-  const tripLine = (t: Trip) => `Leave ${clock(t.plan.leaveAt)}, ${formatDuration(t.driveMinutes)} drive`;
+  const pct = (score: number | null) => (score === null ? '–' : String(Math.round(score * 100)));
+  const pickFor = (h: HillResult): Pick => ({ lat: h.hill.lat, lon: h.hill.lon, href: `?hill=${h.hill.number}`, zoom: 10 });
+  const periodWord = (c: ConditionTrip) =>
+    conditions.data && conditions.data.config.profiles[c.profileId]!.periods.length > 1
+      ? ` ${c.period === 'morning' ? 'am' : 'pm'}`
+      : '';
+  /** The conditions worth mentioning on a row: Go and Maybe, best first. */
+  const highlights = (h: HillResult) => h.counted.filter((c) => c.result.verdict === 'go' || c.result.verdict === 'maybe').slice(0, 4);
+  const tripLine = (t: Trip) => `leave ${clock(t.plan.leaveAt)}, ${formatDuration(t.driveMinutes)} drive`;
   const problemLine = (t: Trip) =>
     t.problem === 'too-late' ? `Leave by ${clock(t.plan.leaveAt)}: passed` : `Up at ${clock(t.plan.wakeAt)}`;
-  const best = $derived(usable[0] ?? null);
-  const bestHill = $derived(best?.hills[0] ?? null);
-  const bestReasons = $derived(
+
+  /** Other good conditions at the best bet, each named once. */
+  const alsoGood = $derived(
     best
-      ? explain(bestHill?.result ?? best.result, { wind: settings.wind }, modelLabel)
-          .filter((r) => r.status === 'good')
+      ? [...new Set(highlights(best).map((c) => c.profileId))]
+          .filter((id) => id !== best.best?.profileId)
+          .map((id) => conditions.short(id).toLowerCase())
+      : [],
+  );
+  const bestReasons = $derived(
+    best?.best
+      ? explain(best.best.result, { wind: settings.wind }, modelLabel)
+          .filter((r) => r.status === 'good' || r.status === 'blocked' || r.status === 'poor')
           .slice(0, 3)
       : [],
   );
-  const profileLabel = $derived(
-    conditions.data?.config.profiles[settings.profile]?.label.toLowerCase() ?? '',
-  );
-
-  let expanded = $state<string | null>(null);
-
-  function pickFor(z: ZoneResult, hillIndex = 0): Pick {
-    const h = ranking.summitProfile ? z.hills[hillIndex] : undefined;
-    return h
-      ? { lat: h.hill.lat, lon: h.hill.lon, href: `?hill=${h.hill.number}`, zoom: 11 }
-      : { ...z.zone.forecastPoint, href: `?zone=${z.zone.id}`, zoom: 9.5 };
-  }
-
-  function gaugeFor(z: ZoneResult, i: number) {
-    const h = z.hills[i];
-    if (!h) return null;
-    const k = keyHourProfile(h.result, conditions.forecastsFor(z.zone.id));
-    return k
-      ? { layers: k.layers, groundM: k.forecast.groundElevationM, summitM: h.hill.metres }
-      : null;
-  }
-
-  const miles = (z: ZoneResult) => z.hills[0]?.miles ?? z.miles;
-  const rowName = (z: ZoneResult) =>
-    ranking.summitProfile && z.hills[0] ? z.hills[0].hill.name : z.zone.name;
+  const SORTS = [
+    ['best', 'Best first'],
+    ['worst', 'Worst first'],
+    ['nearest', 'Nearest first'],
+    ['highest', 'Highest first'],
+  ] as const;
 </script>
 
 {#snippet target(p: Pick, label: string, cls: string)}
@@ -83,31 +96,55 @@
   >
 {/snippet}
 
-{#if best}
-  {@const p = pickFor(best)}
+{#snippet badges(h: HillResult)}
+  {@const hl = highlights(h)}
+  {#if hl.length}
+    <span class="badges">
+      {#each hl as c (c.profileId + c.period)}
+        <span class="badge {c.result.verdict}" title="{conditions.label(c.profileId)}, {PERIOD_LABELS[c.period].toLowerCase()}: {pct(c.result.score)}">
+          {conditions.short(c.profileId)}{periodWord(c)}
+        </span>
+      {/each}
+    </span>
+  {/if}
+{/snippet}
+
+{#snippet row(h: HillResult)}
+  <li>
+    <VerdictMark verdict={h.verdict} />
+    <span class="row-main">
+      {@render target(pickFor(h), h.hill.name, 'zone-name')}
+      <span class="small muted">
+        {h.zone.name}, {Math.round(h.hill.metres)} m{#if h.best?.trip}, {tripLine(h.best.trip)}{:else if h.miles !== null}, {Math.round(h.miles)} mi{/if}
+      </span>
+      {@render badges(h)}
+    </span>
+    <span class="score" title="Photo score out of 100">{pct(h.score)}</span>
+  </li>
+{/snippet}
+
+{#if best && best.best}
+  {@const c = best.best}
   <section class="best" aria-labelledby="best-title">
-    <p class="small muted">Best bet for {profileLabel}, {dayLabel(settings.dayOffset).toLowerCase()}</p>
-    <h2 id="best-title">{@render target(p, bestHill ? bestHill.hill.name : best.zone.name, 'best-name')}</h2>
+    <p class="small muted">Best bet {dayLabel(settings.dayOffset).toLowerCase()}</p>
+    <h2 id="best-title">{@render target(pickFor(best), best.hill.name, 'best-name')}</h2>
     <p>
-      {#if bestHill}{Math.round(bestHill.hill.metres)} m, {best.zone.name}{:else}{best.zone.name}{/if}{#if miles(best) !== null}<span
-          class="muted">, {Math.round(miles(best)!)} miles</span
-        >{/if}
+      {Math.round(best.hill.metres)} m, {best.zone.name}{#if best.miles !== null}<span class="muted">, {Math.round(best.miles)} miles</span>{/if}
     </p>
     <div class="best-verdict">
-      <VerdictMark
-        verdict={(bestHill?.result ?? best.result).verdict}
-        confidence={(bestHill?.result ?? best.result).confidence}
-        size="large"
-      />
-      <span class="small muted">{formatTime(best.window.start)} to {formatTime(best.window.end)}</span>
+      <VerdictMark verdict={best.verdict} confidence={c.result.confidence} size="large" />
+      <span class="big-score"><strong>{pct(best.score)}</strong> <span class="small muted">photo score</span></span>
     </div>
-    {#if best.trip}
-      {@const t = best.trip}
+    <p class="small">
+      Best for <strong>{conditions.label(c.profileId).toLowerCase()}</strong>, {PERIOD_LABELS[c.period].toLowerCase()}{#if alsoGood.length}; also {alsoGood.join(', ')}{/if}.
+    </p>
+    {#if c.trip}
+      {@const t = c.trip}
       <dl class="trip">
-        <div><dt>Up</dt><dd>{clock(t.plan.wakeAt)}</dd></div>
+        <div><dt>{c.period === 'morning' ? 'Up' : 'Get ready'}</dt><dd>{clock(t.plan.wakeAt)}</dd></div>
         <div class="leave"><dt>Leave</dt><dd>{clock(t.plan.leaveAt)}</dd></div>
         <div><dt>Drive</dt><dd>{formatDuration(t.driveMinutes)}</dd></div>
-        <div><dt>{ranking.summitProfile ? 'Walk up' : 'Walk'}</dt><dd>{formatDuration(t.walkMinutes)}</dd></div>
+        <div><dt>{c.scope === 'summit' ? 'Walk up' : 'Walk'}</dt><dd>{formatDuration(t.walkMinutes)}</dd></div>
         <div><dt>In place</dt><dd>{clock(t.plan.arriveAt)}</dd></div>
       </dl>
       <p class="small muted">In place {settings.earlyMinutes} min before {t.targetLabel} ({clock(t.plan.target)}). Times are rough estimates.</p>
@@ -116,90 +153,80 @@
     {/if}
     {#if bestReasons.length}
       <ul class="reasons small">
-        {#each bestReasons as r, i (i)}<li>{r.text}</li>{/each}
+        {#each bestReasons as r, i (i)}<li class={r.status}>{r.text}</li>{/each}
       </ul>
     {/if}
   </section>
-{:else if conditions.data && !conditions.loading && tooEarly.length > 0}
+{:else if conditions.data && !conditions.loading && conditions.ticked.size === 0}
+  <section class="best">
+    <h2 class="none">Tick something to look for</h2>
+    <p class="small muted">Choose at least one condition above.</p>
+  </section>
+{:else if conditions.data && !conditions.loading && worth.length === 0 && tooEarly.length > 0}
   <section class="best">
     <h2 class="none">Nothing worth it without an earlier start</h2>
     <p class="small muted">
       The places below look good, but you’d need to be up before {settings.earliestUp}. Allow an
-      earlier start, a later moment, or try another day.
+      earlier start or try another day.
     </p>
   </section>
-{:else if conditions.data && !conditions.loading && ranking.zones.length > 0}
+{:else if conditions.data && !conditions.loading && ranking.total > 0 && worth.length === 0}
   <section class="best">
-    <h2 class="none">Nothing looks good for {profileLabel} {dayLabel(settings.dayOffset).toLowerCase()}</h2>
-    <p class="small muted">Try another day or profile, or widen the filters.</p>
+    <h2 class="none">Nothing looks good {dayLabel(settings.dayOffset).toLowerCase()}</h2>
+    <p class="small muted">Try another day, tick more conditions or widen the filters.</p>
   </section>
-{:else if conditions.data && conditions.filteredHills.length === 0}
+{:else if conditions.data && !conditions.loading && ranking.total === 0 && conditions.forecasts.size > 0}
   <section class="best">
-    <h2 class="none">No hills match the filters</h2>
+    <h2 class="none">No hills match</h2>
     <p class="small muted">Turn on more hill lists, lower the minimum height or allow a longer drive.</p>
   </section>
 {/if}
 
-{#if usable.length > 0}
-  <section aria-labelledby="go-title">
-    <h3 id="go-title" class="list-title">Worth going</h3>
-    <ol class="zones">
-      {#each usable as z (z.zone.id)}
-        {@const gauge = ranking.summitProfile ? gaugeFor(z, 0) : null}
-        <li class="zone">
-          <div class="zone-head">
-            <VerdictMark verdict={z.result.verdict} confidence={z.result.confidence} />
-            {#if gauge}<AltitudeGauge {...gauge} />{:else}<span></span>{/if}
-            <div class="zone-text">
-              {@render target(pickFor(z), rowName(z), 'zone-name')}
-              <span class="small muted">
-                {#if ranking.summitProfile}{z.zone.name}{#if z.goCount > 1}, {z.goCount} good{/if}{:else}Valley forecast{/if}{#if !z.trip && miles(z) !== null}, {Math.round(miles(z)!)} mi{/if}
-              </span>
-              {#if z.trip}<span class="small leave-line">{tripLine(z.trip)}</span>{/if}
-            </div>
-            {#if ranking.summitProfile && z.hills.length > 1}
-              <button
-                class="more"
-                aria-expanded={expanded === z.zone.id}
-                aria-controls="hills-{z.zone.id}"
-                aria-label="{expanded === z.zone.id ? 'Hide' : 'Show'} other hills in {z.zone.name}"
-                onclick={() => (expanded = expanded === z.zone.id ? null : z.zone.id)}
-              >
-                {expanded === z.zone.id ? 'Less' : `+${z.hills.length - 1}`}
-              </button>
-            {/if}
-          </div>
-          {#if expanded === z.zone.id}
-            <ul class="hills" id="hills-{z.zone.id}">
-              {#each z.hills.slice(1, 25) as h, i (h.hill.number)}
-                {@const g = gaugeFor(z, i + 1)}
-                <li>
-                  <VerdictMark verdict={h.result.verdict} />
-                  {#if g}<AltitudeGauge {...g} />{/if}
-                  {@render target(pickFor(z, i + 1), h.hill.name, 'hill-name')}
-                  <span class="small muted">{Math.round(h.hill.metres)} m{#if h.trip}, {h.trip.problem ? problemLine(h.trip).toLowerCase() : `leave ${clock(h.trip.plan.leaveAt)}`}{/if}</span>
-                </li>
-              {/each}
-              {#if z.hills.length > 25}<li class="small muted">and {z.hills.length - 25} more on the map</li>{/if}
-            </ul>
-          {/if}
-        </li>
-      {/each}
-    </ol>
-  </section>
+{#if ranking.total > 0}
+  <div class="list-head">
+    <h3 class="list-title">
+      {#if settings.sort === 'best'}Worth going: {worth.length}{:else}All hills: {ranking.total}{/if}
+    </h3>
+    <label class="small sort">
+      <span class="muted">Sort</span>
+      <select bind:value={settings.sort}>
+        {#each SORTS as [v, l] (v)}<option value={v}>{l}</option>{/each}
+      </select>
+    </label>
+  </div>
+{/if}
+
+{#if settings.sort === 'best'}
+  {#if listed.length > 0}
+    <ul class="zones">
+      {#each listed.slice(0, shown) as h (h.hill.number)}{@render row(h)}{/each}
+    </ul>
+    {#if listed.length > shown}
+      <button class="more" onclick={() => (shown += PAGE)}>Show {Math.min(PAGE, listed.length - shown)} more</button>
+    {/if}
+  {/if}
+{:else}
+  {@const all = [...worth, ...rest]}
+  <ul class="zones">
+    {#each all.slice(0, shown) as h (h.hill.number)}{@render row(h)}{/each}
+  </ul>
+  {#if all.length > shown}
+    <button class="more" onclick={() => (shown += PAGE)}>Show {Math.min(PAGE, all.length - shown)} more</button>
+  {/if}
 {/if}
 
 {#if tooEarly.length > 0}
   <section aria-labelledby="early-title">
-    <details class="avoid" open={usable.length === 0}>
+    <details class="avoid" open={worth.length === 0}>
       <summary><h3 id="early-title" class="list-title">Needs an earlier start: {tooEarly.length}</h3></summary>
       <ul class="avoid-list">
-        {#each tooEarly as z (z.zone.id)}
+        {#each tooEarly.slice(0, 40) as h (h.hill.number)}
+          {@const c = h.needsEarlier!}
           <li class="early">
-            <VerdictMark verdict={z.result.verdict} />
+            <VerdictMark verdict={c.result.verdict} />
             <span class="early-text">
-              {@render target(pickFor(z), rowName(z), 'avoid-name')}
-              {#if z.trip}<span class="small muted">{problemLine(z.trip)}, {formatDuration(z.trip.driveMinutes)} drive</span>{/if}
+              {@render target(pickFor(h), h.hill.name, 'avoid-name')}
+              <span class="small muted">{conditions.short(c.profileId)}, {problemLine(c.trip!).toLowerCase()}, {formatDuration(c.trip!.driveMinutes)} drive</span>
             </span>
           </li>
         {/each}
@@ -208,26 +235,97 @@
   </section>
 {/if}
 
-{#if avoid.length > 0}
-  <section aria-labelledby="avoid-title">
-    <details class="avoid" open={usable.length === 0}>
-      <summary><h3 id="avoid-title" class="list-title">Avoid: {avoid.length} {avoid.length === 1 ? 'area' : 'areas'}</h3></summary>
-      <ul class="avoid-list">
-        {#each avoid as z (z.zone.id)}
-          {@const reason = explain(z.result, { wind: settings.wind }, modelLabel).find(
-            (r) => r.status === 'blocked' || r.status === 'poor',
-          )}
-          <li>
-            {@render target(pickFor(z), z.zone.name, 'avoid-name')}
-            {#if reason}<span class="small muted">{reason.text}</span>{/if}
-          </li>
-        {/each}
+{#if settings.sort === 'best' && rest.length > 0}
+  <section aria-labelledby="rest-title">
+    <details class="avoid">
+      <summary><h3 id="rest-title" class="list-title">Not worth it: {rest.length}</h3></summary>
+      <ul class="zones">
+        {#each rest.slice(0, restShown) as h (h.hill.number)}{@render row(h)}{/each}
       </ul>
+      {#if rest.length > restShown}
+        <button class="more" onclick={() => (restShown += PAGE)}>Show {Math.min(PAGE, rest.length - restShown)} more</button>
+      {/if}
     </details>
   </section>
 {/if}
 
 <style>
+  .list-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .sort {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+  }
+  .sort select {
+    padding: 2px 6px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .zones {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+  }
+  .zones li {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 10px;
+    align-items: start;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .row-main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .score {
+    font-weight: 800;
+    font-stretch: 75%;
+    font-size: 1.25rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+  }
+  .big-score strong {
+    font-size: 1.6rem;
+    font-stretch: 70%;
+    font-weight: 850;
+  }
+  .badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: 3px;
+  }
+  .badge {
+    font-size: 0.74rem;
+    padding: 0 6px;
+    border-radius: 4px;
+    border: 1px solid currentColor;
+    line-height: 1.5;
+  }
+  .badge.go {
+    color: var(--go);
+  }
+  .badge.maybe {
+    color: var(--maybe);
+  }
+  .more {
+    justify-self: start;
+    margin-top: 6px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.85rem;
+  }
   section {
     display: grid;
     gap: 4px;
@@ -365,11 +463,6 @@
     border-left: 2px solid var(--line);
     display: grid;
     gap: 6px;
-  }
-  .hills li {
-    display: flex;
-    align-items: center;
-    gap: 8px;
   }
   .hills :global(.hill-name) {
     font-stretch: 85%;

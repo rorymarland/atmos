@@ -25,6 +25,8 @@ export interface SurfaceSeries {
   visibility?: Series;
   pressureMsl?: Series;
   freezingLevelHeight?: Series;
+  /** Convective (shower) precipitation, mm per hour. */
+  showers?: Series;
 }
 
 export type SurfaceVariable = keyof SurfaceSeries;
@@ -63,6 +65,9 @@ export interface Target {
   id: string;
   name: string;
   altitudeM: number;
+  /** Position, for sun, moon and aurora geometry. Night-sky conditions need it. */
+  lat?: number;
+  lon?: number;
 }
 
 /** Inclusive time window, epoch ms. */
@@ -75,4 +80,14 @@ export type Verdict = 'go' | 'maybe' | 'no' | 'nodata';
 export type Confidence = 'high' | 'medium' | 'low';
 
 /** Units used when formatting values for people. */
-export type Unit = 'kmh' | 'celsius' | 'celsiusDelta' | 'metres' | 'percent' | 'hpa' | 'mm' | 'km';
+export type Unit =
+  | 'kmh'
+  | 'celsius'
+  | 'celsiusDelta'
+  | 'metres'
+  | 'percent'
+  | 'hpa'
+  | 'mm'
+  | 'km'
+  | 'degrees'
+  | 'kp';

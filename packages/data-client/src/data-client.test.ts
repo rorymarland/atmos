@@ -192,3 +192,21 @@ describe('fetchZoneForecasts', () => {
     });
   });
 });
+
+describe('Kp forecast', () => {
+  it('reads both the row and the object formats', async () => {
+    const { parseKpForecast, kpAt } = await import('./kp.js');
+    const rows = parseKpForecast([
+      ['time_tag', 'kp', 'observed', 'noaa_scale'],
+      ['2026-11-16 00:00:00', '3.33', 'observed', null],
+      ['2026-11-16 03:00:00', '5.67', 'predicted', 'G2'],
+    ]);
+    const objects = parseKpForecast([
+      { time_tag: '2026-11-16T00:00:00', kp: 3.33 },
+      { time_tag: '2026-11-16T03:00:00', kp: 5.67 },
+    ]);
+    expect(rows).toEqual(objects);
+    expect(kpAt(rows, Date.UTC(2026, 10, 16, 4, 30))).toBeCloseTo(5.67);
+    expect(kpAt(rows, Date.UTC(2026, 10, 17, 4))).toBeNull();
+  });
+});
