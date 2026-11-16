@@ -1,10 +1,14 @@
 <script lang="ts">
-  /** One hill: its photo score, every condition broken down, the trip and the reasons. */
+  /**
+   * One hill, shown in the side panel in place of the results: its photo score, every
+   * condition broken down, the trip and the reasons. Not modal, so the map and the
+   * timeline stay usable alongside it.
+   */
   import { explain, formatDuration, googleMapsDirectionsUrl, hillIsOnList } from '@atmos/engine';
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { conditions, keyHourProfile, type ConditionTrip } from '#lib/conditions.svelte.ts';
-  import { settings } from '#lib/settings.svelte.ts';
+  import { resetFilters, settings } from '#lib/settings.svelte.ts';
   import { modelLabel } from '#lib/static-data.ts';
   import { PERIOD_LABELS } from '#lib/sun.ts';
   import { formatClock, formatTime, londonMidnight } from '#lib/time.ts';
@@ -63,13 +67,25 @@
       : (settings.start?.label ?? ''),
   );
 
-  let dialog: HTMLDialogElement | undefined = $state();
-
+  let view: HTMLElement | undefined = $state();
+  // Start each hill at the top, with focus on its name for keyboard and screen readers.
   $effect(() => {
-    if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
+    void hillParam;
+    if (view) {
+      view.closest('.panel-body')?.scrollTo({ top: 0 });
+      view.querySelector<HTMLElement>('h2')?.focus({ preventScroll: true });
+    }
   });
+
+  function onKey(e: KeyboardEvent) {
+    const t = e.target as HTMLElement | null;
+    if (e.key === 'Escape' && open && !t?.closest('input, select, textarea')) close();
+  }
+
+  function resetAll() {
+    resetFilters();
+    close();
+  }
 
   function close() {
     const url = new URL(page.url.href);
@@ -96,18 +112,23 @@
   </li>
 {/snippet}
 
-<dialog bind:this={dialog} onclose={close} aria-labelledby="sheet-title">
-  {#if open}
+<svelte:window onkeydown={onKey} />
+
+{#if open}
+  <div class="hill-view" bind:this={view} role="region" aria-labelledby="sheet-title">
+    <div class="nav">
+      <button class="back" onclick={close}>Back to results</button>
+      <button class="back" onclick={resetAll} title="Clear this hill and put the search back to its defaults">Reset filters</button>
+    </div>
     <header>
       <div>
-        <h2 id="sheet-title">{hillResult?.hill.name ?? 'Hill'}</h2>
+        <h2 id="sheet-title" tabindex="-1">{hillResult?.hill.name ?? 'Hill'}</h2>
         {#if hillResult}
           <p class="muted small">
             {Math.round(hillResult.hill.metres)} m{#if lists.length}, {lists.join(', ')}{/if}. {hillResult.zone.name}.
           </p>
         {/if}
       </div>
-      <button class="close" onclick={() => dialog?.close()} aria-label="Close">×</button>
     </header>
 
     {#if !hillResult}
@@ -214,8 +235,8 @@
         </p>
       </section>
     {/if}
-  {/if}
-</dialog>
+  </div>
+{/if}
 
 <style>
   .big {
@@ -232,7 +253,8 @@
   .cond {
     width: 100%;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 72px 2.2em auto;
+    grid-template-columns: minmax(0, 1fr) 48px 2em auto;
+    gap: 8px;
     gap: 10px;
     align-items: center;
     text-align: left;
@@ -310,37 +332,37 @@
     color: var(--no);
     font-weight: 600;
   }
-  dialog {
-    border: none;
-    padding: 0 20px 28px;
-    background: var(--paper);
+  .hill-view {
+    display: grid;
+    min-width: 0;
+  }
+  .hill-view > * {
+    min-width: 0;
+  }
+  .nav {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .back {
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 0.84rem;
     color: var(--ink);
-    width: min(560px, 100vw);
-    max-width: 100vw;
-    height: 100dvh;
-    max-height: 100dvh;
-    margin: 0 0 0 auto;
-    box-shadow: -1px 0 0 var(--line);
-    overflow-y: auto;
   }
-  dialog::backdrop {
-    background: rgb(20 29 36 / 0.35);
-  }
-  @media (max-width: 640px) {
-    dialog {
-      margin: auto 0 0;
-      height: 88dvh;
-      border-radius: 14px 14px 0 0;
-    }
+  h2:focus {
+    outline: none;
   }
   header {
     position: sticky;
-    top: 0;
+    top: -14px;
     background: var(--paper);
     display: flex;
     justify-content: space-between;
     gap: 12px;
-    padding: 18px 0 12px;
+    padding: 12px 0 10px;
     border-bottom: 1px solid var(--line);
     z-index: 1;
   }
@@ -348,14 +370,6 @@
     font-size: 1.7rem;
     font-stretch: 68%;
     font-weight: 800;
-  }
-  .close {
-    border: none;
-    background: none;
-    font-size: 1.8rem;
-    line-height: 1;
-    padding: 0 4px;
-    align-self: flex-start;
   }
   section {
     padding: 16px 0;
