@@ -24,3 +24,15 @@
   browser and build scripts alike.
 - Scoring thresholds and weights live in `config/profiles.yaml`, not in code.
 - Every change keeps `pnpm check` green (lint, format, typecheck, tests).
+
+## SvelteKit 3 notes (apps/web)
+
+- Config lives in `vite.config.ts` via `sveltekit({...})`; there is no `svelte.config.js`.
+- `$lib` is gone: import with `#lib/...` (package.json `imports`) and include the file extension,
+  e.g. `#lib/conditions.svelte.ts`, `#lib/components/AirColumn.svelte`.
+- `tsconfig.json` extends `$app/tsconfig`.
+- `goto` takes `replace` and `reset` (no `noScroll`/`keepFocus`); links use
+  `data-sveltekit-reset="false"` to keep scroll position.
+- Build-time defaults reach the client through Vite `define` (`__ATMOS_DEFAULTS__`).
+- MapLibre 6 needs `setWorkerUrl(...)` with the worker module imported via `?url`. Layer
+  errors arrive as `error` events, not exceptions; zoom expressions must be top-level.

@@ -72,6 +72,13 @@ describe('inversion profile', () => {
     expect(gate.value!).toBeLessThan(0);
   });
 
+  it('does not penalise overnight valley fog, only cloud above it', () => {
+    const r = evaluateWindow(makeForecast(inversionMorning), dawn, benLedi, 'inversion', config);
+    const f = r.keyHour!.factors.find((x) => x.id === 'nightCooling')!;
+    expect(f.value).toBeCloseTo(9.75);
+    expect(f.score).toBe(1);
+  });
+
   it('says NO on a wet, windy day', () => {
     const r = evaluateWindow(makeForecast(windyWetDay), dawn, benLedi, 'inversion', config);
     expect(r.verdict).toBe('no');

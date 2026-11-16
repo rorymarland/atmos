@@ -1,7 +1,9 @@
 /**
  * Builds the app's static data from config/ and the DoBIH CSV into data/generated/.
  *
- *   pnpm build:data -- --dobih-version 18.3 [--hills data/raw/DoBIH.csv] [--out data/generated]
+ *   pnpm build:data --dobih-version 18.6 [--hills data/raw/DoBIH.csv] [--out data/generated]
+ *
+ * DOBIH_VERSION in the environment works in place of --dobih-version.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -32,9 +34,11 @@ const { values: args } = parseArgs({
   },
 });
 
-const dobihVersion = args['dobih-version'];
+const dobihVersion = args['dobih-version'] ?? process.env.DOBIH_VERSION;
 if (!dobihVersion || !/^\d+(\.\d+)*$/.test(dobihVersion)) {
-  console.error('Pass the DoBIH version you downloaded, e.g. --dobih-version 18.3');
+  console.error(
+    'Pass the DoBIH version you downloaded, e.g. --dobih-version 18.6 (or set DOBIH_VERSION)',
+  );
   process.exit(1);
 }
 

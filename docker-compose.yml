@@ -1,0 +1,32 @@
+# Atmos on the NAS: builds from this checkout and serves the static site with nginx.
+#
+#   cp .env.example .env        # then edit it
+#   docker compose up -d --build
+#
+# Rebuild (`--build`) after pulling new code, changing .env, or updating the DoBIH CSV.
+
+services:
+  atmos:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        DOBIH_VERSION: ${DOBIH_VERSION:?Set DOBIH_VERSION in .env, e.g. 18.6}
+        ATMOS_DEFAULT_THEME: ${ATMOS_DEFAULT_THEME:-light}
+        ATMOS_DEFAULT_WIND_UNIT: ${ATMOS_DEFAULT_WIND_UNIT:-kmh}
+    image: atmos:local
+    container_name: atmos
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Europe/London}
+    ports:
+      - '${ATMOS_PORT:-8085}:80'
+    # To reach it only through Nginx Proxy Manager on a shared Docker network instead of
+    # a host port: remove `ports`, uncomment below, and point NPM at http://atmos:80.
+    # networks:
+    #   - proxy
+
+# networks:
+#   proxy:
+#     external: true
+#     name: ${PROXY_NETWORK:-proxy}

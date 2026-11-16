@@ -13,10 +13,12 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc -b && pnpm --filter web check",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test"
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test",
+    "build": "tsx scripts/build-data.ts --out apps/web/static/data && pnpm --filter web build",
+    "dev": "pnpm --filter web dev"
   },
   "devDependencies": {
     "@atmos/engine": "workspace:*",
@@ -26,6 +28,7 @@
     "eslint": "^10.15.0",
     "globals": "^17.14.0",
     "prettier": "^3.10.1",
+    "prettier-plugin-svelte": "^4.1.1",
     "tsx": "^4.23.15",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.72.2",

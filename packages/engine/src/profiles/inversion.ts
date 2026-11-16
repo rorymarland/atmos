@@ -58,11 +58,19 @@ export const inversion: ProfileDefinition = {
       read: (ctx) => ({ value: ctx.surface('pressureMsl') }),
     },
     nightCooling: {
-      label: 'Cloud cover overnight',
+      label: 'Mid and high cloud overnight',
       unit: 'percent',
       read: (ctx) => {
         // Roughly dusk to the small hours before a dawn window: 10 to 4 hours earlier.
-        const values = ctx.surfaceRange('cloudCover', -10, -4);
+        // Only cloud above the fog counts: valley fog forming overnight is the point, and
+        // it would otherwise make total cloud look high on the best inversion nights.
+        const values: number[] = [];
+        for (let o = -10; o <= -4; o++) {
+          const mid = ctx.surface('cloudCoverMid', o);
+          const high = ctx.surface('cloudCoverHigh', o);
+          if (mid === null && high === null) continue;
+          values.push(100 * (1 - (1 - (mid ?? 0) / 100) * (1 - (high ?? 0) / 100)));
+        }
         return { value: values.length >= 3 ? mean(values) : null };
       },
     },

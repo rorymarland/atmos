@@ -20,6 +20,7 @@ confidence:
 # Highest resolution first. Open-Meteo model ids: confirm in the M0 spike.
 modelPriority:
   - ukmo_uk_deterministic_2km
+  - ukmo_seamless
   - ukmo_global_deterministic_10km
   - ecmwf_ifs025
   - icon_seamless
