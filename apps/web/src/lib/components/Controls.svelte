@@ -1,6 +1,6 @@
 <script lang="ts">
   /** Day, what to look for and when; the trip plan (start, moment, limits); hill filters. */
-  import { formatDuration, NATION_LABELS, type Nation } from '@atmos/engine';
+  import { NATION_LABELS, type Nation } from '@atmos/engine';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { conditions } from '#lib/conditions.svelte.ts';
@@ -31,7 +31,7 @@
   const lists = $derived(conditions.data?.lists ?? []);
   const moments: Moment[] = ['blue', 'golden', 'sun'];
   const upTimes = ['03:00', '03:30', '04:00', '04:30', '05:00', '05:30', '06:00', '06:30', '07:00', '08:00', '09:00'];
-  const drives = [30, 45, 60, 90, 120, 150, 180, 240];
+  const driveMiles = [10, 20, 30, 50, 75, 100, 150, 200, 300];
   const lightPeriods = $derived(settings.periods.filter((p) => p === 'morning' || p === 'evening'));
   const changed = $derived(filtersChanged());
 
@@ -53,7 +53,7 @@
     const parts = [`${day}${when}${where}, ${what}`];
     if (lightPeriods.length) parts.push(`there for ${MOMENT_LABELS.sunrise[settings.moment].toLowerCase()}`);
     if (settings.start && settings.earliestUp) parts.push(`up no earlier than ${settings.earliestUp}`);
-    if (settings.start && settings.maxDriveMinutes) parts.push(`no more than ${formatDuration(settings.maxDriveMinutes)} in the car`);
+    if (settings.start && settings.maxDriveMiles) parts.push(`within ${settings.maxDriveMiles} miles’ drive`);
     if (settings.start) parts.push(`from ${atHome ? 'home' : settings.start.label}`);
     return parts.join(', ') + '.';
   });
@@ -250,9 +250,9 @@
 
     <label class="row">
       <span class="label">Drive up to</span>
-      <select bind:value={settings.maxDriveMinutes} disabled={!settings.start}>
+      <select bind:value={settings.maxDriveMiles} disabled={!settings.start} title="Estimated road miles from the start point">
         <option value={null}>Any distance</option>
-        {#each drives as d (d)}<option value={d}>{formatDuration(d)}</option>{/each}
+        {#each driveMiles as d (d)}<option value={d}>{d} miles</option>{/each}
       </select>
     </label>
   </details>

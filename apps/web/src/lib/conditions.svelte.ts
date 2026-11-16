@@ -97,6 +97,8 @@ export interface HillResult {
   miles: number | null;
   /** Drive estimate in minutes, if a start point is set. */
   driveMinutes: number | null;
+  /** Estimated road miles, if a start point is set. */
+  roadMiles: number | null;
   /** Worth going only with an earlier start: the best condition that needs one. */
   needsEarlier: ConditionTrip | null;
   /** Picked from the search (e.g. a Tump): scored, but not on the map or in the list. */
@@ -198,10 +200,10 @@ class Conditions {
     if (!data) return [];
     const extraZone = this.extra?.zone ?? -1;
     const start = settings.start;
-    const maxDrive = start ? settings.maxDriveMinutes : null;
+    const maxMiles = start ? settings.maxDriveMiles : null;
     const ids = new Set(
       this.listedHills
-        .filter((h) => maxDrive === null || estimateDrive(start!, h).minutes <= maxDrive)
+        .filter((h) => maxMiles === null || estimateDrive(start!, h).roadMiles <= maxMiles)
         .map((h) => h.zone),
     );
     if (extraZone >= 0) ids.add(extraZone);
@@ -377,6 +379,7 @@ class Conditions {
         conditions,
         miles: start ? distanceMiles(start, e.hill) : null,
         driveMinutes: drive?.minutes ?? null,
+        roadMiles: drive?.roadMiles ?? null,
       };
     });
   });
@@ -395,7 +398,7 @@ class Conditions {
     if (!data) return empty;
     const ticked = this.ticked;
     const periods = new Set(settings.periods);
-    const maxDrive = settings.start ? settings.maxDriveMinutes : null;
+    const maxMiles = settings.start ? settings.maxDriveMiles : null;
     // Conditions arrive best first, so the top three are the first three scored.
     const photoScore = (list: ConditionTrip[]): number | null => {
       const scores = list
@@ -410,7 +413,7 @@ class Conditions {
     let windowPassed = false;
     const searched: HillResult[] = [];
     for (const h of this.planned) {
-      const tooFar = maxDrive !== null && h.driveMinutes !== null && h.driveMinutes > maxDrive;
+      const tooFar = maxMiles !== null && h.roadMiles !== null && h.roadMiles > maxMiles;
       if (tooFar && !h.searchOnly) continue;
       const candidates = h.conditions.filter(
         (c) => ticked.has(c.profileId) && periods.has(c.period),

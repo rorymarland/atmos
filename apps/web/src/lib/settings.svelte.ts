@@ -39,7 +39,9 @@ export interface Settings {
   /** Don't plan trips that need getting up before this local time ("04:00"), or null. */
   earliestUp: string | null;
   /** Longest acceptable drive, minutes, or null for any. */
-  maxDriveMinutes: number | null;
+  maxDriveMinutes?: number | null;
+  /** Longest acceptable drive, estimated road miles, or null for any. */
+  maxDriveMiles: number | null;
   /** Getting up to leaving, minutes. */
   readyMinutes: number;
   /** Arrive this many minutes before the moment. */
@@ -73,7 +75,7 @@ export const DEFAULT_SETTINGS: Settings = {
   home: null,
   moment: 'golden',
   earliestUp: null,
-  maxDriveMinutes: null,
+  maxDriveMiles: null,
   readyMinutes: 30,
   earlyMinutes: 15,
   pace: 'steady',
@@ -88,6 +90,8 @@ function load(): Settings {
     // Retired fields from the one-condition-at-a-time version.
     delete raw.profile;
     delete raw.light;
+    // The drive limit was in minutes; it's in miles now.
+    delete raw.maxDriveMinutes;
     return { ...DEFAULT_SETTINGS, ...raw };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -121,7 +125,7 @@ export function resetFilters(): void {
     minHeight: d.minHeight,
     moment: d.moment,
     earliestUp: d.earliestUp,
-    maxDriveMinutes: d.maxDriveMinutes,
+    maxDriveMiles: d.maxDriveMiles,
   });
 }
 
@@ -137,7 +141,7 @@ export function filtersChanged(): boolean {
     settings.minHeight !== d.minHeight ||
     settings.moment !== d.moment ||
     settings.earliestUp !== d.earliestUp ||
-    settings.maxDriveMinutes !== d.maxDriveMinutes
+    settings.maxDriveMiles !== d.maxDriveMiles
   );
 }
 
