@@ -28,6 +28,11 @@ modelPriority:
 profiles:
   walking:
     label: Hill walking
+    short: Walking
+    blurb: 'Safe, pleasant conditions on the summit: wind, rain, cloud base and wind chill.'
+    scope: summit
+    periods: [day]
+    photo: false
     aggregate: mean
     worstHourPenalty: 0.5
     factors:
@@ -41,6 +46,10 @@ profiles:
 
   inversion:
     label: Cloud inversion
+    short: Inversion
+    blurb: 'Standing above a sea of cloud at dawn, with warm air over a cold, foggy valley.'
+    scope: summit
+    periods: [morning]
     aggregate: best-hour
     factors:
       inversionStrength: { weight: 3, good: 3, bad: 0 }
@@ -56,6 +65,10 @@ profiles:
 
   sky:
     label: Golden-hour sky
+    short: Sky
+    blurb: 'Mid and high cloud to catch colour at sunrise or sunset, with a clear horizon.'
+    scope: valley
+    periods: [morning, evening]
     aggregate: best-hour
     factors:
       midHighCloud: { weight: 3, band: [20, 70], zero: [0, 95] }
@@ -67,8 +80,129 @@ profiles:
 
   reflections:
     label: Still reflections
+    short: Reflections
+    blurb: 'Calm, dry air for mirror reflections on lochs and lakes.'
+    scope: valley
+    periods: [morning, evening]
     aggregate: best-hour
     factors:
       wind: { weight: 3, good: 5, bad: 12 }
       gusts: { weight: 2, good: 10, bad: 20 }
       precipitation: { weight: 1, good: 0, bad: 0.2 }
+
+  mist:
+    label: Valley mist
+    short: Mist
+    blurb: 'Mist and fog in the glens at dawn, shot from inside or beside it rather than above.'
+    scope: valley
+    periods: [morning]
+    aggregate: best-hour
+    factors:
+      humidity: { weight: 3, good: 97, bad: 88 }
+      dewGap: { weight: 2, good: 0.5, bad: 2.5 }
+      wind: { weight: 2, good: 5, bad: 15 }
+      # Thick enough to show, thin enough to see through: about 0.2 to 4 km.
+      visibility: { weight: 2, band: [0.2, 4], zero: [0, 15] }
+      clearNight: { weight: 1, good: 30, bad: 85 }
+    gates:
+      rain: { max: 0.3 }
+
+  frost:
+    label: Hoar frost
+    short: Frost
+    blurb: 'Frost on grass, trees and ferns after a cold, clear, still night.'
+    scope: valley
+    periods: [morning]
+    aggregate: best-hour
+    factors:
+      overnightLow: { weight: 3, good: -3, bad: 1 }
+      clearNight: { weight: 2, good: 20, bad: 70 }
+      humidity: { weight: 1, good: 90, bad: 70 }
+      wind: { weight: 1, good: 5, bad: 15 }
+
+  snow:
+    label: Snow on the tops
+    short: Snow
+    blurb: 'Fresh snow on the summit, cold enough to stay, with the tops clear of cloud.'
+    scope: summit
+    periods: [day]
+    aggregate: best-hour
+    factors:
+      freshSnow: { weight: 3, good: 5, bad: 0.5 }
+      snowLine: { weight: 2, good: 300, bad: -100 }
+      cloudBase: { weight: 2, good: 200, bad: 0 }
+      sunshine: { weight: 1, good: 50, bad: 95 }
+    gates:
+      rain: { max: 0.5 }
+
+  clarity:
+    label: Clear air and long views
+    short: Clear air
+    blurb: 'Crisp, dry air for distant views, often just behind a cold front.'
+    scope: summit
+    periods: [day]
+    aggregate: best-hour
+    factors:
+      visibility: { weight: 3, good: 30, bad: 10 }
+      dryAir: { weight: 2, good: 7, bad: 2 }
+      summitHumidity: { weight: 1, good: 55, bad: 90 }
+      cloudBase: { weight: 2, good: 300, bad: 0 }
+      rain: { weight: 1, good: 0, bad: 0.3 }
+
+  dramatic:
+    label: Dramatic light
+    short: Drama
+    blurb: 'Broken cloud and passing showers with a low sun: shafts of light, rainbows, moving skies.'
+    scope: valley
+    periods: [morning, evening]
+    aggregate: best-hour
+    factors:
+      brokenCloud: { weight: 3, band: [35, 75], zero: [5, 98] }
+      # Showers help but aren't essential: no showers still scores 0.6.
+      showersNearby: { weight: 2, good: 1, bad: -1.5 }
+      dryNow: { weight: 2, good: 0, bad: 1 }
+      movingSky: { weight: 1, good: 20, bad: 3 }
+      visibility: { weight: 1, good: 20, bad: 5 }
+    gates:
+      totalCloud: { max: 97 }
+
+  waterfalls:
+    label: Waterfalls in spate
+    short: Waterfalls
+    blurb: 'Rivers and falls running full after heavy rain, ideally with a dry spell to shoot in.'
+    scope: valley
+    periods: [day]
+    aggregate: best-hour
+    factors:
+      recentRain: { weight: 3, good: 25, bad: 5 }
+      rain: { weight: 1, good: 0, bad: 2 }
+
+  astro:
+    label: Milky Way and stars
+    short: Stars
+    blurb: 'Clear, dark, moonless skies for stars and the Milky Way.'
+    scope: valley
+    periods: [night]
+    aggregate: best-hour
+    factors:
+      clearSky: { weight: 3, good: 10, bad: 50 }
+      darkness: { weight: 3, good: 18, bad: 10 }
+      moonlight: { weight: 2, good: 5, bad: 60 }
+      # The core is a bonus: winter skies still score, just a little lower.
+      core: { weight: 1, good: 15, bad: -45 }
+      transparency: { weight: 1, good: 75, bad: 97 }
+    gates:
+      totalCloud: { max: 85 }
+
+  aurora:
+    label: Aurora
+    short: Aurora
+    blurb: 'Northern lights: enough geomagnetic activity for this latitude, with a clear, dark sky.'
+    scope: valley
+    periods: [night]
+    aggregate: best-hour
+    factors:
+      activity: { weight: 3, good: 0.5, bad: -1.5 }
+      clearSky: { weight: 2, good: 20, bad: 70 }
+      darkness: { weight: 2, good: 15, bad: 8 }
+      moonlight: { weight: 1, good: 20, bad: 90 }

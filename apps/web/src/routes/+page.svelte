@@ -8,6 +8,12 @@
   import { settings } from '#lib/settings.svelte.ts';
   import { ageLabel, dayLabel, formatTime } from '#lib/time.ts';
   import Controls from '#lib/components/Controls.svelte';
+  import PlaceSearch from '#lib/components/PlaceSearch.svelte';
+  import SkyTimeline, { type KeyMark } from '#lib/components/SkyTimeline.svelte';
+  import { page } from '$app/state';
+  import { skyPositions, sunTimes } from '#lib/sun.ts';
+  import { londonMidnight } from '#lib/time.ts';
+  import type { StartPoint } from '#lib/settings.svelte.ts';
   import ResultsList, { type Pick } from '#lib/components/ResultsList.svelte';
   import VerdictMark from '#lib/components/VerdictMark.svelte';
 
@@ -15,6 +21,10 @@
   const VERDICT_COLOURS = { go: '#2f7a50', maybe: '#b98318', no: '#a3412b', nodata: '#8a979f' };
   const RANK = { go: 3, maybe: 2, no: 1, nodata: 0 } as const;
   const empty = { type: 'FeatureCollection' as const, features: [] };
+  const UK_BOUNDS: [[number, number], [number, number]] = [
+    [-8.2, 49.9],
+    [1.8, 60.9],
+  ];
 
   let container: HTMLDivElement;
   let map: MapLibreMap | null = $state(null);
@@ -26,23 +36,23 @@
 
   const ranking = $derived(conditions.ranking);
   const best = $derived(ranking.go[0] ?? null);
-  const bestName = $derived(best ? (ranking.summitProfile && best.hills[0] ? best.hills[0].hill.name : best.zone.name) : null);
-  const profileLabel = $derived(conditions.data?.config.profiles[settings.profile]?.label ?? '');
+  const bestName = $derived(best?.hill.name ?? null);
 
-  const features = $derived.by(() => {
-    if (ranking.summitProfile) {
-      return [...ranking.hillsByNumber.values()].map((h) => ({
-        type: 'Feature' as const,
-        geometry: { type: 'Point' as const, coordinates: [h.hill.lon, h.hill.lat] },
-        properties: { kind: 'hill', id: h.hill.number, name: h.hill.name, verdict: h.result.verdict, rank: RANK[h.result.verdict] - (h.trip?.problem ? 2 : 0), out: h.trip?.problem ? 1 : 0 },
-      }));
-    }
-    return ranking.zones.map((z) => ({
+  const features = $derived(
+    [...ranking.hillsByNumber.values()].map((h) => ({
       type: 'Feature' as const,
-      geometry: { type: 'Point' as const, coordinates: [z.zone.forecastPoint.lon, z.zone.forecastPoint.lat] },
-      properties: { kind: 'zone', id: z.zone.id, name: z.zone.name, verdict: z.result.verdict, rank: RANK[z.result.verdict] - (z.trip?.problem ? 2 : 0), out: z.trip?.problem ? 1 : 0 },
-    }));
-  });
+      geometry: { type: 'Point' as const, coordinates: [h.hill.lon, h.hill.lat] },
+      properties: {
+        kind: 'hill',
+        id: h.hill.number,
+        name: h.hill.name,
+        verdict: h.verdict,
+        // Better hills draw on top; those needing an earlier start sit back.
+        rank: RANK[h.verdict] * 100 + Math.round((h.score ?? 0) * 99) - (h.needsEarlier ? 150 : 0),
+        out: h.needsEarlier ? 1 : 0,
+      },
+    })),
+  );
 
   function point(lat: number, lon: number) {
     return {
@@ -57,10 +67,11 @@
 
   /** Keep the map's centre in the part of the map the panel doesn't cover. */
   function mapPadding() {
-    if (!panelOpen) return { top: 20, bottom: 20, left: 20, right: 20 };
+    const sky = skyOpen && !narrow ? skyHeight + 16 : 0;
+    if (!panelOpen) return { top: 60, bottom: 20 + sky, left: 20, right: 20 };
     return narrow
-      ? { top: 20, bottom: Math.round(window.innerHeight * 0.55), left: 20, right: 20 }
-      : { top: 20, bottom: 20, left: 20, right: 420 };
+      ? { top: 60, bottom: Math.round(window.innerHeight * 0.55), left: 20, right: 20 }
+      : { top: 60, bottom: 20 + sky, left: 20, right: 420 };
   }
 
   function select(p: Pick) {
@@ -76,6 +87,84 @@
     goto(p.href, { reset: false });
   }
 
+  // The sun and moon timeline.
+  const SKY_KEY = 'atmos.skyOpen';
+  let skyOpen = $state(true);
+  let skyHeight = $state(0);
+  let skyTime = $state(Date.now());
+  const selectedHill = $derived.by(() => {
+    const n = Number(page.url.searchParams.get('hill'));
+    return (n && ranking.hillsByNumber.get(n)) || best;
+  });
+  const skyPlace = $derived(
+    selectedHill
+      ? { lat: selectedHill.hill.lat, lon: selectedHill.hill.lon, name: selectedHill.hill.name }
+      : { lat: 56.8, lon: -4.2, name: 'the Highlands' },
+  );
+  const skyDayStart = $derived(londonMidnight(settings.dayOffset, conditions.now));
+  const skySun = $derived(sunTimes(skyPlace.lat, skyPlace.lon, settings.dayOffset, conditions.now));
+  const keyTimeOf = (r: { byModel: { model: string; keyHour: { time: number } | null }[]; referenceModel: string | null }) =>
+    r.byModel.find((m) => m.model === r.referenceModel)?.keyHour?.time ?? null;
+  const skyMarks = $derived.by((): KeyMark[] => {
+    if (!selectedHill) return [];
+    return selectedHill.counted
+      .slice(0, 6)
+      .map((c) => ({ time: keyTimeOf(c.result) ?? 0, label: conditions.short(c.profileId), verdict: c.result.verdict }))
+      .filter((m) => m.time >= skyDayStart && m.time <= skyDayStart + 86_400_000);
+  });
+  // Jump to the headline condition's best hour when the hill or day changes.
+  $effect(() => {
+    const h = selectedHill;
+    const start = skyDayStart;
+    const t = h?.best ? keyTimeOf(h.best.result) : null;
+    skyTime = t && t >= start && t <= start + 86_400_000 ? t : (skySun.sunrise ?? start + 8 * 3_600_000);
+  });
+
+  /** Sun and moon bearing lines from the place, about 25 km long. */
+  function rays(lat: number, lon: number, time: number) {
+    const p = skyPositions(time, lat, lon);
+    const R = 6371;
+    const line = (az: number, km: number) => {
+      const b = (az * Math.PI) / 180;
+      const d = km / R;
+      const φ1 = (lat * Math.PI) / 180;
+      const λ1 = (lon * Math.PI) / 180;
+      const φ2 = Math.asin(Math.sin(φ1) * Math.cos(d) + Math.cos(φ1) * Math.sin(d) * Math.cos(b));
+      const λ2 = λ1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(φ1), Math.cos(d) - Math.sin(φ1) * Math.sin(φ2));
+      return [
+        [lon, lat],
+        [(λ2 * 180) / Math.PI, (φ2 * 180) / Math.PI],
+      ];
+    };
+    return {
+      type: 'FeatureCollection' as const,
+      features: [
+        { body: 'moon', ...p.moon },
+        { body: 'sun', ...p.sun },
+      ].map((b) => ({
+        type: 'Feature' as const,
+        geometry: { type: 'LineString' as const, coordinates: line(b.azDeg, 25) },
+        properties: { body: b.body, up: b.altDeg >= 0 ? 1 : 0 },
+      })),
+    };
+  }
+
+  /** A place picked in the search box, offered as a start point. */
+  let found = $state<StartPoint | null>(null);
+
+  function flyTo(lat: number, lon: number, zoom: number) {
+    map?.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), zoom), padding: mapPadding(), speed: 1.4 });
+  }
+  function onSearchHill(h: { number: number; lat: number; lon: number }) {
+    found = null;
+    select({ lat: h.lat, lon: h.lon, href: `?hill=${h.number}`, zoom: 11 });
+  }
+  function onSearchPlace(p: StartPoint) {
+    found = p;
+    setSource('found', point(p.lat, p.lon));
+    flyTo(p.lat, p.lon, 10);
+  }
+
   function hover(p: { lat: number; lon: number } | null) {
     setSource('highlight', p ? point(p.lat, p.lon) : empty);
   }
@@ -85,6 +174,8 @@
     narrow = mq.matches;
     const saved = localStorage.getItem(PANEL_KEY);
     panelOpen = saved === null ? !narrow : saved === '1';
+    const sky = localStorage.getItem(SKY_KEY);
+    skyOpen = sky === null ? !narrow : sky === '1';
     const onMq = () => (narrow = mq.matches);
     mq.addEventListener('change', onMq);
 
@@ -103,11 +194,9 @@
       const m = new maplibre.Map({
         container,
         style: 'https://tiles.openfreemap.org/styles/liberty',
-        bounds: [
-          [-8.3, 49.9],
-          [1.9, 60.9],
-        ],
-        fitBoundsOptions: { padding: mapPadding() },
+        // Roughly the UK; fitted properly once the panel padding is known (see 'load').
+        center: [-3.4, 55.2],
+        zoom: 4.6,
         attributionControl: { compact: true },
       });
       // MapLibre reports bad layers and failed tiles as events, not exceptions.
@@ -119,6 +208,10 @@
       m.addControl(new maplibre.NavigationControl({ visualizePitch: true }), 'top-left');
       m.on('load', () => {
         mapError = null;
+        // Set the panel padding first, then fit the UK inside what's left. Fitting with
+        // padding and then easing to the same padding offset the map twice.
+        m.setPadding(mapPadding());
+        m.fitBounds(UK_BOUNDS, { padding: 24, animate: false });
         const firstSymbol = m.getStyle().layers.find((l) => l.type === 'symbol')?.id;
         m.addSource('terrain-dem', {
           type: 'raster-dem',
@@ -140,6 +233,20 @@
         m.addSource('targets', { type: 'geojson', data: empty });
         m.addSource('highlight', { type: 'geojson', data: empty });
         m.addSource('start', { type: 'geojson', data: empty });
+        m.addSource('found', { type: 'geojson', data: empty });
+        m.addSource('rays', { type: 'geojson', data: empty });
+        m.addLayer({
+          id: 'rays',
+          type: 'line',
+          source: 'rays',
+          layout: { 'line-cap': 'round' },
+          paint: {
+            'line-color': ['match', ['get', 'body'], 'sun', '#d9a13b', '#6d7a88'],
+            'line-width': ['match', ['get', 'body'], 'sun', 3, 2],
+            'line-opacity': ['case', ['==', ['get', 'up'], 1], 0.95, 0.35],
+            'line-dasharray': [2, 1.5],
+          },
+        });
         m.addLayer({
           id: 'targets',
           type: 'circle',
@@ -174,6 +281,17 @@
             'circle-color': 'rgba(0,0,0,0)',
             'circle-stroke-color': '#d9a13b',
             'circle-stroke-width': 3,
+          },
+        });
+        m.addLayer({
+          id: 'found',
+          type: 'circle',
+          source: 'found',
+          paint: {
+            'circle-radius': 7,
+            'circle-color': 'rgba(0,0,0,0)',
+            'circle-stroke-color': '#1b2731',
+            'circle-stroke-width': 2.5,
           },
         });
         m.addLayer({
@@ -212,7 +330,7 @@
           const f = e.features?.[0];
           if (!f) return;
           const p = f.properties as { kind: string; id: string | number };
-          goto(p.kind === 'hill' ? `?hill=${p.id}` : `?zone=${p.id}`, { reset: false });
+          goto(`?hill=${p.id}`, { reset: false });
         });
         m.on('click', (e: MapMouseEvent) => {
           if (!picking) return;
@@ -250,10 +368,25 @@
     if (map) map.getCanvas().style.cursor = picking ? 'crosshair' : '';
   });
 
+  $effect(() => {
+    const data = skyOpen ? rays(skyPlace.lat, skyPlace.lon, skyTime) : empty;
+    if (map && loaded) setSource('rays', data);
+  });
+
+  $effect(() => {
+    try {
+      localStorage.setItem(SKY_KEY, skyOpen ? '1' : '0');
+    } catch {
+      // Not saved: fine.
+    }
+  });
+
   // Re-centre the visible part of the map when the panel opens, closes or changes shape.
   $effect(() => {
     void panelOpen;
     void narrow;
+    void skyOpen;
+    void skyHeight;
     if (map && loaded) map.easeTo({ padding: mapPadding(), duration: 300 });
   });
 
@@ -271,10 +404,21 @@
   }
 </script>
 
-<svelte:head><title>Atmos: {profileLabel} {dayLabel(settings.dayOffset).toLowerCase()}</title></svelte:head>
+<svelte:head><title>Atmos: {dayLabel(settings.dayOffset).toLowerCase()}</title></svelte:head>
 
 <div class="map-page">
   <div class="map" bind:this={container} role="region" aria-label="Map of hills coloured by verdict"></div>
+
+  <div class="search-box">
+    <PlaceSearch onHill={onSearchHill} onPlace={onSearchPlace} />
+    {#if found}
+      <div class="found small">
+        <span>{found.label}</span>
+        <button class="link" onclick={() => { settings.start = { ...found! }; found = null; setSource('found', empty); }}>Start from here</button>
+        <button class="link" onclick={() => { found = null; setSource('found', empty); }} aria-label="Dismiss">Close</button>
+      </div>
+    {/if}
+  </div>
 
   {#if mapError}
     <p class="map-error small" role="alert">{mapError} Results are still in the panel.</p>
@@ -287,11 +431,30 @@
     </div>
   {/if}
 
-  <div class="legend small" aria-hidden="true">
-    <span><i style="background: var(--go)"></i>Go</span>
-    <span><i style="background: var(--maybe)"></i>Maybe</span>
-    <span><i style="background: var(--no)"></i>No</span>
-    {#if settings.start}<span><i class="start-dot"></i>Start</span>{/if}
+  <div class="bottom" class:with-panel={panelOpen && !narrow}>
+    {#if skyOpen}
+      <div bind:clientHeight={skyHeight}>
+        <SkyTimeline
+          lat={skyPlace.lat}
+          lon={skyPlace.lon}
+          place={skyPlace.name}
+          dayStart={skyDayStart}
+          sun={skySun}
+          marks={skyMarks}
+          bind:time={skyTime}
+        />
+      </div>
+    {/if}
+    <div class="legend small">
+      <span aria-hidden="true"><i style="background: var(--go)"></i>Go</span>
+      <span aria-hidden="true"><i style="background: var(--maybe)"></i>Maybe</span>
+      <span aria-hidden="true"><i style="background: var(--no)"></i>No</span>
+      {#if settings.start}<span aria-hidden="true"><i class="start-dot"></i>Start</span>{/if}
+      {#if skyOpen}<span aria-hidden="true"><i class="ray sun"></i>Sun</span><span aria-hidden="true"><i class="ray moon"></i>Moon</span>{/if}
+      <button class="link" onclick={() => (skyOpen = !skyOpen)} aria-pressed={skyOpen}>
+        {skyOpen ? 'Hide sun and moon' : 'Sun and moon'}
+      </button>
+    </div>
   </div>
 
   {#if panelOpen}
@@ -331,9 +494,9 @@
   {:else}
     <button class="panel-tab" onclick={() => (panelOpen = true)} aria-label="Show where to go">
       <span class="tab-title">Where to go</span>
-      <span class="tab-sub small">{profileLabel}, {dayLabel(settings.dayOffset).toLowerCase()}</span>
+      <span class="tab-sub small">{dayLabel(settings.dayOffset)}, {conditions.ticked.size} conditions</span>
       {#if best && bestName}
-        <span class="tab-best"><VerdictMark verdict={best.result.verdict} /> {bestName}</span>
+        <span class="tab-best"><VerdictMark verdict={best.verdict} /> {bestName}</span>
       {:else if conditions.loading}
         <span class="tab-sub small">Fetching forecasts…</span>
       {/if}
@@ -353,6 +516,28 @@
     inset: 0;
   }
 
+  .search-box {
+    position: absolute;
+    z-index: 4;
+    top: 12px;
+    left: 12px;
+    display: grid;
+    gap: 6px;
+    justify-items: start;
+  }
+  .found {
+    display: flex;
+    gap: 12px;
+    align-items: baseline;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 5px 10px;
+    box-shadow: 0 4px 16px rgb(20 29 36 / 0.14);
+  }
+  .map-page :global(.maplibregl-ctrl-top-left) {
+    top: 56px;
+  }
   .panel {
     position: absolute;
     z-index: 3;
@@ -462,11 +647,37 @@
     font-stretch: 85%;
   }
 
-  .legend {
+  .bottom {
     position: absolute;
     z-index: 2;
     left: 12px;
-    bottom: 28px;
+    right: 12px;
+    bottom: 26px;
+    display: grid;
+    gap: 6px;
+    justify-items: start;
+    pointer-events: none;
+  }
+  .bottom > * {
+    pointer-events: auto;
+  }
+  .bottom > div:first-child {
+    justify-self: stretch;
+  }
+  .bottom.with-panel {
+    right: 414px;
+  }
+  .legend .ray {
+    width: 14px;
+    height: 0;
+    border-radius: 0;
+    border-top: 3px dashed #d9a13b;
+    vertical-align: 3px;
+  }
+  .legend .ray.moon {
+    border-top: 2px dashed #6d7a88;
+  }
+  .legend {
     display: flex;
     flex-wrap: wrap;
     gap: 6px 14px;
@@ -527,10 +738,15 @@
       bottom: 16px;
       max-width: none;
     }
-    .legend {
-      top: 12px;
+    .bottom {
+      top: 60px;
       bottom: auto;
-      left: auto;
+    }
+    /* Pinch to zoom on phones; the buttons would sit under the legend. */
+    .map-page :global(.maplibregl-ctrl-top-left) {
+      display: none;
+    }
+    .search-box {
       right: 12px;
     }
   }

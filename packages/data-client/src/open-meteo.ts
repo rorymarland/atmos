@@ -24,6 +24,7 @@ export const SURFACE_VARIABLES: Record<keyof SurfaceSeries, string> = {
   visibility: 'visibility',
   pressureMsl: 'pressure_msl',
   freezingLevelHeight: 'freezing_level_height',
+  showers: 'showers',
 };
 
 export interface ForecastRequest {

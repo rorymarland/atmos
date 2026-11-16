@@ -16,10 +16,23 @@ static host.
 
 ## Status
 
-Milestone M3: the first working app. The map is the home page, with a collapsible panel for
-choosing a profile, day, filters and start point and for the ranked areas; a detail sheet explains
-every hill or zone. Four profiles so far: hill walking, cloud inversion, golden-hour
-sky and still reflections.
+The map is the home page, with a collapsible panel for the search and the results, a search box
+for hills, places and postcodes, and a sun and moon timeline along the bottom. Every hill is
+scored for every condition, morning, daytime, evening and night:
+
+| Group           | Conditions                                                           |
+| --------------- | -------------------------------------------------------------------- |
+| Light and sky   | Golden-hour sky, dramatic light (showers, broken cloud), clear air   |
+| Cloud and water | Cloud inversion, valley mist, still reflections, waterfalls in spate |
+| Winter          | Snow on the tops, hoar frost                                         |
+| Night           | Milky Way and stars, aurora (NOAA Kp forecast)                       |
+| On foot         | Hill walking (not part of the photo score unless ticked)             |
+
+Tick the conditions and times of day you care about; each hill gets a photo score out of 100
+from its best three (the best counts most), and the list sorts best to worst. Summit conditions
+(inversion, snow, clear air, walking) are judged at each summit's height; the rest come from the
+zone's valley forecast and are shared by nearby hills. The detail sheet breaks every condition
+down with its reasons. Thresholds and weights are in `config/profiles.yaml`.
 
 Trip planning: set a home by postcode or place name (Settings), choose what to be in place for
 (blue hour, golden hour, sunrise or sunset), the earliest you're willing to get up and the longest
@@ -90,6 +103,7 @@ To build the image from a checkout instead:
 | [Database of British and Irish Hills](https://www.hills-database.co.uk/) (DoBIH)                     | Hill names, heights, positions, lists  | CC BY 4.0                                     |
 | [Postcodes.io](https://postcodes.io/) (OS, Royal Mail and ONS data)                                  | Finding home from a postcode           | OGL v3.0                                      |
 | [GeoNames](https://www.geonames.org/) via Open-Meteo geocoding                                       | Finding home from a place name         | CC BY 4.0                                     |
+| [NOAA SWPC](https://www.swpc.noaa.gov/)                                                              | Kp forecast for the aurora             | Public domain                                 |
 | [AuroraWatch UK](https://aurorawatch.lancs.ac.uk/), Lancaster University                             | Aurora alert status (planned)          | Non-commercial use only; credit and link      |
 | [OpenStreetMap](https://www.openstreetmap.org/copyright) via [OpenFreeMap](https://openfreemap.org/) | Basemap (planned)                      | ODbL                                          |
 

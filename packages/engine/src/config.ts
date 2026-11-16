@@ -21,8 +21,20 @@ const bandRamp = z.strictObject({
 
 const gate = z.union([z.strictObject({ max: z.number() }), z.strictObject({ min: z.number() })]);
 
+const period = z.enum(['morning', 'day', 'evening', 'night']);
+
 const profile = z.strictObject({
   label: z.string().min(1),
+  /** One or two words for badges. */
+  short: z.string().min(1),
+  /** One sentence on what the condition is, for people. */
+  blurb: z.string().min(1),
+  /** Scored at each summit's height, or once for the valley forecast point. */
+  scope: z.enum(['summit', 'valley']),
+  /** When in the day it happens; morning and evening conditions are scored for both. */
+  periods: z.array(period).min(1),
+  /** Counts towards the photo score. */
+  photo: z.boolean().default(true),
   aggregate: z.enum(['best-hour', 'mean']),
   /** Only for `mean`: how much of the gap between the mean and the worst hour is subtracted. */
   worstHourPenalty: z.number().min(0).max(1).default(0.5),
@@ -51,6 +63,7 @@ const scoringConfig = z.strictObject({
 export type FactorConfig = z.infer<typeof linearRamp> | z.infer<typeof bandRamp>;
 export type GateConfig = z.infer<typeof gate>;
 export type ProfileConfig = z.infer<typeof profile>;
+export type Period = z.infer<typeof period>;
 export type ScoringConfig = z.infer<typeof scoringConfig>;
 
 export function rampOf(factor: FactorConfig): Ramp {

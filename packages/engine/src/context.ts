@@ -1,8 +1,26 @@
 /**
  * Everything a factor needs to read one forecast hour for one target.
  */
+import { skyAt, type SkyState } from './astro.js';
 import { profileAt, sampleAt, type ProfileSample, type VerticalProfile } from './vertical.js';
 import type { ModelForecast, SurfaceVariable, Target } from './types.js';
+
+/** Data from outside the weather models. */
+export interface HourExtras {
+  /** Planetary K index forecast for an instant, or null when not known. */
+  kp?: (time: number) => number | null;
+}
+
+const profileCache = new WeakMap<ModelForecast, Map<number, VerticalProfile>>();
+
+/** Vertical profiles are shared by every target in a zone: build each one once. */
+function cachedProfile(forecast: ModelForecast, i: number): VerticalProfile {
+  let byHour = profileCache.get(forecast);
+  if (!byHour) profileCache.set(forecast, (byHour = new Map()));
+  let p = byHour.get(i);
+  if (!p) byHour.set(i, (p = profileAt(forecast, i)));
+  return p;
+}
 
 export interface HourContext {
   forecast: ModelForecast;
@@ -18,11 +36,20 @@ export interface HourContext {
   surface(variable: SurfaceVariable, offset?: number): number | null;
   /** Surface values from `from` to `to` hours relative to this hour, nulls dropped. */
   surfaceRange(variable: SurfaceVariable, from: number, to: number): number[];
+  /** Sun, moon and Milky Way at this hour (30 minutes in), or null without a position. */
+  readonly sky: SkyState | null;
+  extras: HourExtras;
 }
 
-export function createHourContext(forecast: ModelForecast, i: number, target: Target): HourContext {
+export function createHourContext(
+  forecast: ModelForecast,
+  i: number,
+  target: Target,
+  extras: HourExtras = {},
+): HourContext {
   let profile: VerticalProfile | undefined;
   let atTarget: ProfileSample | undefined;
+  let sky: SkyState | null | undefined;
 
   const surface = (variable: SurfaceVariable, offset = 0): number | null => {
     const v = forecast.surface[variable]?.[i + offset];
@@ -35,7 +62,7 @@ export function createHourContext(forecast: ModelForecast, i: number, target: Ta
     time: forecast.time[i]!,
     target,
     get profile() {
-      profile ??= profileAt(forecast, i);
+      profile ??= cachedProfile(forecast, i);
       return profile;
     },
     get atTarget() {
@@ -43,6 +70,16 @@ export function createHourContext(forecast: ModelForecast, i: number, target: Ta
       return atTarget;
     },
     surface,
+    extras,
+    get sky() {
+      if (sky === undefined) {
+        sky =
+          target.lat === undefined || target.lon === undefined
+            ? null
+            : skyAt(forecast.time[i]! + 1_800_000, target.lat, target.lon);
+      }
+      return sky;
+    },
     surfaceRange(variable, from, to) {
       const out: number[] = [];
       for (let o = from; o <= to; o++) {

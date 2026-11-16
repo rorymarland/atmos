@@ -55,8 +55,6 @@ export function loadStaticData(): Promise<StaticData> {
 }
 
 /** Profiles judged at each summit, rather than once for the whole zone at valley level. */
-export const SUMMIT_PROFILES = new Set(['walking', 'inversion']);
-
 export const MODEL_LABELS: Record<string, string> = {
   ukmo_seamless: 'Met Office',
   ukmo_uk_deterministic_2km: 'Met Office UKV',

@@ -24,6 +24,11 @@ attributions:
     url: https://www.hills-database.co.uk/
     licence: CC BY 4.0
     use: Hill names, heights, positions and lists
+  - id: noaa-swpc
+    name: NOAA Space Weather Prediction Center
+    url: https://www.swpc.noaa.gov/
+    licence: Public domain (US Government work)
+    use: Planetary K index forecast for the aurora
   - id: aurorawatch
     name: AuroraWatch UK, Lancaster University
     url: https://aurorawatch.lancs.ac.uk/

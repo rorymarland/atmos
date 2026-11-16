@@ -25,7 +25,9 @@
   m, hPa, %, mm.
 - `packages/engine` is pure TypeScript with no DOM or network access, so it runs in tests, the
   browser and build scripts alike.
-- Scoring thresholds and weights live in `config/profiles.yaml`, not in code.
+- Scoring thresholds and weights live in `config/profiles.yaml`, not in code. Each condition
+  there also declares `scope` (summit or valley), `periods` and whether it counts towards the
+  photo score; the web app scores every hill for every condition and period.
 - Every change keeps `pnpm check` green (lint, format, typecheck, tests).
 
 ## SvelteKit 3 notes (apps/web)

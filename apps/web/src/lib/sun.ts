@@ -1,5 +1,13 @@
 /** Sun times, the light window each profile is scored over, and the moment to be in place. */
-import { Body, Observer, SearchAltitude, SearchRiseSet } from 'astronomy-engine';
+import {
+  Body,
+  Equator,
+  Horizon,
+  Illumination,
+  Observer,
+  SearchAltitude,
+  SearchRiseSet,
+} from 'astronomy-engine';
 import type { TimeWindow } from '@atmos/engine';
 import { floorToHour, londonMidnight } from './time';
 
@@ -53,20 +61,32 @@ export function sunTimes(lat: number, lon: number, dayOffset: number, now = Date
 }
 
 export type Light = 'sunrise' | 'sunset';
+export type Period = 'morning' | 'day' | 'evening' | 'night';
+
+export const PERIOD_LABELS: Record<Period, string> = {
+  morning: 'Morning',
+  day: 'Daytime',
+  evening: 'Evening',
+  night: 'Night',
+};
 
 export interface LightWindow extends TimeWindow {
   /** Plain description for people, e.g. "Dawn to two hours after sunrise". */
   label: string;
 }
 
+/** Conditions that build through the dawn hours get a longer morning window. */
+const LONG_MORNING = new Set(['inversion', 'mist', 'frost']);
+
 /**
- * The hours each profile is judged over. Inversions are a morning phenomenon; sky and
- * reflections follow the chosen light; walking covers the middle of the day.
+ * The hours a condition is judged over in one part of the day. `nextSun` is the
+ * following day's sun, for the night.
  */
-export function profileWindow(
+export function periodWindow(
+  period: Period,
   profileId: string,
-  light: Light,
   sun: SunTimes,
+  nextSun: SunTimes,
   dayStart: number,
 ): LightWindow {
   const sunrise = sun.sunrise ?? dayStart + 8 * HOUR;
@@ -74,37 +94,38 @@ export function profileWindow(
   const dawn = sun.civilDawn ?? sunrise - HOUR;
   const dusk = sun.civilDusk ?? sunset + HOUR;
 
-  switch (profileId) {
-    case 'inversion':
+  switch (period) {
+    case 'morning':
+      return LONG_MORNING.has(profileId)
+        ? {
+            start: floorToHour(dawn),
+            end: sunrise + 2 * HOUR,
+            label: 'Dawn to two hours after sunrise',
+          }
+        : { start: floorToHour(dawn), end: sunrise + HOUR, label: 'Dawn to an hour after sunrise' };
+    case 'evening':
       return {
-        start: floorToHour(dawn),
-        end: sunrise + 2 * HOUR,
-        label: 'Dawn to two hours after sunrise',
+        start: floorToHour(sunset - HOUR),
+        end: dusk,
+        label: 'An hour before sunset to dusk',
       };
-    case 'walking':
-      return {
-        start: floorToHour(Math.max(sunrise, dayStart + 9 * HOUR)),
-        end: Math.min(sunset, dayStart + 16 * HOUR),
-        label: 'Daylight, 09:00 to 16:00',
-      };
-    default:
-      return light === 'sunrise'
-        ? { start: floorToHour(dawn), end: sunrise + HOUR, label: 'Dawn to an hour after sunrise' }
-        : {
-            start: floorToHour(sunset - HOUR),
-            end: dusk,
-            label: 'An hour before sunset to dusk',
-          };
+    case 'day':
+      return profileId === 'walking'
+        ? {
+            start: floorToHour(Math.max(sunrise, dayStart + 9 * HOUR)),
+            end: Math.min(sunset, dayStart + 16 * HOUR),
+            label: 'Daylight, 09:00 to 16:00',
+          }
+        : { start: floorToHour(sunrise), end: sunset, label: 'Sunrise to sunset' };
+    case 'night': {
+      const nextDawn = nextSun.civilDawn ?? dayStart + 30 * HOUR;
+      return { start: floorToHour(dusk), end: nextDawn, label: 'Dusk to dawn' };
+    }
   }
 }
 
 /** What to be in place for. */
 export type Moment = 'blue' | 'golden' | 'sun';
-
-/** The light each profile is judged in: morning for inversions and walks. */
-export function lightFor(profileId: string, light: Light): Light {
-  return profileId === 'inversion' || profileId === 'walking' ? 'sunrise' : light;
-}
 
 export const MOMENT_LABELS: Record<Light, Record<Moment, string>> = {
   sunrise: { blue: 'Blue hour', golden: 'Golden hour', sun: 'Sunrise' },
@@ -113,18 +134,22 @@ export const MOMENT_LABELS: Record<Light, Record<Moment, string>> = {
 
 /**
  * The instant to be in place. Morning: blue hour begins at civil dawn, golden hour at
- * -4°. Evening: golden hour begins at +6°, blue hour at -4°. Walking starts at the
- * beginning of its window instead.
+ * -4°. Evening: golden hour begins at +6°, blue hour at -4°. Daytime and night
+ * conditions aim for their best hour; walks for the start of the walking window.
  */
 export function targetTime(
   profileId: string,
-  light: Light,
+  period: Period,
   moment: Moment,
   sun: SunTimes,
   window: LightWindow,
+  keyHour: number | null,
 ): { at: number; label: string } {
   if (profileId === 'walking') return { at: window.start, label: 'the start of the walk' };
-  const l = lightFor(profileId, light);
+  if (period === 'day' || period === 'night') {
+    return { at: keyHour ?? window.start, label: 'the best hour' };
+  }
+  const l: Light = period === 'morning' ? 'sunrise' : 'sunset';
   const pick =
     l === 'sunrise'
       ? { blue: sun.civilDawn, golden: sun.goldenStart, sun: sun.sunrise }[moment]
@@ -133,3 +158,71 @@ export function targetTime(
   const at = pick ?? fallback ?? window.start;
   return { at, label: MOMENT_LABELS[l][moment].toLowerCase() };
 }
+
+export interface BodyPosition {
+  altDeg: number;
+  /** Compass bearing, degrees from north. */
+  azDeg: number;
+}
+
+export interface SkyPositions {
+  sun: BodyPosition;
+  moon: BodyPosition;
+  /** Lit fraction of the moon, 0 to 1. */
+  moonLit: number;
+}
+
+function position(body: Body, date: Date, obs: Observer): BodyPosition {
+  const eq = Equator(body, date, obs, true, true);
+  const h = Horizon(date, obs, eq.ra, eq.dec, 'normal');
+  return { altDeg: h.altitude, azDeg: h.azimuth };
+}
+
+/** Sun and moon height and direction at one instant. */
+export function skyPositions(time: number, lat: number, lon: number): SkyPositions {
+  const obs = new Observer(lat, lon, 0);
+  const date = new Date(time);
+  return {
+    sun: position(Body.Sun, date, obs),
+    moon: position(Body.Moon, date, obs),
+    moonLit: Illumination(Body.Moon, date).phase_fraction,
+  };
+}
+
+export interface MoonTimes {
+  rise: number | null;
+  set: number | null;
+}
+
+/** Moonrise and moonset within the London day starting at `dayStart`. */
+export function moonTimes(lat: number, lon: number, dayStart: number): MoonTimes {
+  const obs = new Observer(lat, lon, 0);
+  const date = new Date(dayStart);
+  const within = (t: { date: Date } | null) =>
+    t && t.date.getTime() < dayStart + 24 * HOUR ? t.date.getTime() : null;
+  return {
+    rise: within(SearchRiseSet(Body.Moon, obs, +1, date, 1)),
+    set: within(SearchRiseSet(Body.Moon, obs, -1, date, 1)),
+  };
+}
+
+const COMPASS = [
+  'N',
+  'NNE',
+  'NE',
+  'ENE',
+  'E',
+  'ESE',
+  'SE',
+  'SSE',
+  'S',
+  'SSW',
+  'SW',
+  'WSW',
+  'W',
+  'WNW',
+  'NW',
+  'NNW',
+];
+export const compass = (deg: number) =>
+  COMPASS[Math.round((((deg % 360) + 360) % 360) / 22.5) % 16]!;

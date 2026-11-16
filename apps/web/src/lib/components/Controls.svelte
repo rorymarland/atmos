@@ -1,10 +1,9 @@
 <script lang="ts">
-  /** Profile, day and light; the trip plan (start, moment, limits); and hill filters. */
+  /** Day, what to look for and when; the trip plan (start, moment, limits); hill filters. */
   import { formatDuration } from '@atmos/engine';
   import { conditions } from '#lib/conditions.svelte.ts';
-  import { settings } from '#lib/settings.svelte.ts';
-  import { SUMMIT_PROFILES } from '#lib/static-data.ts';
-  import { MOMENT_LABELS, lightFor, type Moment } from '#lib/sun.ts';
+  import { filtersChanged, resetFilters, settings } from '#lib/settings.svelte.ts';
+  import { MOMENT_LABELS, PERIOD_LABELS, type Moment, type Period } from '#lib/sun.ts';
   import { dayLabel } from '#lib/time.ts';
 
   let {
@@ -12,38 +11,88 @@
     onPickStart,
   }: { picking?: boolean; onPickStart?: () => void } = $props();
 
-  const profiles = $derived(
-    conditions.data
-      ? Object.entries(conditions.data.config.profiles).map(([id, p]) => ({ id, label: p.label }))
-      : [],
+  const GROUPS: { label: string; ids: string[] }[] = [
+    { label: 'Light and sky', ids: ['sky', 'dramatic', 'clarity'] },
+    { label: 'Cloud and water', ids: ['inversion', 'mist', 'reflections', 'waterfalls'] },
+    { label: 'Winter', ids: ['snow', 'frost'] },
+    { label: 'Night', ids: ['astro', 'aurora'] },
+    { label: 'On foot', ids: ['walking'] },
+  ];
+  const ALL_PERIODS: Period[] = ['morning', 'day', 'evening', 'night'];
+
+  const profiles = $derived(conditions.data?.config.profiles ?? {});
+  const groups = $derived(
+    GROUPS.map((g) => ({ ...g, ids: g.ids.filter((id) => profiles[id]) })).filter((g) => g.ids.length),
   );
+  const ticked = $derived(conditions.ticked);
   const days = [0, 1, 2, 3, 4];
-  const showLight = $derived(!SUMMIT_PROFILES.has(settings.profile));
-  const light = $derived(lightFor(settings.profile, settings.light));
-  const isWalking = $derived(settings.profile === 'walking');
   const lists = $derived(conditions.data?.lists ?? []);
   const moments: Moment[] = ['blue', 'golden', 'sun'];
   const upTimes = ['03:00', '03:30', '04:00', '04:30', '05:00', '05:30', '06:00', '06:30', '07:00', '08:00', '09:00'];
   const drives = [30, 45, 60, 90, 120, 150, 180, 240];
+  const lightPeriods = $derived(settings.periods.filter((p) => p === 'morning' || p === 'evening'));
+  const changed = $derived(filtersChanged());
 
   const atHome = $derived(
     Boolean(settings.home && settings.start && settings.home.lat === settings.start.lat && settings.home.lon === settings.start.lon),
   );
 
-  /** The plan read back as a sentence. */
+  /** The search read back as a sentence. */
   const summary = $derived.by(() => {
     const day = dayLabel(settings.dayOffset);
-    const when = isWalking ? '' : ` ${light === 'sunrise' ? 'morning' : 'evening'}`;
-    const parts = [`${day}${when}`];
-    if (!isWalking) parts.push(`for ${MOMENT_LABELS[light][settings.moment].toLowerCase()}`);
+    const when =
+      settings.periods.length === ALL_PERIODS.length
+        ? ''
+        : ` ${settings.periods.map((p) => PERIOD_LABELS[p].toLowerCase()).join(' or ')}`;
+    const n = ticked.size;
+    const what =
+      n === 0 ? 'nothing ticked' : n === 1 ? conditions.label([...ticked][0]!).toLowerCase() : `${n} conditions`;
+    const parts = [`${day}${when}, ${what}`];
+    if (lightPeriods.length) parts.push(`there for ${MOMENT_LABELS.sunrise[settings.moment].toLowerCase()}`);
     if (settings.start && settings.earliestUp) parts.push(`up no earlier than ${settings.earliestUp}`);
     if (settings.start && settings.maxDriveMinutes) parts.push(`no more than ${formatDuration(settings.maxDriveMinutes)} in the car`);
     if (settings.start) parts.push(`from ${atHome ? 'home' : settings.start.label}`);
     return parts.join(', ') + '.';
   });
 
+  /** Section open states, remembered in this browser. */
+  function remembered(key: string, fallback: boolean): boolean {
+    try {
+      const v = localStorage.getItem(key);
+      return v === null ? fallback : v === '1';
+    } catch {
+      return fallback;
+    }
+  }
+  let lookOpen = $state(remembered('atmos.lookOpen', true));
+  let tripOpen = $state(remembered('atmos.tripOpen', true));
+  $effect(() => {
+    try {
+      localStorage.setItem('atmos.lookOpen', lookOpen ? '1' : '0');
+      localStorage.setItem('atmos.tripOpen', tripOpen ? '1' : '0');
+    } catch {
+      // Not remembered: fine.
+    }
+  });
+
   let locating = $state(false);
   let locateError = $state<string | null>(null);
+
+  function toggleCondition(id: string) {
+    const next = new Set(ticked);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    settings.conditions = [...next];
+  }
+  function setAll(on: boolean) {
+    settings.conditions = on
+      ? Object.entries(profiles).filter(([, p]) => p.photo).map(([id]) => id)
+      : [];
+  }
+  function togglePeriod(p: Period) {
+    const has = settings.periods.includes(p);
+    settings.periods = has ? settings.periods.filter((x) => x !== p) : ALL_PERIODS.filter((x) => x === p || settings.periods.includes(x));
+  }
 
   function toggleList(id: string) {
     const all = lists.map((l) => l.id);
@@ -82,14 +131,11 @@
 </script>
 
 <div class="controls">
-  <p class="summary">{summary}</p>
-
-  <div class="chips wrap" role="group" aria-label="What are you going for?">
-    {#each profiles as p (p.id)}
-      <button class="chip" aria-pressed={settings.profile === p.id} onclick={() => (settings.profile = p.id)}>
-        {p.label}
-      </button>
-    {/each}
+  <div class="summary-row">
+    <p class="summary">{summary}</p>
+    <button class="reset" onclick={resetFilters} disabled={!changed} title="Put the search back to its defaults. Home and start point stay.">
+      Reset filters
+    </button>
   </div>
 
   <div class="chips wrap" role="group" aria-label="Day">
@@ -98,15 +144,42 @@
         {dayLabel(d)}
       </button>
     {/each}
-    {#if showLight}
-      <span class="sep" aria-hidden="true"></span>
-      <button class="chip light" aria-pressed={settings.light === 'sunrise'} onclick={() => (settings.light = 'sunrise')}>Morning</button>
-      <button class="chip light" aria-pressed={settings.light === 'sunset'} onclick={() => (settings.light = 'sunset')}>Evening</button>
-    {/if}
   </div>
 
-  <fieldset class="plan">
-    <legend>Your trip</legend>
+  <details class="look" bind:open={lookOpen}>
+    <summary>Look for <span class="small muted">{ticked.size} ticked, {settings.periods.length === 4 ? 'any time' : settings.periods.map((p) => PERIOD_LABELS[p].toLowerCase()).join(', ')}</span></summary>
+    <div class="quick small">
+      <button class="link" onclick={() => setAll(true)}>All photo conditions</button>
+      <button class="link" onclick={() => setAll(false)}>None</button>
+    </div>
+    {#each groups as g (g.label)}
+      <div class="group">
+        <span class="group-label small">{g.label}</span>
+        <div class="ticks">
+          {#each g.ids as id (id)}
+            <label class="tick" title={profiles[id]?.blurb}>
+              <input type="checkbox" checked={ticked.has(id)} onchange={() => toggleCondition(id)} />
+              {profiles[id]?.short}
+            </label>
+          {/each}
+        </div>
+      </div>
+    {/each}
+    <div class="group">
+      <span class="group-label small">When</span>
+      <div class="ticks">
+        {#each ALL_PERIODS as p (p)}
+          <label class="tick">
+            <input type="checkbox" checked={settings.periods.includes(p)} onchange={() => togglePeriod(p)} />
+            {PERIOD_LABELS[p]}
+          </label>
+        {/each}
+      </div>
+    </div>
+  </details>
+
+<details class="plan" bind:open={tripOpen}>
+    <summary>Your trip <span class="small muted">{settings.start ? `from ${atHome ? 'home' : settings.start.label}` : 'no start point'}</span></summary>
 
     <div class="row">
       <span class="label">From</span>
@@ -126,13 +199,13 @@
     </div>
     {#if locateError}<p class="small error">{locateError}</p>{/if}
 
-    {#if !isWalking}
+    {#if lightPeriods.length}
       <div class="row">
         <span class="label">Be there for</span>
-        <div class="chips" role="group" aria-label="Be there for">
+        <div class="chips" role="group" aria-label="At dawn and dusk, be there for">
           {#each moments as m (m)}
             <button class="chip" aria-pressed={settings.moment === m} onclick={() => (settings.moment = m)}>
-              {MOMENT_LABELS[light][m]}
+              {m === 'sun' ? (lightPeriods.length === 2 ? 'Sunrise or sunset' : lightPeriods[0] === 'morning' ? 'Sunrise' : 'Sunset') : MOMENT_LABELS.sunrise[m]}
             </button>
           {/each}
         </div>
@@ -154,7 +227,7 @@
         {#each drives as d (d)}<option value={d}>{formatDuration(d)}</option>{/each}
       </select>
     </label>
-  </fieldset>
+  </details>
 
   <details class="filters">
     <summary>Hill filters{#if settings.lists.length || settings.minHeight}<span class="dot" aria-label="(active)"></span>{/if}</summary>
@@ -186,20 +259,68 @@
     font-stretch: 88%;
     line-height: 1.35;
   }
+  .summary-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+  .reset {
+    flex: none;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: 6px;
+    padding: 3px 9px;
+    font-size: 0.8rem;
+    color: var(--ink);
+  }
+  .reset:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  .look {
+    margin: 0;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 10px 10px;
+    background: var(--surface);
+    display: grid;
+    gap: 8px;
+  }
+  .quick {
+    display: flex;
+    gap: 14px;
+    margin-top: -2px;
+  }
+  .group {
+    display: grid;
+    grid-template-columns: 7.5em 1fr;
+    gap: 2px 8px;
+    align-items: baseline;
+  }
+  .group-label {
+    color: var(--ink-soft);
+  }
+  .ticks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 14px;
+  }
+  .tick {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.88rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .tick input {
+    accent-color: var(--ink);
+    margin: 0;
+  }
   .wrap {
     flex-wrap: wrap;
     overflow: visible;
-  }
-  .sep {
-    flex: none;
-    width: 1px;
-    background: var(--line);
-    margin: 3px 2px;
-  }
-  .chip.light[aria-pressed='true'] {
-    background: var(--gold);
-    border-color: var(--gold);
-    color: #1b2731;
   }
   .plan {
     margin: 0;
@@ -210,10 +331,11 @@
     display: grid;
     gap: 7px;
   }
-  legend {
-    padding: 0 4px;
-    font-size: 0.85rem;
-    color: var(--ink-soft);
+  .look > summary,
+  .plan > summary {
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 650;
   }
   .row {
     display: flex;
