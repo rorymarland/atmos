@@ -25,9 +25,7 @@
   let narrow = $state(false);
 
   const ranking = $derived(conditions.ranking);
-  const best = $derived(
-    ranking.zones.find((z) => z.result.verdict === 'go' || z.result.verdict === 'maybe') ?? null,
-  );
+  const best = $derived(ranking.go[0] ?? null);
   const bestName = $derived(best ? (ranking.summitProfile && best.hills[0] ? best.hills[0].hill.name : best.zone.name) : null);
   const profileLabel = $derived(conditions.data?.config.profiles[settings.profile]?.label ?? '');
 
@@ -36,13 +34,13 @@
       return [...ranking.hillsByNumber.values()].map((h) => ({
         type: 'Feature' as const,
         geometry: { type: 'Point' as const, coordinates: [h.hill.lon, h.hill.lat] },
-        properties: { kind: 'hill', id: h.hill.number, name: h.hill.name, verdict: h.result.verdict, rank: RANK[h.result.verdict] },
+        properties: { kind: 'hill', id: h.hill.number, name: h.hill.name, verdict: h.result.verdict, rank: RANK[h.result.verdict] - (h.trip?.problem ? 2 : 0), out: h.trip?.problem ? 1 : 0 },
       }));
     }
     return ranking.zones.map((z) => ({
       type: 'Feature' as const,
       geometry: { type: 'Point' as const, coordinates: [z.zone.forecastPoint.lon, z.zone.forecastPoint.lat] },
-      properties: { kind: 'zone', id: z.zone.id, name: z.zone.name, verdict: z.result.verdict, rank: RANK[z.result.verdict] },
+      properties: { kind: 'zone', id: z.zone.id, name: z.zone.name, verdict: z.result.verdict, rank: RANK[z.result.verdict] - (z.trip?.problem ? 2 : 0), out: z.trip?.problem ? 1 : 0 },
     }));
   });
 
@@ -163,7 +161,8 @@
             ],
             'circle-stroke-color': '#ffffff',
             'circle-stroke-width': 1,
-            'circle-opacity': ['case', ['==', ['get', 'verdict'], 'no'], 0.55, 0.95],
+            // Out of reach (too early) and NO both fade back.
+            'circle-opacity': ['case', ['==', ['get', 'out'], 1], 0.4, ['==', ['get', 'verdict'], 'no'], 0.55, 0.95],
           },
         });
         m.addLayer({

@@ -1,6 +1,43 @@
 <script lang="ts">
   import { clearForecastCache } from '#lib/cache.ts';
-  import { DEFAULT_SETTINGS, exportSettings, importSettings, settings } from '#lib/settings.svelte.ts';
+  import { findPlace } from '#lib/geocode.ts';
+  import {
+    DEFAULT_SETTINGS,
+    exportSettings,
+    importSettings,
+    settings,
+    type StartPoint,
+  } from '#lib/settings.svelte.ts';
+
+  let query = $state('');
+  let searching = $state(false);
+  let found = $state<StartPoint[] | null>(null);
+
+  async function search(e: SubmitEvent) {
+    e.preventDefault();
+    message = null;
+    searching = true;
+    try {
+      found = await findPlace(query);
+      if (found.length === 0) message = `Nothing found for “${query}”. Try a full postcode or a town name.`;
+    } catch (err) {
+      message = `${(err as Error).message}. Check your connection and try again.`;
+      found = null;
+    } finally {
+      searching = false;
+    }
+  }
+
+  function setHome(p: StartPoint) {
+    const wasHome =
+      !settings.start ||
+      (settings.home && settings.start.lat === settings.home.lat && settings.start.lon === settings.home.lon);
+    settings.home = { ...p };
+    if (wasHome) settings.start = { ...p };
+    found = null;
+    query = '';
+    message = `Home set to ${p.label}.`;
+  }
 
   let message = $state<string | null>(null);
   let latText = $state(settings.start ? String(settings.start.lat) : '');
@@ -44,7 +81,7 @@
 
   function clearStart() {
     settings.start = null;
-    settings.maxMiles = null;
+    settings.maxDriveMinutes = null;
     latText = '';
     lonText = '';
     message = 'Start point cleared.';
@@ -93,16 +130,62 @@
     </fieldset>
   </section>
 
-  <section>
-    <h2>Start point</h2>
+  <section id="home">
+    <h2>Home</h2>
     <p class="small muted">
-      Used for straight-line distances and directions. Nothing is assumed: set it each time you’re
-      somewhere new, or leave it empty.
+      Where trips usually start, for leave times and drive limits. A postcode or town is enough;
+      only the coordinates are kept, in this browser.
+    </p>
+    {#if settings.home}
+      <p>Home is <strong>{settings.home.label}</strong>.
+        <button class="link" onclick={() => { settings.home = null; message = 'Home cleared.'; }}>Clear</button></p>
+    {/if}
+    <form class="row search" onsubmit={search}>
+      <label>Postcode or place <input bind:value={query} placeholder="EH1 1YZ or Peebles" autocomplete="postal-code" /></label>
+      <button class="button" disabled={searching || !query.trim()}>{searching ? 'Searching…' : 'Find'}</button>
+    </form>
+    {#if found && found.length}
+      <ul class="found">
+        {#each found as f (f.lat + ',' + f.lon)}
+          <li><button class="link" onclick={() => setHome(f)}>{f.label}</button> <span class="small muted">{f.lat}, {f.lon}</span></li>
+        {/each}
+      </ul>
+    {/if}
+  </section>
+
+  <section>
+    <h2>Trip timings</h2>
+    <p class="small muted">Used to work out when to get up and leave. All estimates.</p>
+    <label class="field">Getting ready
+      <select bind:value={settings.readyMinutes}>
+        {#each [10, 15, 20, 30, 45, 60] as m (m)}<option value={m}>{m} min</option>{/each}
+      </select>
+    </label>
+    <label class="field">Be in place early by
+      <select bind:value={settings.earlyMinutes}>
+        {#each [0, 10, 15, 20, 30, 45] as m (m)}<option value={m}>{m} min</option>{/each}
+      </select>
+    </label>
+    <label class="field">Walking pace
+      <select bind:value={settings.pace}>
+        <option value="relaxed">Relaxed (with a heavy camera bag)</option>
+        <option value="steady">Steady (Naismith’s rule)</option>
+        <option value="brisk">Brisk</option>
+      </select>
+    </label>
+  </section>
+
+  <section>
+    <h2>Start point for today</h2>
+    <p class="small muted">
+      Usually home. Change it when you’re setting off from somewhere else; it stays until you change
+      it back.
     </p>
     {#if settings.start}
       <p>Currently {settings.start.label}: {settings.start.lat}, {settings.start.lon}.</p>
     {/if}
     <div class="row">
+      {#if settings.home}<button class="button quiet" onclick={() => { settings.start = { ...settings.home! }; message = 'Starting from home.'; }}>Use home</button>{/if}
       <button class="button" onclick={useLocation}>Use my location</button>
       {#if settings.start}<button class="button quiet" onclick={clearStart}>Clear start point</button>{/if}
     </div>
@@ -175,6 +258,43 @@
     flex-wrap: wrap;
     gap: 10px;
     align-items: flex-end;
+  }
+  .field {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .field select {
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .search label {
+    display: grid;
+    gap: 2px;
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+  }
+  .search input {
+    width: 16em;
+    padding: 6px 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+  }
+  .found {
+    margin: 0;
+    padding-left: 1.1em;
+    display: grid;
+    gap: 4px;
+  }
+  .link {
+    border: none;
+    background: none;
+    padding: 0;
+    text-decoration: underline;
+    color: var(--ink);
   }
   .coords label {
     display: grid;

@@ -10,8 +10,11 @@
   client.
 - **Private, non-commercial use.** Licensed under PolyForm Noncommercial 1.0.0. Do not add ads,
   analytics or anything commercial.
-- Never assume a fixed start location. Distances are straight-line estimates in miles from a
-  user-chosen point, plus a Google Maps directions link for the real route.
+- Never hard-code a start location. The user can save a home (postcode or place name, kept only in
+  their browser) and change today's start point at any time. Drive times are estimates from
+  straight-line distance and typical road speeds (`packages/engine/src/travel.ts`), always shown
+  as approximate, with a Google Maps directions link for the real route. No routing API: none is
+  free, keyless and allowed for app use.
 - UI defaults to a light theme, with dark mode available as an option.
 
 ## Conventions

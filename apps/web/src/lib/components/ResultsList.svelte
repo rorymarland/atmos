@@ -8,12 +8,12 @@
 </script>
 
 <script lang="ts">
-  /** Best bet, areas worth going to, and the compact Avoid list. */
-  import { explain } from '@atmos/engine';
-  import { conditions, keyHourProfile, type ZoneResult } from '#lib/conditions.svelte.ts';
+  /** Best bet, areas worth going to, those that need an earlier start, and Avoid. */
+  import { explain, formatDuration } from '@atmos/engine';
+  import { conditions, keyHourProfile, type Trip, type ZoneResult } from '#lib/conditions.svelte.ts';
   import { settings } from '#lib/settings.svelte.ts';
   import { modelLabel } from '#lib/static-data.ts';
-  import { dayLabel, formatTime } from '#lib/time.ts';
+  import { dayLabel, formatClock, formatTime, londonMidnight } from '#lib/time.ts';
   import AltitudeGauge from './AltitudeGauge.svelte';
   import VerdictMark from './VerdictMark.svelte';
 
@@ -24,10 +24,14 @@
     $props();
 
   const ranking = $derived(conditions.ranking);
-  const usable = $derived(
-    ranking.zones.filter((z) => z.result.verdict !== 'no' && z.result.verdict !== 'nodata'),
-  );
-  const avoid = $derived(ranking.zones.filter((z) => z.result.verdict === 'no'));
+  const usable = $derived(ranking.go);
+  const tooEarly = $derived(ranking.tooEarly);
+  const avoid = $derived(ranking.avoid);
+  const dayStart = $derived(londonMidnight(settings.dayOffset, conditions.now));
+  const clock = (ms: number) => formatClock(ms, dayStart);
+  const tripLine = (t: Trip) => `Leave ${clock(t.plan.leaveAt)}, ${formatDuration(t.driveMinutes)} drive`;
+  const problemLine = (t: Trip) =>
+    t.problem === 'too-late' ? `Leave by ${clock(t.plan.leaveAt)}: passed` : `Up at ${clock(t.plan.wakeAt)}`;
   const best = $derived(usable[0] ?? null);
   const bestHill = $derived(best?.hills[0] ?? null);
   const bestReasons = $derived(
@@ -60,6 +64,8 @@
   }
 
   const miles = (z: ZoneResult) => z.hills[0]?.miles ?? z.miles;
+  const rowName = (z: ZoneResult) =>
+    ranking.summitProfile && z.hills[0] ? z.hills[0].hill.name : z.zone.name;
 </script>
 
 {#snippet target(p: Pick, label: string, cls: string)}
@@ -95,11 +101,32 @@
       />
       <span class="small muted">{formatTime(best.window.start)} to {formatTime(best.window.end)}</span>
     </div>
+    {#if best.trip}
+      {@const t = best.trip}
+      <dl class="trip">
+        <div><dt>Up</dt><dd>{clock(t.plan.wakeAt)}</dd></div>
+        <div class="leave"><dt>Leave</dt><dd>{clock(t.plan.leaveAt)}</dd></div>
+        <div><dt>Drive</dt><dd>{formatDuration(t.driveMinutes)}</dd></div>
+        <div><dt>{ranking.summitProfile ? 'Walk up' : 'Walk'}</dt><dd>{formatDuration(t.walkMinutes)}</dd></div>
+        <div><dt>In place</dt><dd>{clock(t.plan.arriveAt)}</dd></div>
+      </dl>
+      <p class="small muted">In place {settings.earlyMinutes} min before {t.targetLabel} ({clock(t.plan.target)}). Times are rough estimates.</p>
+    {:else}
+      <p class="small muted hint">Set a start point or home to see when to leave.</p>
+    {/if}
     {#if bestReasons.length}
       <ul class="reasons small">
         {#each bestReasons as r, i (i)}<li>{r.text}</li>{/each}
       </ul>
     {/if}
+  </section>
+{:else if conditions.data && !conditions.loading && tooEarly.length > 0}
+  <section class="best">
+    <h2 class="none">Nothing worth it without an earlier start</h2>
+    <p class="small muted">
+      The places below look good, but you’d need to be up before {settings.earliestUp}. Allow an
+      earlier start, a later moment, or try another day.
+    </p>
   </section>
 {:else if conditions.data && !conditions.loading && ranking.zones.length > 0}
   <section class="best">
@@ -109,7 +136,7 @@
 {:else if conditions.data && conditions.filteredHills.length === 0}
   <section class="best">
     <h2 class="none">No hills match the filters</h2>
-    <p class="small muted">Turn on more hill lists, lower the minimum height or allow a greater distance.</p>
+    <p class="small muted">Turn on more hill lists, lower the minimum height or allow a longer drive.</p>
   </section>
 {/if}
 
@@ -124,14 +151,11 @@
             <VerdictMark verdict={z.result.verdict} confidence={z.result.confidence} />
             {#if gauge}<AltitudeGauge {...gauge} />{:else}<span></span>{/if}
             <div class="zone-text">
-              {@render target(
-                pickFor(z),
-                ranking.summitProfile && z.hills[0] ? z.hills[0].hill.name : z.zone.name,
-                'zone-name',
-              )}
+              {@render target(pickFor(z), rowName(z), 'zone-name')}
               <span class="small muted">
-                {#if ranking.summitProfile}{z.zone.name}{#if z.goCount > 1}, {z.goCount} good{/if}{:else}Valley forecast{/if}{#if miles(z) !== null}, {Math.round(miles(z)!)} mi{/if}
+                {#if ranking.summitProfile}{z.zone.name}{#if z.goCount > 1}, {z.goCount} good{/if}{:else}Valley forecast{/if}{#if !z.trip && miles(z) !== null}, {Math.round(miles(z)!)} mi{/if}
               </span>
+              {#if z.trip}<span class="small leave-line">{tripLine(z.trip)}</span>{/if}
             </div>
             {#if ranking.summitProfile && z.hills.length > 1}
               <button
@@ -153,7 +177,7 @@
                   <VerdictMark verdict={h.result.verdict} />
                   {#if g}<AltitudeGauge {...g} />{/if}
                   {@render target(pickFor(z, i + 1), h.hill.name, 'hill-name')}
-                  <span class="small muted">{Math.round(h.hill.metres)} m</span>
+                  <span class="small muted">{Math.round(h.hill.metres)} m{#if h.trip}, {h.trip.problem ? problemLine(h.trip).toLowerCase() : `leave ${clock(h.trip.plan.leaveAt)}`}{/if}</span>
                 </li>
               {/each}
               {#if z.hills.length > 25}<li class="small muted">and {z.hills.length - 25} more on the map</li>{/if}
@@ -162,6 +186,25 @@
         </li>
       {/each}
     </ol>
+  </section>
+{/if}
+
+{#if tooEarly.length > 0}
+  <section aria-labelledby="early-title">
+    <details class="avoid" open={usable.length === 0}>
+      <summary><h3 id="early-title" class="list-title">Needs an earlier start: {tooEarly.length}</h3></summary>
+      <ul class="avoid-list">
+        {#each tooEarly as z (z.zone.id)}
+          <li class="early">
+            <VerdictMark verdict={z.result.verdict} />
+            <span class="early-text">
+              {@render target(pickFor(z), rowName(z), 'avoid-name')}
+              {#if z.trip}<span class="small muted">{problemLine(z.trip)}, {formatDuration(z.trip.driveMinutes)} drive</span>{/if}
+            </span>
+          </li>
+        {/each}
+      </ul>
+    </details>
   </section>
 {/if}
 
@@ -217,6 +260,49 @@
     align-items: center;
     gap: 10px;
     margin-top: 2px;
+  }
+  .trip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 18px;
+    margin: 6px 0 0;
+  }
+  .trip div {
+    display: flex;
+    flex-direction: column;
+  }
+  .trip dt {
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+  }
+  .trip dd {
+    margin: 0;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    font-size: 1.05rem;
+  }
+  .trip .leave dd {
+    color: var(--ink);
+    font-size: 1.35rem;
+    font-stretch: 75%;
+    font-weight: 850;
+    line-height: 1;
+  }
+  .trip {
+    align-items: flex-end;
+  }
+  .leave-line {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+  .early {
+    flex-direction: row !important;
+    align-items: center;
+    gap: 10px;
+  }
+  .early-text {
+    display: flex;
+    flex-direction: column;
   }
   .reasons {
     margin: 4px 0 0;

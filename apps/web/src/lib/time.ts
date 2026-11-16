@@ -62,3 +62,16 @@ export function ageLabel(fetchedAt: number, now = Date.now()): string {
   const h = Math.round(mins / 60);
   return `${h} h ago`;
 }
+
+const weekdayTime = new Intl.DateTimeFormat('en-GB', {
+  timeZone: TZ,
+  weekday: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/** "04:35", or "Mon 23:10" when it falls before the outing's day starts. */
+export function formatClock(ms: number, dayStart: number): string {
+  return ms < dayStart ? weekdayTime.format(ms) : formatTime(ms);
+}

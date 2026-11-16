@@ -8,6 +8,17 @@ attributions:
     licence: CC BY 4.0
     use: Weather forecasts (UK Met Office, ECMWF and DWD ICON models)
     terms: Free API for non-commercial use
+  - id: postcodes-io
+    name: Postcodes.io (Ordnance Survey, Royal Mail and ONS data)
+    url: https://postcodes.io/
+    licence: Open Government Licence v3.0
+    use: Finding home from a postcode
+    terms: Contains OS data © Crown copyright and database right; Royal Mail data © Royal Mail copyright and database right; ONS data © Crown copyright
+  - id: geonames
+    name: GeoNames, via Open-Meteo geocoding
+    url: https://www.geonames.org/
+    licence: CC BY 4.0
+    use: Finding home from a place name
   - id: dobih
     name: Database of British and Irish Hills v{dobihVersion}
     url: https://www.hills-database.co.uk/
