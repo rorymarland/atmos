@@ -1,6 +1,6 @@
 # Builds Atmos from source and serves it with nginx. No Node needed on the host.
 #
-# Needs data/raw/DoBIH.csv in the build context (see data/raw/README.md).
+# Needs the DoBIH CSV in data/raw/ (any name; see data/raw/README.md).
 # Usually run through docker compose, which passes the build arguments from .env.
 
 # --- Build: data pipeline + static site -----------------------------------------
@@ -20,8 +20,10 @@ COPY . .
 ARG DOBIH_VERSION
 ARG ATMOS_DEFAULT_THEME=light
 ARG ATMOS_DEFAULT_WIND_UNIT=kmh
-RUN test -n "$DOBIH_VERSION" || (echo "Set DOBIH_VERSION (e.g. 18.6) in .env" && exit 1)
-RUN test -f data/raw/DoBIH.csv || (echo "data/raw/DoBIH.csv is missing: see data/raw/README.md" && exit 1)
+RUN ls data/raw/*.csv >/dev/null 2>&1 || ( \
+      echo "No DoBIH CSV in data/raw/. Download the csv version from" \
+      "https://www.hills-database.co.uk/downloads.html and put it there."; \
+      echo "data/raw/ contains:"; ls -la data/raw/; exit 1 )
 RUN DOBIH_VERSION="$DOBIH_VERSION" \
     ATMOS_DEFAULT_THEME="$ATMOS_DEFAULT_THEME" \
     ATMOS_DEFAULT_WIND_UNIT="$ATMOS_DEFAULT_WIND_UNIT" \

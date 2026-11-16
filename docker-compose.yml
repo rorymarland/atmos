@@ -11,10 +11,13 @@ services:
       context: .
       dockerfile: docker/Dockerfile
       args:
-        DOBIH_VERSION: ${DOBIH_VERSION:?Set DOBIH_VERSION in .env, e.g. 18.6}
+        # Optional: read from the CSV's file name (DoBIH_v18_6.csv) when left empty.
+        DOBIH_VERSION: ${DOBIH_VERSION:-}
         ATMOS_DEFAULT_THEME: ${ATMOS_DEFAULT_THEME:-light}
         ATMOS_DEFAULT_WIND_UNIT: ${ATMOS_DEFAULT_WIND_UNIT:-kmh}
     image: atmos:local
+    # Built here, never pulled: stops Compose looking for "atmos" on Docker Hub first.
+    pull_policy: build
     container_name: atmos
     restart: unless-stopped
     environment:
