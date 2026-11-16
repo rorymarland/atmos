@@ -27,6 +27,11 @@ import {
   type Zone,
 } from '@atmos/engine';
 import {
+  fetchEnsemble,
+  HARMONIE_REQUEST,
+  HORIZON_REQUEST,
+  type Ensemble,
+  type ForecastSite,
   fetchOvation,
   type Ovation,
   fetchKpForecast,
@@ -41,6 +46,7 @@ import { loadStaticData, type StaticData } from './static-data';
 import {
   periodFitsMoment,
   periodWindow,
+  skyPositions,
   sunTimes,
   targetTime,
   type LightWindow,
@@ -131,6 +137,54 @@ function localTime(dayStart: number, hhmm: string): number {
   return dayStart + ((h ?? 0) * 60 + (m ?? 0)) * MINUTE;
 }
 
+const londonHourFormat = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/London',
+  hour: 'numeric',
+  hourCycle: 'h23',
+});
+const londonHour = (t: number) => Number(londonHourFormat.format(t));
+
+/** About 60 km out: far enough to be the horizon's cloud, close enough to matter. */
+const HORIZON_KM = 60;
+
+/**
+ * Points towards sunrise and sunset from a zone. Bearings are taken two days ahead and
+ * rounded to 5°, so they serve the whole five days and the cache stays put.
+ */
+function horizonSites(zone: Zone, now: number): ForecastSite[] {
+  const p = zone.forecastPoint;
+  const t = sunTimes(p.lat, p.lon, 2, now);
+  const out: ForecastSite[] = [];
+  for (const [side, at, body] of [
+    ['am', t.sunrise, 'sun'],
+    ['pm', t.sunset, 'sun'],
+  ] as const) {
+    if (!at) continue;
+    const az = Math.round(skyPositions(at, p.lat, p.lon)[body].azDeg / 5) * 5;
+    out.push({
+      id: `${zone.id}|${side}`,
+      forecastPoint: destination(p.lat, p.lon, az, HORIZON_KM),
+    });
+  }
+  return out;
+}
+
+function destination(lat: number, lon: number, bearingDeg: number, km: number) {
+  const R = 6371;
+  const b = (bearingDeg * Math.PI) / 180;
+  const d = km / R;
+  const φ1 = (lat * Math.PI) / 180;
+  const λ1 = (lon * Math.PI) / 180;
+  const φ2 = Math.asin(Math.sin(φ1) * Math.cos(d) + Math.cos(φ1) * Math.sin(d) * Math.cos(b));
+  const λ2 =
+    λ1 +
+    Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(φ1), Math.cos(d) - Math.sin(φ1) * Math.sin(φ2));
+  return {
+    lat: Math.round(((φ2 * 180) / Math.PI) * 1e4) / 1e4,
+    lon: Math.round(((λ2 * 180) / Math.PI) * 1e4) / 1e4,
+  };
+}
+
 interface Evaluated {
   hill: Hill;
   zone: Zone;
@@ -149,6 +203,26 @@ class Conditions {
   progress = $state<{ done: number; total: number } | null>(null);
   error = $state<string | null>(null);
   now = $state(Date.now());
+  /** KNMI HARMONIE per zone: the third model, for about the first two and a half days. */
+  harmonie = $state.raw<Map<string, ModelForecast[]>>(new Map());
+  /** Cloud towards the sunrise (am) and sunset (pm) for each zone. */
+  horizons = $state.raw<Map<string, { am?: ModelForecast; pm?: ModelForecast }>>(new Map());
+  /** Ensembles for hills that have been opened, by hill number. */
+  ensembles = $state.raw<Map<number, Ensemble | 'loading' | 'failed'>>(new Map());
+
+  /** Fetches the ensemble for one place, once per page load. */
+  async loadEnsemble(hillNumber: number, lat: number, lon: number) {
+    if (this.ensembles.has(hillNumber)) return;
+    this.ensembles = new Map(this.ensembles).set(hillNumber, 'loading');
+    try {
+      const e = await fetchEnsemble(lat, lon);
+      this.ensembles = new Map(this.ensembles).set(hillNumber, e);
+    } catch (err) {
+      console.warn('Ensemble:', err);
+      this.ensembles = new Map(this.ensembles).set(hillNumber, 'failed');
+    }
+  }
+
   /** OVATION aurora nowcast, fetched only while the aurora is ticked for tonight. */
   ovation = $state.raw<Ovation | null>(null);
   #ovationAt = 0;
@@ -277,6 +351,8 @@ class Conditions {
       this.forecasts = next;
       this.fetchedAt = newestFetch(results);
       this.now = Date.now();
+      // The extras refine what's already on screen; failures there only cost the extra.
+      void this.#refreshExtras(zones, force);
     } catch (e) {
       this.error =
         e instanceof ForecastError
@@ -291,6 +367,64 @@ class Conditions {
         void this.refresh();
       }
     }
+  }
+
+  /**
+   * The third model and the horizon points, after the main forecast is on screen. The
+   * rate limiter in the data client spreads them past the minute's request budget.
+   */
+  async #refreshExtras(zones: Zone[], force: boolean) {
+    const maxAgeMs = force ? 0 : 60 * 60 * 1000;
+    try {
+      const h = await fetchZoneForecasts(zones, {
+        request: HARMONIE_REQUEST,
+        cache: forecastCache,
+        maxAgeMs,
+      });
+      const next = new Map(this.harmonie);
+      for (const r of h) next.set(r.zoneId, r.forecasts);
+      this.harmonie = next;
+    } catch (e) {
+      console.warn('HARMONIE:', e);
+    }
+    try {
+      const sites: ForecastSite[] = zones.flatMap((z) => horizonSites(z, this.now));
+      const res = await fetchZoneForecasts(sites, {
+        request: HORIZON_REQUEST,
+        cache: forecastCache,
+        maxAgeMs,
+      });
+      const next = new Map(this.horizons);
+      for (const r of res) {
+        const [zoneId, side] = r.zoneId.split('|') as [string, 'am' | 'pm'];
+        next.set(zoneId, { ...next.get(zoneId), [side]: r.forecasts[0] });
+      }
+      this.horizons = next;
+    } catch (e) {
+      console.warn('Horizon:', e);
+    }
+  }
+
+  /** Every model for a zone: the main two plus HARMONIE when it's arrived. */
+  modelsFor(zoneId: string): ModelForecast[] {
+    return [...(this.forecasts.get(zoneId) ?? []), ...(this.harmonie.get(zoneId) ?? [])];
+  }
+
+  /** The horizon lookup the engine uses for a zone. */
+  horizonFor(zoneId: string): (time: number) => { low: number | null; mid: number | null } | null {
+    const h = this.horizons.get(zoneId);
+    if (!h) return () => null;
+    return (time) => {
+      // Morning conditions look towards sunrise, the rest towards sunset.
+      const f = londonHour(time) < 12 ? h.am : h.pm;
+      if (!f) return null;
+      const i = f.time.indexOf(Math.floor(time / 3_600_000) * 3_600_000);
+      if (i < 0) return null;
+      return {
+        low: f.surface.cloudCoverLow?.[i] ?? null,
+        mid: f.surface.cloudCoverMid?.[i] ?? null,
+      };
+    };
   }
 
   /** Layer 1: every condition for every listed hill with a forecast. The costly part. */
@@ -315,8 +449,9 @@ class Conditions {
     const hills = addExtra ? [...listed, extra] : listed;
     for (const hill of hills) {
       const zone = data.zones[hill.zone]!;
-      const forecasts = this.forecasts.get(zone.id);
-      if (!forecasts || forecasts.length === 0) continue;
+      const forecasts = this.modelsFor(zone.id);
+      if (forecasts.length === 0) continue;
+      const zoneOpts = { ...opts, extras: { ...opts.extras, horizon: this.horizonFor(zone.id) } };
       const p = zone.forecastPoint;
 
       let z = zoneCache.get(hill.zone);
@@ -336,7 +471,7 @@ class Conditions {
               lat: p.lat,
               lon: p.lon,
             };
-            const result = evaluateTarget(forecasts, window, target, id, data.config, opts);
+            const result = evaluateTarget(forecasts, window, target, id, data.config, zoneOpts);
             valley.push({ profileId: id, period, result, window, scope: 'valley' });
           }
         }
@@ -356,7 +491,7 @@ class Conditions {
             lat: hill.lat,
             lon: hill.lon,
           };
-          const result = evaluateTarget(forecasts, window, target, id, data.config, opts);
+          const result = evaluateTarget(forecasts, window, target, id, data.config, zoneOpts);
           summit.push({ profileId: id, period, result, window, scope: 'summit' });
         }
       }
@@ -509,7 +644,7 @@ class Conditions {
   });
 
   forecastsFor(zoneId: string): ModelForecast[] {
-    return this.forecasts.get(zoneId) ?? [];
+    return this.modelsFor(zoneId);
   }
 
   label(profileId: string): string {

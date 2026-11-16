@@ -9,6 +9,11 @@ import type { ModelForecast, SurfaceVariable, Target } from './types.js';
 export interface HourExtras {
   /** Planetary K index forecast for an instant, or null when not known. */
   kp?: (time: number) => number | null;
+  /**
+   * Cloud on the horizon towards the sun at an instant: low and mid cover (%) from a
+   * point about 60 km along the sunrise (morning) or sunset (evening) bearing.
+   */
+  horizon?: (time: number) => { low: number | null; mid: number | null } | null;
 }
 
 const profileCache = new WeakMap<ModelForecast, Map<number, VerticalProfile>>();

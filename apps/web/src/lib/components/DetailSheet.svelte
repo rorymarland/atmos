@@ -5,6 +5,7 @@
    * timeline stay usable alongside it.
    */
   import { explain, formatDuration, googleMapsDirectionsUrl, hillIsOnList } from '@atmos/engine';
+  import { ensembleShare, type EnsembleVariable } from '@atmos/data-client';
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { conditions, keyHourProfile, type ConditionTrip } from '#lib/conditions.svelte.ts';
@@ -23,14 +24,71 @@
   const keyOf = (c: ConditionTrip) => `${c.profileId}-${c.period}`;
 
   /** Counted conditions first (best first), then the rest. */
+  const isRisk = (c: ConditionTrip) => conditions.data?.config.profiles[c.profileId]?.risk ?? false;
   const breakdown = $derived.by(() => {
     if (!hillResult) return { counted: [] as ConditionTrip[], others: [] as ConditionTrip[] };
     const counted = new Set(hillResult.counted.map(keyOf));
     return {
       counted: hillResult.counted,
-      others: hillResult.conditions.filter((c) => !counted.has(keyOf(c))),
+      others: hillResult.conditions.filter((c) => !counted.has(keyOf(c)) && !isRisk(c)),
     };
   });
+
+  /** Midges: the worse of dawn and dusk. A higher score means more midges. */
+  const midges = $derived.by(() => {
+    const list = hillResult?.conditions.filter(isRisk) ?? [];
+    const worst = list.reduce<ConditionTrip | null>(
+      (a, b) => ((b.result.score ?? 0) > (a?.result.score ?? -1) ? b : a),
+      null,
+    );
+    if (!worst || worst.result.score === null) return null;
+    const level = worst.result.verdict === 'go' ? 'high' : worst.result.verdict === 'maybe' ? 'moderate' : 'low';
+    return { level, period: worst.period };
+  });
+
+  // The ensemble for this hill: fetched when it opens.
+  $effect(() => {
+    const h = hillResult?.hill;
+    if (h) void conditions.loadEnsemble(h.number, h.lat, h.lon);
+  });
+  const ensemble = $derived(hillResult ? conditions.ensembles.get(hillResult.hill.number) : undefined);
+
+  /** What the ensemble is asked, for the chosen condition, at its best hour. */
+  const ENSEMBLE_CHECKS: Record<string, { label: string; variable: EnsembleVariable; test: (v: number) => boolean; key?: boolean }[]> = {
+    clear: [{ label: 'Clear sky (under 30% cloud)', variable: 'cloud_cover', test: (v) => v < 30, key: true }],
+    lowFill: [{ label: 'Cloud filling the valleys (over 70% low cloud)', variable: 'cloud_cover_low', test: (v) => v > 70, key: true }],
+    noLow: [{ label: 'Little low cloud (under 40%)', variable: 'cloud_cover_low', test: (v) => v < 40, key: true }],
+    dry: [{ label: 'Dry (under 0.2 mm)', variable: 'precipitation', test: (v) => v < 0.2 }],
+    calm: [{ label: 'Light wind (under 15 km/h)', variable: 'wind_speed_10m', test: (v) => v < 15 }],
+  };
+  const CHECKS_FOR: Record<string, string[]> = {
+    inversion: ['lowFill', 'calm'],
+    mist: ['lowFill', 'calm'],
+    sky: ['noLow', 'dry'],
+    dramatic: ['noLow', 'dry'],
+    alpenglow: ['noLow', 'dry'],
+    reflections: ['calm', 'dry'],
+    frozen: ['calm', 'dry'],
+    astro: ['clear', 'dry'],
+    aurora: ['clear', 'dry'],
+    clarity: ['clear', 'dry'],
+    frost: ['clear', 'calm'],
+    snow: ['clear', 'dry'],
+  };
+  const ensembleRows = $derived.by(() => {
+    if (!chosen || !ensemble || typeof ensemble === 'string') return [];
+    const ref = chosen.result.byModel.find((m) => m.model === chosen.result.referenceModel);
+    const at = ref?.keyHour?.time;
+    if (at === undefined) return [];
+    return (CHECKS_FOR[chosen.profileId] ?? ['dry', 'calm'])
+      .flatMap((k) => ENSEMBLE_CHECKS[k] ?? [])
+      .map((c) => ({ ...c, share: ensembleShare(ensemble, c.variable, at, c.test) }))
+      .filter((r) => r.share !== null);
+  });
+  /** The deciding check found in fewer than half the runs: worth a warning. */
+  const ensembleDoubt = $derived(
+    ensembleRows.some((r) => r.key && r.share && r.share.yes / r.share.of < 0.5),
+  );
 
   let chosenKey = $state<string | null>(null);
   $effect(() => {
@@ -137,6 +195,11 @@
         <VerdictMark verdict={hillResult.verdict} confidence={hillResult.best?.result.confidence ?? null} size="large" />
         <p><strong class="big">{pct(hillResult.score)}</strong> <span class="small muted">photo score, from the conditions you’ve ticked</span></p>
       </section>
+      {#if midges && midges.level !== 'low'}
+        <p class="midges {midges.level}">
+          Midges: {midges.level} risk at {midges.period === 'morning' ? 'dawn' : 'dusk'}. Warm, damp, still air; take a net and repellent.
+        </p>
+      {/if}
 
       <section>
         <h3>Conditions</h3>
@@ -170,6 +233,34 @@
               <span>{modelLabel(m.model)}: <VerdictMark verdict={m.verdict} /></span>
             {/each}
           </p>
+          {#if result.agreement?.outvoted}
+            <p class="small warn">Only {result.agreement.go} of {result.agreement.models} models say Go, so it’s a Maybe.</p>
+          {/if}
+          <div class="ensemble">
+            <h4 class="small">Ensemble check{#if ensembleRows.length}, ECMWF runs at {clock(chosen.result.byModel.find((m) => m.model === chosen.result.referenceModel)?.keyHour?.time ?? 0)}{/if}</h4>
+            {#if ensemble === 'loading' || ensemble === undefined}
+              <p class="small muted">Fetching the ensemble…</p>
+            {:else if ensemble === 'failed'}
+              <p class="small muted">The ensemble isn’t available right now.</p>
+            {:else if ensembleRows.length === 0}
+              <p class="small muted">The ensemble doesn’t reach this hour.</p>
+            {:else}
+              <ul>
+                {#each ensembleRows as r (r.label)}
+                  <li>
+                    <span>{r.label}</span>
+                    <span class="ens-bar" aria-hidden="true"><i style="width: {Math.round((r.share!.yes / r.share!.of) * 100)}%"></i></span>
+                    <strong>{r.share!.yes} of {r.share!.of}</strong>
+                  </li>
+                {/each}
+              </ul>
+              {#if ensembleDoubt}
+                <p class="small warn">Most ensemble runs disagree with the main forecast here: treat it as a long shot.</p>
+              {:else}
+                <p class="small muted">Each run is the same model started from slightly different conditions; more runs agreeing means more confidence.</p>
+              {/if}
+            {/if}
+          </div>
         </section>
 
         <section class="plan">
@@ -238,6 +329,50 @@
 {/if}
 
 <style>
+  .midges {
+    margin: 8px 0 0;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.88rem;
+    background: color-mix(in srgb, var(--maybe) 14%, transparent);
+  }
+  .midges.high {
+    background: color-mix(in srgb, var(--no) 14%, transparent);
+  }
+  .ensemble {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+  }
+  .ensemble h4 {
+    margin: 0 0 4px;
+    font-weight: 650;
+  }
+  .ensemble ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 4px;
+    font-size: 0.86rem;
+  }
+  .ensemble li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 60px auto;
+    gap: 8px;
+    align-items: center;
+  }
+  .ens-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--line);
+    overflow: hidden;
+  }
+  .ens-bar i {
+    display: block;
+    height: 100%;
+    background: var(--ink-soft);
+  }
   .big {
     font-size: 1.7rem;
     font-stretch: 70%;

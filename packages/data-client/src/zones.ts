@@ -2,7 +2,7 @@
  * Fetching forecasts for zones: one batched Open-Meteo request per chunk of zones,
  * with a pluggable cache so the browser can keep responses in IndexedDB.
  */
-import type { ModelForecast, Zone } from '@atmos/engine';
+import type { ModelForecast } from '@atmos/engine';
 import {
   buildForecastUrl,
   estimateCallWeight,
@@ -36,8 +36,57 @@ export const ZONE_REQUEST: Omit<ForecastRequest, 'points'> = {
   // ECMWF only publishes 1000, 925 and 850 of these; the Met Office has them all.
   pressureLevels: [1000, 975, 950, 925, 900, 850],
   forecastDays: 5,
-  pastDays: 1,
+  // Two days back: snow that fell yesterday, and the cold spell behind frozen lochs.
+  pastDays: 2,
 };
+
+/**
+ * KNMI's HARMONIE-AROME Europe (5.5 km): a third, independent model for the first two
+ * and a half days, for the agreement rule. Fetched separately so a failure here never
+ * loses the main forecast. It publishes 925 and 850 hPa among our levels.
+ */
+export const HARMONIE_REQUEST: Omit<ForecastRequest, 'points'> = {
+  models: ['knmi_harmonie_arome_europe'],
+  surface: ZONE_REQUEST.surface.filter((v) => v !== 'precipitationProbability'),
+  pressureLevels: [925, 850],
+  forecastDays: 3,
+  pastDays: 2,
+};
+
+/** Cloud towards the sunrise and sunset: two cheap variables from one model. */
+export const HORIZON_REQUEST: Omit<ForecastRequest, 'points'> = {
+  models: ['ukmo_seamless'],
+  surface: ['cloudCoverLow', 'cloudCoverMid'],
+  pressureLevels: [],
+  forecastDays: 5,
+  pastDays: 0,
+};
+
+/** Anything with an id and a point to forecast: a zone, or a horizon point. */
+export interface ForecastSite {
+  id: string;
+  forecastPoint: { lat: number; lon: number };
+}
+
+/**
+ * Open-Meteo allows 600 call-equivalents a minute. Requests wait here so a big refresh
+ * (main forecast, then HARMONIE, then horizons) spreads itself over the minute boundary
+ * instead of hitting the limit. Shared by every request from this page.
+ */
+const BUDGET_PER_MINUTE = 540;
+const spent: { at: number; weight: number }[] = [];
+async function withinBudget(weight: number, now: () => number): Promise<void> {
+  for (;;) {
+    const t = now();
+    while (spent.length && t - spent[0]!.at > 60_000) spent.shift();
+    const used = spent.reduce((a, b) => a + b.weight, 0);
+    if (used + weight <= BUDGET_PER_MINUTE || spent.length === 0) {
+      spent.push({ at: t, weight });
+      return;
+    }
+    await new Promise((r) => setTimeout(r, Math.max(500, spent[0]!.at + 60_500 - t)));
+  }
+}
 
 export interface CachedForecast {
   fetchedAt: number;
@@ -50,6 +99,8 @@ export interface ForecastCache {
 }
 
 export interface FetchZonesOptions {
+  /** What to fetch: the main zone request unless given. */
+  request?: Omit<ForecastRequest, 'points'>;
   cache?: ForecastCache;
   /** Cached data younger than this is reused. */
   maxAgeMs?: number;
@@ -77,8 +128,10 @@ export class ForecastError extends Error {
   }
 }
 
-export function cacheKey(zone: Zone): string {
-  const r = ZONE_REQUEST;
+export function cacheKey(
+  zone: ForecastSite,
+  r: Omit<ForecastRequest, 'points'> = ZONE_REQUEST,
+): string {
   const p = zone.forecastPoint;
   return [
     'zone',
@@ -94,10 +147,11 @@ export function cacheKey(zone: Zone): string {
 }
 
 export async function fetchZoneForecasts(
-  zones: Zone[],
+  zones: ForecastSite[],
   options: FetchZonesOptions = {},
 ): Promise<ZoneForecasts[]> {
   const {
+    request = ZONE_REQUEST,
     cache,
     maxAgeMs = 60 * 60 * 1000,
     chunkSize = 17,
@@ -107,9 +161,9 @@ export async function fetchZoneForecasts(
   } = options;
 
   const results = new Map<string, ZoneForecasts>();
-  const missing: Zone[] = [];
+  const missing: ForecastSite[] = [];
   for (const zone of zones) {
-    const hit = await cache?.get(cacheKey(zone));
+    const hit = await cache?.get(cacheKey(zone, request));
     if (hit && now() - hit.fetchedAt < maxAgeMs) {
       results.set(zone.id, { zoneId: zone.id, ...hit, fromCache: true });
     } else {
@@ -117,13 +171,14 @@ export async function fetchZoneForecasts(
     }
   }
 
-  const chunks: Zone[][] = [];
+  const chunks: ForecastSite[][] = [];
   for (let i = 0; i < missing.length; i += chunkSize) chunks.push(missing.slice(i, i + chunkSize));
   let done = 0;
   onProgress?.(done, chunks.length);
 
   for (const chunk of chunks) {
-    const req: ForecastRequest = { ...ZONE_REQUEST, points: chunk.map((z) => z.forecastPoint) };
+    const req: ForecastRequest = { ...request, points: chunk.map((z) => z.forecastPoint) };
+    await withinBudget(estimateCallWeight(req), now);
     const res = await doFetch(buildForecastUrl(req));
     if (!res.ok) {
       const body = await res.text().catch(() => '');
@@ -138,7 +193,7 @@ export async function fetchZoneForecasts(
     for (const [i, zone] of chunk.entries()) {
       const forecasts = parsed[i]!.filter(hasData);
       const entry = { fetchedAt, forecasts };
-      await cache?.set(cacheKey(zone), entry);
+      await cache?.set(cacheKey(zone, request), entry);
       results.set(zone.id, { zoneId: zone.id, ...entry, fromCache: false });
     }
     onProgress?.(++done, chunks.length);

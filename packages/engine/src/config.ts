@@ -35,6 +35,8 @@ const profile = z.strictObject({
   periods: z.array(period).min(1),
   /** Counts towards the photo score. */
   photo: z.boolean().default(true),
+  /** A hazard to warn about (midges), not a condition to look for: higher means worse. */
+  risk: z.boolean().default(false),
   aggregate: z.enum(['best-hour', 'mean']),
   /** Only for `mean`: how much of the gap between the mean and the worst hour is subtracted. */
   worstHourPenalty: z.number().min(0).max(1).default(0.5),

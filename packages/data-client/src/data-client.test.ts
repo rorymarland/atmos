@@ -231,3 +231,22 @@ describe('OVATION nowcast', () => {
     expect(o.forecastFor).toBe(Date.UTC(2026, 10, 16, 18, 45));
   });
 });
+
+describe('ensembles', () => {
+  it('collects the control and member runs and counts shares', async () => {
+    const { parseEnsemble, ensembleShare } = await import('./ensemble.js');
+    const e = parseEnsemble({
+      hourly: {
+        time: [1000, 4600],
+        cloud_cover: [10, 90],
+        cloud_cover_member01: [20, 80],
+        cloud_cover_member02: [70, null],
+        wind_speed_10m: [5, 5],
+      },
+    });
+    expect(e.members.cloud_cover).toHaveLength(3);
+    expect(ensembleShare(e, 'cloud_cover', 1_000_000, (c) => c < 40)).toEqual({ yes: 2, of: 3 });
+    expect(ensembleShare(e, 'cloud_cover', 4_600_000, (c) => c < 40)).toEqual({ yes: 0, of: 2 });
+    expect(ensembleShare(e, 'visibility', 1_000_000, () => true)).toBeNull();
+  });
+});

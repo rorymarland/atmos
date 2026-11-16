@@ -2,6 +2,7 @@
  * Measurements shared by several profiles.
  */
 import type { HourContext } from '../context.js';
+import type { FactorDefinition } from './types.js';
 import { dewPoint, liftingCondensationHeight, saturatedLayers, type Layer } from '../met.js';
 
 /** Relative humidity at or above which a model layer is treated as cloud. */
@@ -89,3 +90,22 @@ export function mean(values: number[]): number | null {
 }
 
 export const round = (x: number, step: number): number => Math.round(x / step) * step;
+
+/**
+ * Cloud on the horizon towards the sun, 60 km out: low cloud there blocks the low sun
+ * from lighting the sky overhead, the usual cause of a promising sunset that fizzles.
+ * Mid cloud counts for half, since a low sun can shine under some of it.
+ */
+export const horizonClear: FactorDefinition = {
+  label: 'Cloud on the horizon towards the sun',
+  unit: 'percent',
+  read: (ctx) => {
+    const h = ctx.extras.horizon?.(ctx.time) ?? null;
+    if (!h || (h.low === null && h.mid === null)) return { value: null };
+    const value = Math.min(100, (h.low ?? 0) + 0.5 * (h.mid ?? 0));
+    return {
+      value,
+      detail: `about 60 km towards the sun: low ${Math.round(h.low ?? 0)}%, mid ${Math.round(h.mid ?? 0)}%`,
+    };
+  },
+};
