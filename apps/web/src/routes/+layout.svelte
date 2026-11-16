@@ -4,7 +4,6 @@
   import { onMount, untrack } from 'svelte';
   import { conditions } from '#lib/conditions.svelte.ts';
   import { watchSettings } from '#lib/settings.svelte.ts';
-  import DetailSheet from '#lib/components/DetailSheet.svelte';
 
   let { children } = $props();
 
@@ -60,7 +59,6 @@
   {/if}
 </div>
 
-<DetailSheet />
 
 <style>
   .shell {

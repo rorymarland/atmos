@@ -169,8 +169,20 @@ class Conditions {
     const lists = data.lists.filter(
       (l) => settings.lists.length === 0 || settings.lists.includes(l.id),
     );
+    const countries = new Set(settings.countries);
+    // Hills on a border count for both countries. Data from before countries were
+    // recorded falls back to the zone's country.
+    const inCountry = (h: Hill) =>
+      countries.size === 0 ||
+      (h.nations.length
+        ? h.nations.some((n) => countries.has(n))
+        : countries.has(data.zones[h.zone]!.nation));
     return data.hills.filter(
-      (h) => h.zone >= 0 && h.metres >= settings.minHeight && lists.some((l) => hillIsOnList(h, l)),
+      (h) =>
+        h.zone >= 0 &&
+        h.metres >= settings.minHeight &&
+        inCountry(h) &&
+        lists.some((l) => hillIsOnList(h, l)),
     );
   });
 

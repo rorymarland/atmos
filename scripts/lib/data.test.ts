@@ -52,6 +52,7 @@ describe('parseDobih', () => {
     expect(hillIsOnList(hill, list('marilyn'))).toBe(true);
     expect(hillIsOnList(hill, list('munro'))).toBe(false);
     expect(scafell.metres).toBe(978.1);
+    expect(scafell.nations).toEqual(['england']);
   });
 
   it('round-trips through the compact row format', () => {

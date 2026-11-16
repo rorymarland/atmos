@@ -1,6 +1,7 @@
 /**
  * Reads the DoBIH CSV and keeps UK hills on the agreed lists.
  */
+import { nationsFromLetters } from '@atmos/engine';
 import { parse } from 'csv-parse/sync';
 import { z } from 'zod';
 import type { Hill, HillList } from '@atmos/engine';
@@ -80,9 +81,8 @@ export function parseDobih(csv: string, config: HillListsConfig): ParseResult {
 
   for (const row of rows) {
     const country = row[col.country] ?? '';
-    const inUk =
-      isUkCode(country) ||
-      (country === config.irelandCountryCode && isNorthernIreland(row[col.county] ?? ''));
+    const inNi = country === config.irelandCountryCode && isNorthernIreland(row[col.county] ?? '');
+    const inUk = isUkCode(country) || inNi;
     if (!inUk) {
       stats.notUk++;
       continue;
@@ -114,6 +114,7 @@ export function parseDobih(csv: string, config: HillListsConfig): ParseResult {
       lon: round(lon, 5),
       metres: round(metres, 1),
       lists: mask,
+      nations: nationsFromLetters(inNi ? 'N' : country),
     });
   }
 

@@ -1,6 +1,8 @@
 <script lang="ts">
   /** Day, what to look for and when; the trip plan (start, moment, limits); hill filters. */
-  import { formatDuration } from '@atmos/engine';
+  import { formatDuration, NATION_LABELS, type Nation } from '@atmos/engine';
+  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { conditions } from '#lib/conditions.svelte.ts';
   import { filtersChanged, resetFilters, settings } from '#lib/settings.svelte.ts';
   import { MOMENT_LABELS, PERIOD_LABELS, type Moment, type Period } from '#lib/sun.ts';
@@ -47,7 +49,8 @@
     const n = ticked.size;
     const what =
       n === 0 ? 'nothing ticked' : n === 1 ? conditions.label([...ticked][0]!).toLowerCase() : `${n} conditions`;
-    const parts = [`${day}${when}, ${what}`];
+    const where = settings.countries.length ? ` in ${settings.countries.map((c) => NATION_LABELS[c]).join(' or ')}` : '';
+    const parts = [`${day}${when}${where}, ${what}`];
     if (lightPeriods.length) parts.push(`there for ${MOMENT_LABELS.sunrise[settings.moment].toLowerCase()}`);
     if (settings.start && settings.earliestUp) parts.push(`up no earlier than ${settings.earliestUp}`);
     if (settings.start && settings.maxDriveMinutes) parts.push(`no more than ${formatDuration(settings.maxDriveMinutes)} in the car`);
@@ -77,6 +80,24 @@
 
   let locating = $state(false);
   let locateError = $state<string | null>(null);
+
+  const NATIONS = Object.keys(NATION_LABELS) as Nation[];
+  function toggleCountry(n: Nation) {
+    const has = settings.countries.includes(n);
+    const next = has ? settings.countries.filter((x) => x !== n) : [...settings.countries, n];
+    // All four ticked is the same as the whole UK.
+    settings.countries = next.length === NATIONS.length ? [] : next;
+  }
+
+  /** Reset the search and close any open hill. */
+  function resetAll() {
+    resetFilters();
+    if (page.url.searchParams.has('hill')) {
+      const url = new URL(page.url.href);
+      url.searchParams.delete('hill');
+      goto(url, { replace: true, reset: false });
+    }
+  }
 
   function toggleCondition(id: string) {
     const next = new Set(ticked);
@@ -133,7 +154,7 @@
 <div class="controls">
   <div class="summary-row">
     <p class="summary">{summary}</p>
-    <button class="reset" onclick={resetFilters} disabled={!changed} title="Put the search back to its defaults. Home and start point stay.">
+    <button class="reset" onclick={resetAll} disabled={!changed} title="Put the search back to its defaults. Home and start point stay.">
       Reset filters
     </button>
   </div>
@@ -143,6 +164,13 @@
       <button class="chip" aria-pressed={settings.dayOffset === d} onclick={() => (settings.dayOffset = d)}>
         {dayLabel(d)}
       </button>
+    {/each}
+  </div>
+
+  <div class="chips wrap" role="group" aria-label="Country">
+    <button class="chip" aria-pressed={settings.countries.length === 0} onclick={() => (settings.countries = [])}>All UK</button>
+    {#each NATIONS as n (n)}
+      <button class="chip" aria-pressed={settings.countries.includes(n)} onclick={() => toggleCountry(n)}>{NATION_LABELS[n]}</button>
     {/each}
   </div>
 

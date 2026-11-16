@@ -2,7 +2,7 @@
  * User settings, kept in this browser's localStorage. Display defaults come from
  * /defaults.js, which the container writes from .env at start-up.
  */
-import type { Pace } from '@atmos/engine';
+import type { Nation, Pace } from '@atmos/engine';
 import type { Moment, Period } from './sun';
 
 export interface StartPoint {
@@ -21,6 +21,8 @@ export interface Settings {
   periods: Period[];
   /** Results order. */
   sort: 'best' | 'worst' | 'nearest' | 'highest';
+  /** Countries to include; empty means the whole UK. */
+  countries: Nation[];
   /** Hill list ids to include; empty means all. */
   lists: string[];
   minHeight: number;
@@ -63,6 +65,7 @@ export const DEFAULT_SETTINGS: Settings = {
   conditions: null,
   periods: ['morning', 'day', 'evening', 'night'],
   sort: 'best',
+  countries: [],
   lists: [],
   minHeight: 0,
   maxMiles: null,
@@ -113,6 +116,7 @@ export function resetFilters(): void {
     conditions: d.conditions,
     periods: [...d.periods],
     sort: d.sort,
+    countries: [],
     lists: [],
     minHeight: d.minHeight,
     moment: d.moment,
@@ -128,6 +132,7 @@ export function filtersChanged(): boolean {
     settings.conditions !== null ||
     settings.periods.length !== d.periods.length ||
     settings.sort !== d.sort ||
+    settings.countries.length > 0 ||
     settings.lists.length > 0 ||
     settings.minHeight !== d.minHeight ||
     settings.moment !== d.moment ||

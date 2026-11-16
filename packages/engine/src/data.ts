@@ -21,10 +21,37 @@ export interface Hill {
   lists: number;
   /** Index into zones.json, or -1 when no zone is close enough. */
   zone: number;
+  /** Countries the hill is in: more than one for hills on a border. */
+  nations: Nation[];
 }
 
-/** [number, name, lat, lon, metres, lists, zone] */
-export type HillRow = [number, string, number, number, number, number, number];
+/** [number, name, lat, lon, metres, lists, zone, nations as letters, e.g. "ES"] */
+export type HillRow = [number, string, number, number, number, number, number, string?];
+
+const NATION_LETTERS: Record<string, Nation> = {
+  S: 'scotland',
+  E: 'england',
+  W: 'wales',
+  N: 'northern-ireland',
+};
+const LETTER_FOR: Record<Nation, string> = {
+  scotland: 'S',
+  england: 'E',
+  wales: 'W',
+  'northern-ireland': 'N',
+};
+
+export const NATION_LABELS: Record<Nation, string> = {
+  scotland: 'Scotland',
+  england: 'England',
+  wales: 'Wales',
+  'northern-ireland': 'Northern Ireland',
+};
+
+/** "ES" to ['england', 'scotland']; unknown letters are ignored. */
+export function nationsFromLetters(letters: string): Nation[] {
+  return [...new Set([...letters].map((c) => NATION_LETTERS[c]).filter((n): n is Nation => !!n))];
+}
 
 export interface HillsFile {
   source: string;
@@ -33,12 +60,30 @@ export interface HillsFile {
 }
 
 export function encodeHill(h: Hill): HillRow {
-  return [h.number, h.name, h.lat, h.lon, h.metres, h.lists, h.zone];
+  return [
+    h.number,
+    h.name,
+    h.lat,
+    h.lon,
+    h.metres,
+    h.lists,
+    h.zone,
+    h.nations.map((n) => LETTER_FOR[n]).join(''),
+  ];
 }
 
 export function decodeHill(row: HillRow): Hill {
-  const [number, name, lat, lon, metres, lists, zone] = row;
-  return { number, name, lat, lon, metres, lists, zone };
+  const [number, name, lat, lon, metres, lists, zone, nations] = row;
+  return {
+    number,
+    name,
+    lat,
+    lon,
+    metres,
+    lists,
+    zone,
+    nations: nationsFromLetters(nations ?? ''),
+  };
 }
 
 export function hillIsOnList(hill: Hill, list: HillList): boolean {

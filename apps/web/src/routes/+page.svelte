@@ -8,6 +8,7 @@
   import { settings } from '#lib/settings.svelte.ts';
   import { ageLabel, dayLabel, formatTime } from '#lib/time.ts';
   import Controls from '#lib/components/Controls.svelte';
+  import DetailSheet from '#lib/components/DetailSheet.svelte';
   import PlaceSearch from '#lib/components/PlaceSearch.svelte';
   import SkyTimeline, { type KeyMark } from '#lib/components/SkyTimeline.svelte';
   import { page } from '$app/state';
@@ -85,7 +86,14 @@
       fly();
     }
     goto(p.href, { reset: false });
+    // The hill opens in the panel: bring it back once the map has moved.
+    if (!panelOpen) setTimeout(() => (panelOpen = true), narrow ? 900 : 0);
   }
+
+  const hillOpen = $derived(page.url.searchParams.has('hill'));
+  const openHill = $derived(
+    hillOpen ? ranking.hillsByNumber.get(Number(page.url.searchParams.get('hill'))) : undefined,
+  );
 
   // The sun and moon timeline.
   const SKY_KEY = 'atmos.skyOpen';
@@ -148,15 +156,16 @@
 
   /**
    * Bearing lines from the pin: where the sun and moon rise and set today, and where they
-   * are at the timeline's time. Drawn about 170 px long whatever the zoom.
+   * are at the timeline's time. The lines run off the edge of the map; each label sits a
+   * set distance along its line, so they stay put and readable at any zoom.
    */
   function rays(lat: number, lon: number, time: number, zoom: number) {
     const metresPerPixel = (40_075_016.686 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
-    const km = (170 * metresPerPixel) / 1000;
+    const km = (pixels: number) => Math.min(800, (pixels * metresPerPixel) / 1000);
     const R = 6371;
-    const end = (az: number, scale = 1) => {
+    const end = (az: number, pixels: number) => {
       const b = (az * Math.PI) / 180;
-      const d = (km * scale) / R;
+      const d = km(pixels) / R;
       const φ1 = (lat * Math.PI) / 180;
       const λ1 = (lon * Math.PI) / 180;
       const φ2 = Math.asin(Math.sin(φ1) * Math.cos(d) + Math.cos(φ1) * Math.sin(d) * Math.cos(b));
@@ -177,18 +186,18 @@
     return {
       type: 'FeatureCollection' as const,
       features: lines.flatMap((l) => {
-        // Current positions reach a little further, so their labels clear the others.
-        const scale = l.kind === 'sun' || l.kind === 'moon' ? 1.15 : 1;
+        // Labels for now sit further out than the rise and set ones, so they don't collide.
+        const labelAt = l.kind === 'sun' || l.kind === 'moon' ? 300 : 210;
         const props = { kind: l.kind, label: l.label, up: l.up ? 1 : 0 };
         return [
           {
             type: 'Feature' as const,
-            geometry: { type: 'LineString' as const, coordinates: [[lon, lat], end(l.az, scale)] },
+            geometry: { type: 'LineString' as const, coordinates: [[lon, lat], end(l.az, 2000)] },
             properties: props,
           },
           {
             type: 'Feature' as const,
-            geometry: { type: 'Point' as const, coordinates: end(l.az, scale) },
+            geometry: { type: 'Point' as const, coordinates: end(l.az, labelAt) },
             properties: props,
           },
         ];
@@ -401,12 +410,25 @@
             filter: ['==', ['geometry-type'], 'Point'],
             layout: {
               'text-field': ['get', 'label'],
-              'text-font': ['Noto Sans Regular'],
-              'text-size': 12,
-              'text-offset': [0, -0.9],
+              'text-font': ['Noto Sans Bold'],
+              'text-size': 14,
               'text-allow-overlap': true,
+              'text-ignore-placement': true,
             },
-            paint: { 'text-color': RAY_COLOUR, 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 },
+            // Dark versions of the line colours on a thick white halo: legible on any map.
+            paint: {
+              'text-color': [
+                'match', ['get', 'kind'],
+                'sunrise', '#8a5a00',
+                'sunset', '#8f3312',
+                'sun', '#7a5200',
+                'moonrise', '#3d4b5e',
+                'moonset', '#1f2a38',
+                '#2c3846',
+              ],
+              'text-halo-color': '#ffffff',
+              'text-halo-width': 2.6,
+            },
           });
         } catch (e) {
           console.warn('Sun and moon labels unavailable', e);
@@ -439,15 +461,20 @@
           if (!f) return;
           const p = f.properties as { kind: string; id: string | number };
           goto(`?hill=${p.id}`, { reset: false });
+          if (!narrow) panelOpen = true;
         });
         m.on('click', (e: MapMouseEvent) => {
-          if (!picking) return;
-          settings.start = {
-            lat: Math.round(e.lngLat.lat * 1e4) / 1e4,
-            lon: Math.round(e.lngLat.lng * 1e4) / 1e4,
-            label: 'the point you picked',
-          };
-          picking = false;
+          const lat = Math.round(e.lngLat.lat * 1e4) / 1e4;
+          const lon = Math.round(e.lngLat.lng * 1e4) / 1e4;
+          if (picking) {
+            settings.start = { lat, lon, label: 'the point you picked' };
+            picking = false;
+            return;
+          }
+          // A click on a hill opens it (above); anywhere else moves the sun and moon pin.
+          if (m.queryRenderedFeatures(e.point, { layers: ['targets'] }).length) return;
+          if (!skyOpen) skyOpen = true;
+          pin = { lat, lon, name: pinName(lat, lon) };
         });
         m.on('mouseenter', 'targets', () => (m.getCanvas().style.cursor = 'pointer'));
         m.on('mouseleave', 'targets', () => (m.getCanvas().style.cursor = picking ? 'crosshair' : ''));
@@ -578,7 +605,7 @@
       <span aria-hidden="true"><i style="background: var(--maybe)"></i>Maybe</span>
       <span aria-hidden="true"><i style="background: var(--no)"></i>No</span>
       {#if settings.start}<span aria-hidden="true"><i class="start-dot"></i>Start</span>{/if}
-      {#if skyOpen}<span class="muted">Drag the pin to move the sun and moon lines</span>{/if}
+      {#if skyOpen}<span class="muted">Click the map or drag the pin to move the sun and moon lines</span>{/if}
       <button class="link" onclick={() => (skyOpen = !skyOpen)} aria-pressed={skyOpen}>
         {skyOpen ? 'Hide sun and moon' : 'Sun and moon'}
       </button>
@@ -588,10 +615,13 @@
   {#if panelOpen}
     <aside class="panel" aria-label="Where to go">
       <header class="panel-head">
-        <h1>Where to go</h1>
+        <h1>{hillOpen ? 'Hill' : 'Where to go'}</h1>
         <button class="hide" onclick={() => (panelOpen = false)} aria-label="Hide the panel">Hide</button>
       </header>
       <div class="panel-body">
+        {#if hillOpen}
+          <DetailSheet />
+        {:else}
         <Controls {picking} onPickStart={startPicking} />
 
         <div class="status small muted" aria-live="polite">
@@ -611,6 +641,7 @@
         {/if}
 
         <ResultsList onSelect={select} onHover={hover} />
+        {/if}
 
         <p class="safety small muted">
           A guide, not a safety service. Check the
@@ -623,7 +654,9 @@
     <button class="panel-tab" onclick={() => (panelOpen = true)} aria-label="Show where to go">
       <span class="tab-title">Where to go</span>
       <span class="tab-sub small">{dayLabel(settings.dayOffset)}, {conditions.ticked.size} conditions</span>
-      {#if best && bestName}
+      {#if hillOpen && openHill}
+        <span class="tab-best"><VerdictMark verdict={openHill.verdict} /> {openHill.hill.name}</span>
+      {:else if best && bestName}
         <span class="tab-best"><VerdictMark verdict={best.verdict} /> {bestName}</span>
       {:else if conditions.loading}
         <span class="tab-sub small">Fetching forecasts…</span>
@@ -698,6 +731,9 @@
     border-radius: 6px;
     padding: 4px 10px;
     font-size: 0.85rem;
+  }
+  .panel-body > :global(*) {
+    min-width: 0;
   }
   .panel-body {
     flex: 1;
