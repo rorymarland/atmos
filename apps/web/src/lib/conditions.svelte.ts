@@ -36,6 +36,7 @@ import { forecastCache, newestFetch } from './cache';
 import { settings } from './settings.svelte';
 import { loadStaticData, type StaticData } from './static-data';
 import {
+  periodFitsMoment,
   periodWindow,
   sunTimes,
   targetTime,
@@ -416,7 +417,10 @@ class Conditions {
       const tooFar = maxMiles !== null && h.roadMiles !== null && h.roadMiles > maxMiles;
       if (tooFar && !h.searchOnly) continue;
       const candidates = h.conditions.filter(
-        (c) => ticked.has(c.profileId) && periods.has(c.period),
+        (c) =>
+          ticked.has(c.profileId) &&
+          periods.has(c.period) &&
+          periodFitsMoment(c.period, settings.moment),
       );
       if (candidates.some((c) => c.window.end < this.now)) windowPassed = true;
       const counted = candidates.filter(

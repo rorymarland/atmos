@@ -8,7 +8,7 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { conditions, keyHourProfile, type ConditionTrip } from '#lib/conditions.svelte.ts';
-  import { resetFilters, settings } from '#lib/settings.svelte.ts';
+  import { settings } from '#lib/settings.svelte.ts';
   import { modelLabel } from '#lib/static-data.ts';
   import { PERIOD_LABELS } from '#lib/sun.ts';
   import { formatClock, formatTime, londonMidnight } from '#lib/time.ts';
@@ -82,11 +82,6 @@
     if (e.key === 'Escape' && open && !t?.closest('input, select, textarea')) close();
   }
 
-  function resetAll() {
-    resetFilters();
-    close();
-  }
-
   function close() {
     const url = new URL(page.url.href);
     url.searchParams.delete('hill');
@@ -118,7 +113,6 @@
   <div class="hill-view" bind:this={view} role="region" aria-labelledby="sheet-title">
     <div class="nav">
       <button class="back" onclick={close}>Back to results</button>
-      <button class="back" onclick={resetAll} title="Clear this hill and put the search back to its defaults">Reset filters</button>
     </div>
     <header>
       <div>

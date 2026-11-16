@@ -32,6 +32,7 @@
 <div class="shell" class:on-map={onMap}>
   <header class="top">
     <a href="/" class="brand" aria-label="Atmos home">
+      <img class="logo" src="/favicon.svg" alt="" width="30" height="30" />
       <span class="name">Atmos</span>
       <span class="tagline">Find the conditions. Capture the moment.</span>
     </a>
@@ -83,8 +84,12 @@
   .brand {
     text-decoration: none;
     display: flex;
-    align-items: baseline;
-    gap: 12px;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo {
+    flex: none;
+    border-radius: 7px;
   }
   .name {
     font-size: 1.6rem;
