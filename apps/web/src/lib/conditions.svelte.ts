@@ -16,6 +16,7 @@ import {
   saturatedLayers,
   tripProblem,
   type Hill,
+  viewLineLatitude,
   type Layer,
   type ModelForecast,
   type ProfileConfig,
@@ -26,6 +27,8 @@ import {
   type Zone,
 } from '@atmos/engine';
 import {
+  fetchOvation,
+  type Ovation,
   fetchKpForecast,
   fetchZoneForecasts,
   ForecastError,
@@ -146,6 +149,44 @@ class Conditions {
   progress = $state<{ done: number; total: number } | null>(null);
   error = $state<string | null>(null);
   now = $state(Date.now());
+  /** OVATION aurora nowcast, fetched only while the aurora is ticked for tonight. */
+  ovation = $state.raw<Ovation | null>(null);
+  #ovationAt = 0;
+
+  /** Whether the aurora layers belong on the map: aurora and night both ticked. */
+  get auroraShown(): boolean {
+    return this.ticked.has('aurora') && settings.periods.includes('night');
+  }
+
+  /**
+   * The chosen night's strongest forecast Kp, and the rule-of-thumb latitude it should
+   * reach on the northern horizon. Null beyond the Kp forecast (about three days).
+   */
+  auroraOutlook = $derived.by(() => {
+    const bins = this.kp;
+    if (bins.length === 0) return null;
+    const dayStart = londonMidnight(settings.dayOffset, this.now);
+    // Roughly dusk to dawn in a UK winter: 16:00 to 07:00 the next morning.
+    const from = dayStart + 16 * 3_600_000;
+    const to = dayStart + 31 * 3_600_000;
+    const night = bins.filter((b) => b.time + 3 * 3_600_000 > from && b.time < to);
+    if (night.length === 0) return null;
+    const peak = night.reduce((a, b) => (b.kp > a.kp ? b : a));
+    return { kp: peak.kp, at: peak.time, lat: viewLineLatitude(peak.kp) };
+  });
+
+  /** Fetches the OVATION nowcast when it's wanted and more than ten minutes old. */
+  async refreshAurora(force = false) {
+    if (!this.auroraShown || settings.dayOffset !== 0) return;
+    if (!force && Date.now() - this.#ovationAt < 10 * 60_000) return;
+    this.#ovationAt = Date.now();
+    try {
+      this.ovation = await fetchOvation();
+    } catch (e) {
+      console.warn('Aurora nowcast:', e);
+    }
+  }
+
   /** A hill picked from the search that isn't on the chosen lists, scored on its own. */
   extra = $state.raw<Hill | null>(null);
   #refreshAgain = false;

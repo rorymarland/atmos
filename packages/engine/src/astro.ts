@@ -53,3 +53,11 @@ export function skyAt(time: number, lat: number, lon: number): SkyState {
 export function kpNeeded(lat: number): number {
   return Math.min(8, Math.max(2, 7 - (lat - 52) / 2));
 }
+
+/**
+ * The inverse of kpNeeded: the southernmost latitude where aurora should show on the
+ * northern horizon at this Kp. A rule of thumb, not a model.
+ */
+export function viewLineLatitude(kp: number): number {
+  return Math.min(62, Math.max(49, 52 + 2 * (7 - kp)));
+}

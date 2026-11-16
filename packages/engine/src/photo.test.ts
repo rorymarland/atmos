@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { kpNeeded, skyAt } from './astro.js';
+import { kpNeeded, skyAt, viewLineLatitude } from './astro.js';
 import { evaluateTarget } from './evaluate.js';
 import { loadRealConfig } from './test-config.js';
 import { HOUR, T0, makeForecast } from './testing.js';
@@ -18,6 +18,12 @@ describe('sky geometry', () => {
   it('puts the sun high at midsummer noon and below the horizon at midnight', () => {
     expect(skyAt(Date.UTC(2026, 5, 21, 12), 56, -4).sunAltDeg).toBeGreaterThan(50);
     expect(skyAt(Date.UTC(2026, 11, 21, 0), 56, -4).sunAltDeg).toBeLessThan(-40);
+  });
+
+  it('puts the view line further south for stronger storms', () => {
+    expect(viewLineLatitude(7)).toBeCloseTo(52);
+    expect(viewLineLatitude(5)).toBeCloseTo(56);
+    expect(kpNeeded(viewLineLatitude(4.5))).toBeCloseTo(4.5);
   });
 
   it('needs less activity further north', () => {

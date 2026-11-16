@@ -47,7 +47,9 @@
     const what =
       n === 0 ? 'nothing ticked' : n === 1 ? conditions.label([...ticked][0]!).toLowerCase() : `${n} conditions`;
     const where = settings.countries.length ? ` in ${settings.countries.map((c) => NATION_LABELS[c]).join(' or ')}` : '';
-    const parts = [`${day}${when}${where}, ${what}`];
+    // "Today night" reads oddly: say "Tonight".
+    const dayWhen = settings.dayOffset === 0 && when === ' night' ? 'Tonight' : `${day}${when}`;
+    const parts = [`${dayWhen}${where}, ${what}`];
     if (lightPeriods.length) parts.push(`there for ${MOMENT_LABELS[settings.moment].toLowerCase()}`);
     if (settings.start && settings.earliestUp) parts.push(`up no earlier than ${settings.earliestUp}`);
     if (settings.start && settings.maxDriveMiles) parts.push(`within ${settings.maxDriveMiles} miles’ drive`);

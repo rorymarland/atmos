@@ -28,7 +28,7 @@ attributions:
     name: NOAA Space Weather Prediction Center
     url: https://www.swpc.noaa.gov/
     licence: Public domain (US Government work)
-    use: Planetary K index forecast for the aurora
+    use: Kp forecast and OVATION aurora nowcast
   - id: aurorawatch
     name: AuroraWatch UK, Lancaster University
     url: https://aurorawatch.lancs.ac.uk/

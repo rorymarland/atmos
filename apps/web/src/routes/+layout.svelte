@@ -3,7 +3,7 @@
   import { page } from '$app/state';
   import { onMount, untrack } from 'svelte';
   import { conditions } from '#lib/conditions.svelte.ts';
-  import { watchSettings } from '#lib/settings.svelte.ts';
+  import { settings, watchSettings } from '#lib/settings.svelte.ts';
 
   let { children } = $props();
 
@@ -19,6 +19,14 @@
   $effect(() => {
     const zones = conditions.neededZones;
     if (zones.length > 0) untrack(() => conditions.refresh());
+  });
+
+  // The aurora nowcast: when the aurora is ticked for tonight, then every ten minutes.
+  $effect(() => {
+    if (!conditions.auroraShown || settings.dayOffset !== 0) return;
+    untrack(() => conditions.refreshAurora());
+    const id = setInterval(() => conditions.refreshAurora(), 10 * 60_000);
+    return () => clearInterval(id);
   });
 
   const NAV = [

@@ -317,6 +317,36 @@
           },
           firstSymbol,
         );
+        // Aurora: the OVATION nowcast as 1° cells (the model's own resolution), and the
+        // chosen night's view line from the Kp forecast. Under the hill points.
+        m.addSource('aurora-cells', { type: 'geojson', data: empty });
+        m.addSource('aurora-line', { type: 'geojson', data: empty });
+        m.addLayer(
+          {
+            id: 'aurora-cells',
+            type: 'fill',
+            source: 'aurora-cells',
+            paint: {
+              'fill-color': [
+                'interpolate', ['linear'], ['get', 'chance'],
+                3, 'rgba(46,170,98,0.12)',
+                10, 'rgba(46,170,98,0.28)',
+                30, 'rgba(120,200,60,0.36)',
+                50, 'rgba(240,205,50,0.42)',
+                80, 'rgba(226,96,58,0.48)',
+              ],
+              'fill-outline-color': 'rgba(0,0,0,0)',
+            },
+          },
+          firstSymbol,
+        );
+        m.addLayer({
+          id: 'aurora-line',
+          type: 'line',
+          source: 'aurora-line',
+          filter: ['==', ['geometry-type'], 'LineString'],
+          paint: { 'line-color': '#2f9e5b', 'line-width': 3, 'line-dasharray': [3, 2] },
+        });
         m.addSource('targets', { type: 'geojson', data: empty });
         m.addSource('highlight', { type: 'geojson', data: empty });
         m.addSource('start', { type: 'geojson', data: empty });
@@ -451,6 +481,26 @@
         }
         try {
           m.addLayer({
+            id: 'aurora-label',
+            type: 'symbol',
+            source: 'aurora-line',
+            filter: ['==', ['geometry-type'], 'Point'],
+            layout: {
+              'text-field': ['get', 'label'],
+              'text-font': ['Noto Sans Bold'],
+              'text-size': 13,
+              'text-anchor': 'bottom-left',
+              'text-max-width': 40,
+              'text-offset': [0.3, -0.3],
+              'text-allow-overlap': true,
+            },
+            paint: { 'text-color': '#1e6b3e', 'text-halo-color': '#ffffff', 'text-halo-width': 2.4 },
+          });
+        } catch (e) {
+          console.warn('Aurora label unavailable', e);
+        }
+        try {
+          m.addLayer({
             id: 'ray-labels',
             type: 'symbol',
             source: 'rays',
@@ -538,6 +588,58 @@
   $effect(() => {
     const data = { type: 'FeatureCollection' as const, features };
     if (map && loaded) setSource('targets', data);
+  });
+
+  // Aurora layers, only while the aurora is ticked (with night).
+  const showOvation = $derived(conditions.auroraShown && settings.dayOffset === 0 && conditions.ovation !== null);
+  const auroraOutlook = $derived(conditions.auroraShown ? conditions.auroraOutlook : null);
+  $effect(() => {
+    const o = showOvation ? conditions.ovation : null;
+    const data = o
+      ? {
+          type: 'FeatureCollection' as const,
+          features: o.cells
+            .filter((c) => c.chance >= 3)
+            .map((c) => ({
+              type: 'Feature' as const,
+              geometry: {
+                type: 'Polygon' as const,
+                coordinates: [
+                  [
+                    [c.lon - 0.5, c.lat - 0.5],
+                    [c.lon + 0.5, c.lat - 0.5],
+                    [c.lon + 0.5, c.lat + 0.5],
+                    [c.lon - 0.5, c.lat + 0.5],
+                    [c.lon - 0.5, c.lat - 0.5],
+                  ],
+                ],
+              },
+              properties: { chance: c.chance },
+            })),
+        }
+      : empty;
+    if (map && loaded) setSource('aurora-cells', data);
+  });
+  $effect(() => {
+    const a = auroraOutlook;
+    const data = a
+      ? {
+          type: 'FeatureCollection' as const,
+          features: [
+            {
+              type: 'Feature' as const,
+              geometry: { type: 'LineString' as const, coordinates: [[-14, a.lat], [5, a.lat]] },
+              properties: {},
+            },
+            {
+              type: 'Feature' as const,
+              geometry: { type: 'Point' as const, coordinates: [-10.5, a.lat] },
+              properties: { label: `Aurora view line, Kp ${a.kp.toFixed(1)}: low in the north from here northwards` },
+            },
+          ],
+        }
+      : empty;
+    if (map && loaded) setSource('aurora-line', data);
   });
 
   $effect(() => {
@@ -659,6 +761,18 @@
       <span aria-hidden="true"><i style="background: var(--maybe)"></i>Maybe</span>
       <span aria-hidden="true"><i style="background: var(--no)"></i>No</span>
       {#if best}<span aria-hidden="true"><i class="best-ring"></i>Best bet</span>{/if}
+      {#if showOvation && conditions.ovation}
+        <span title="NOAA SWPC OVATION nowcast: chance of aurora overhead">
+          <i class="aurora-scale" aria-hidden="true"></i>Aurora chance now (to {formatTime(conditions.ovation.forecastFor)})
+        </span>
+      {/if}
+      {#if auroraOutlook}
+        <span title="Rule of thumb from NOAA's Kp forecast, not a model">
+          <i class="aurora-line" aria-hidden="true"></i>View line, Kp {auroraOutlook.kp.toFixed(1)}
+        </span>
+      {:else if conditions.auroraShown && conditions.kp.length}
+        <span class="muted">No Kp forecast this far ahead</span>
+      {/if}
       {#if settings.start}<span aria-hidden="true"><i class="start-dot"></i>Start</span>{/if}
       {#if skyOpen}<span class="muted">Click the map or drag the pin to move the sun and moon lines</span>{/if}
       <button class="link" onclick={() => (skyOpen = !skyOpen)} aria-pressed={skyOpen}>
@@ -925,6 +1039,19 @@
     border-radius: 50%;
     margin-right: 5px;
     vertical-align: -1px;
+  }
+  .legend .aurora-scale {
+    width: 38px;
+    height: 9px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, rgb(46 170 98 / 0.4), rgb(120 200 60 / 0.7), rgb(240 205 50 / 0.8), rgb(226 96 58 / 0.85));
+  }
+  .legend .aurora-line {
+    width: 18px;
+    height: 0;
+    border-radius: 0;
+    border-top: 3px dashed #2f9e5b;
+    vertical-align: 3px;
   }
   .legend .best-ring {
     background: transparent;
