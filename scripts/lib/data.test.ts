@@ -23,15 +23,24 @@ describe('parseDobih', () => {
       'Scafell Pike',
       'Ben Ledi',
       'Slieve Donard',
+      'Cuilcagh',
+      'The Cheviot Border Top',
       'Leith Hill',
     ]);
-    expect(result.stats).toEqual({ rows: 11, kept: 7, notUk: 2, notOnList: 1, invalid: 1 });
+    expect(result.stats).toEqual({ rows: 13, kept: 9, notUk: 2, notOnList: 1, invalid: 1 });
   });
 
   it('keeps Northern Ireland but not the Republic of Ireland or the Isle of Man', () => {
+    // Matched on the full council name, which itself contains a comma.
     expect(names).toContain('Slieve Donard');
+    // On the border: "Fermanagh and Omagh, Cavan".
+    expect(names).toContain('Cuilcagh');
     expect(names).not.toContain('Lugnaquilla');
     expect(names).not.toContain('Snaefell');
+  });
+
+  it('keeps hills on the England-Scotland border (country code ES)', () => {
+    expect(names).toContain('The Cheviot Border Top');
   });
 
   it('records list membership as a bitmask', () => {
@@ -91,8 +100,10 @@ describe('zones', () => {
     expect(zoneOf('Scafell Pike')).toBe('lakes-south');
     expect(zoneOf('Yr Wyddfa - Snowdon')).toBe('eryri-north');
     expect(zoneOf('Slieve Donard')).toBe('mournes');
-    expect(zoneOf('Leith Hill')).toBeNull();
-    expect(result.unzoned).toBe(1);
+    expect(zoneOf('Cuilcagh')).toBe('fermanagh');
+    expect(zoneOf('The Cheviot Border Top')).toBe('cheviots');
+    expect(zoneOf('Leith Hill')).toBe('south-downs');
+    expect(result.unzoned).toBe(0);
   });
 
   it('rejects duplicate zone ids', () => {
