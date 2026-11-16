@@ -31,7 +31,9 @@ scored for every condition, morning, daytime, evening and night:
 Tick the conditions and times of day you care about; each hill gets a photo score out of 100
 from its best three (the best counts most), and the list sorts best to worst. Summit conditions
 (inversion, snow, clear air, walking) are judged at each summit's height; the rest come from the
-zone's valley forecast and are shared by nearby hills. The detail sheet breaks every condition
+zone's valley forecast and are shared by nearby hills. Every other UK hill in the DoBIH CSV (mostly Tumps, such as Ben A'an) is searchable but not mapped or
+ranked: `search-hills.json` loads the first time the search box is used, and picking one scores
+it on its own. The detail sheet breaks every condition
 down with its reasons. Thresholds and weights are in `config/profiles.yaml`.
 
 Trip planning: set a home by postcode or place name (Settings), choose what to be in place for

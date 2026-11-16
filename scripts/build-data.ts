@@ -90,6 +90,13 @@ const hillsFile: HillsFile = {
   lists: parsed.lists,
   hills: zoned.hills.map(encodeHill),
 };
+// Every other UK hill (mostly Tumps), for the search box only. Loaded on demand.
+const zonedOthers = assignZones(parsed.others, zonesConfig.zones, zonesConfig.maxAssignKm);
+const searchFile: HillsFile = {
+  source: hillsFile.source,
+  lists: [],
+  hills: zonedOthers.hills.filter((h) => h.zone >= 0).map(encodeHill),
+};
 
 // Attributions.
 const attributionsRaw = JSON.stringify(readYaml('attributions.yaml')).replaceAll(
@@ -107,6 +114,7 @@ const write = (name: string, data: unknown) => {
 };
 const written = [
   write('hills.json', hillsFile),
+  write('search-hills.json', searchFile),
   write('zones.json', zonesFile),
   write('profiles.json', profiles),
   write('attributions.json', attributionsFile),

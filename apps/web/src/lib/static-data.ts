@@ -69,6 +69,23 @@ export function loadStaticData(): Promise<StaticData> {
   return loading;
 }
 
+let searchLoading: Promise<Hill[]> | null = null;
+
+/**
+ * Every other UK hill (mostly Tumps) for the search box: not mapped or ranked, so it's
+ * only downloaded the first time someone searches.
+ */
+export function loadSearchHills(): Promise<Hill[]> {
+  searchLoading ??= getJson<HillsFile>('/data/search-hills.json')
+    .then((f) => f.hills.map(decodeHill))
+    .catch((e) => {
+      searchLoading = null;
+      console.warn('Search hills:', e);
+      return [];
+    });
+  return searchLoading;
+}
+
 /** Profiles judged at each summit, rather than once for the whole zone at valley level. */
 export const MODEL_LABELS: Record<string, string> = {
   ukmo_seamless: 'Met Office',
