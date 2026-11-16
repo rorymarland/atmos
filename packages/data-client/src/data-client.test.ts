@@ -210,3 +210,24 @@ describe('Kp forecast', () => {
     expect(kpAt(rows, Date.UTC(2026, 10, 17, 4))).toBeNull();
   });
 });
+
+describe('OVATION nowcast', () => {
+  it('keeps the UK box and converts longitudes to -180..180', async () => {
+    const { parseOvation } = await import('./ovation.js');
+    const o = parseOvation({
+      'Observation Time': '2026-11-16T18:00:00Z',
+      'Forecast Time': '2026-11-16T18:45:00Z',
+      coordinates: [
+        [356, 58, 12],
+        [2, 55, 3],
+        [100, 58, 50],
+        [356, 30, 0],
+      ],
+    });
+    expect(o.cells).toEqual([
+      { lat: 58, lon: -4, chance: 12 },
+      { lat: 55, lon: 2, chance: 3 },
+    ]);
+    expect(o.forecastFor).toBe(Date.UTC(2026, 10, 16, 18, 45));
+  });
+});

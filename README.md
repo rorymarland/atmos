@@ -33,6 +33,8 @@
   leave time, with a Google Maps link for the real route.
 - **Shows the sun and moon.** A draggable pin draws sunrise, sunset, moonrise and moonset bearings;
   the timeline adds the sun and moon now, and you scrub it through the day.
+- **Maps the aurora.** With Aurora ticked, tonight's NOAA OVATION nowcast is shaded over the UK,
+  and each night has a view line from the Kp forecast showing how far south it should reach.
 - **Finds anywhere.** Search hills, UK places and postcodes. Every other UK hill in the database
   (mostly Tumps, such as Ben A'an) can be searched and scored without cluttering the map.
 
@@ -41,7 +43,7 @@
 | Light and sky   | Golden-hour sky, dramatic light, clear air and long views            |
 | Cloud and water | Cloud inversion, valley mist, still reflections, waterfalls in spate |
 | Winter          | Snow on the tops, hoar frost                                         |
-| Night           | Milky Way and stars, aurora (NOAA Kp forecast)                       |
+| Night           | Milky Way and stars, aurora (NOAA Kp forecast and OVATION nowcast)   |
 | On foot         | Hill walking (not in the photo score unless ticked)                  |
 
 <table>
@@ -126,7 +128,7 @@ To build the image from a checkout instead:
 | [Database of British and Irish Hills](https://www.hills-database.co.uk/) (DoBIH)                     | Hill names, heights, positions, lists  | CC BY 4.0                                     |
 | [Postcodes.io](https://postcodes.io/) (OS, Royal Mail and ONS data)                                  | Finding home from a postcode           | OGL v3.0                                      |
 | [GeoNames](https://www.geonames.org/) via Open-Meteo geocoding                                       | Finding home from a place name         | CC BY 4.0                                     |
-| [NOAA SWPC](https://www.swpc.noaa.gov/)                                                              | Kp forecast for the aurora             | Public domain                                 |
+| [NOAA SWPC](https://www.swpc.noaa.gov/)                                                              | Kp forecast and OVATION nowcast        | Public domain                                 |
 | [OpenStreetMap](https://www.openstreetmap.org/copyright) via [OpenFreeMap](https://openfreemap.org/) | Basemap                                | ODbL                                          |
 | [Mapterhorn](https://mapterhorn.com/attribution)                                                     | Hillshade terrain                      | Open data; see the attribution page           |
 
