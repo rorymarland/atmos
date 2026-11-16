@@ -1,0 +1,42 @@
+# Which DoBIH hills go into the app, and how to read the DoBIH CSV.
+# Check the column names against the CSV you download: the build fails with the
+# actual header list if any of these are missing.
+
+columns:
+  number: Number
+  name: Name
+  metres: Metres
+  latitude: Latitude
+  longitude: Longitude
+  country: Country
+  county: County
+
+# DoBIH country codes to consider. "I" covers the whole island of Ireland; Irish hills
+# are then kept only if their county is in Northern Ireland (see below).
+# Isle of Man and the Channel Islands are not part of the UK and are left out.
+countries:
+  scotland: S
+  england: E
+  wales: W
+  ireland: I
+
+northernIrelandCounties:
+  - Antrim
+  - Armagh
+  - Down
+  - Fermanagh
+  - Londonderry
+  - Derry
+  - Tyrone
+
+# The agreed lists. `column` is the DoBIH classification column (1 = on the list).
+# Order matters: it sets each list's bit in the hill mask, so only append.
+lists:
+  - { id: munro, label: Munro, column: M }
+  - { id: corbett, label: Corbett, column: C }
+  - { id: graham, label: Graham, column: G }
+  - { id: donald, label: Donald, column: D }
+  - { id: hewitt, label: Hewitt, column: Hew }
+  - { id: nuttall, label: Nuttall, column: N }
+  - { id: wainwright, label: Wainwright, column: W }
+  - { id: marilyn, label: Marilyn, column: Ma }

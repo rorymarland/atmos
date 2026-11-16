@@ -1,0 +1,12 @@
+Number,Name,Parent (SMC),Section,Region,County,Classification,Metres,Feet,Grid ref,Drop,Country,Latitude,Longitude,Ma,Hu,M,C,G,D,Hew,N,W,Tu
+1,Ben Nevis,,04A,"04: Fort William to Loch Treig & Loch Leven",Highland,"Ma,Hu,M",1345,4413,NN166712,1345,S,56.796891,-5.003675,1,1,1,0,0,0,0,0,0,1
+2,Ben Ledi,,01C,"01: Loch Tay to Perth",Stirling,"Ma,Hu,C",879,2884,NN562097,646,S,56.257290,-4.323224,1,1,0,1,0,0,0,0,0,1
+3,Scafell Pike,,34B,"34: Lake District",Cumbria,"Ma,Hu,Hew,N,W",978.1,3209,NY215072,912,E,54.454222,-3.211528,1,1,0,0,0,0,1,1,1,1
+4,Yr Wyddfa - Snowdon,,30B,"30: Snowdonia",Gwynedd,"Ma,Hu,Hew,N",1085,3560,SH609543,1039,W,53.068496,-4.076231,1,1,0,0,0,0,1,1,0,1
+5,Slieve Donard,,43B,"43: Mourne Mountains",Down,"Ma,Hu",849,2785,J357276,822,I,54.180344,-5.920844,1,1,0,0,0,0,0,0,0,1
+6,Lugnaquilla,,55A,"55: Wicklow",Wicklow,"Ma,Hu",925,3035,T032917,905,I,52.966656,-6.464394,1,1,0,0,0,0,0,0,0,1
+7,Snaefell,,29,"29: Isle of Man",Isle of Man,"Ma,Hu",621,2037,SC397880,621,M,54.263228,-4.461653,1,1,0,0,0,0,0,0,0,1
+8,Little Knowe,,28B,"28: Southern Uplands",Scottish Borders,Tu,412,1352,NT300300,40,S,55.560000,-3.120000,0,0,0,0,0,0,0,0,0,1
+9,Broken Hill,,28B,"28: Southern Uplands",Scottish Borders,"Ma",600,1969,NT300301,200,S,,,1,0,0,0,0,0,0,0,0,1
+10,Sgùrr Alasdair,,17B,"17: Skye & Inner Hebrides",Highland,"Ma,Hu,M",992,3255,NG450207,992,S,57.206269,-6.224286,1,1,1,0,0,0,0,0,0,1
+11,Leith Hill,,42,"42: South-East England",Surrey,"Ma,Hu",294,965,TQ139431,284,E,51.175868,-0.371409,1,1,0,0,0,0,0,0,0,1

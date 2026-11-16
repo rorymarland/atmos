@@ -1,0 +1,73 @@
+# Scoring configuration: the source of truth for thresholds, weights, gates and verdicts.
+#
+# Factor ramps:
+#   { weight, good, bad }          linear: score 1 at `good`, 0 at `bad` (either direction)
+#   { weight, band, zero }         band: score 1 inside `band`, 0 at or beyond `zero`
+# Gates veto an hour outright: { max } or { min }.
+# Units: km/h, °C, metres AMSL, %, hPa, mm per hour, km.
+# Starting values from the design plan; tune them against the inversion log.
+
+verdict:
+  go: 0.70
+  maybe: 0.45
+
+confidence:
+  high: 0.15
+  medium: 0.30
+  # UKV 2 km covers about two days; beyond that, confidence is capped at Medium.
+  highConfidenceHorizonHours: 48
+
+# Highest resolution first. Open-Meteo model ids: confirm in the M0 spike.
+modelPriority:
+  - ukmo_uk_deterministic_2km
+  - ukmo_global_deterministic_10km
+  - ecmwf_ifs025
+  - icon_seamless
+
+profiles:
+  walking:
+    label: Hill walking
+    aggregate: mean
+    worstHourPenalty: 0.5
+    factors:
+      summitWind: { weight: 3, good: 30, bad: 60 }
+      precipitationProbability: { weight: 2, good: 20, bad: 60 }
+      cloudBaseMargin: { weight: 2, good: 200, bad: 0 }
+      visibility: { weight: 1, good: 20, bad: 5 }
+      windChill: { weight: 1, good: -5, bad: -15 }
+    gates:
+      summitGusts: { max: 80 }
+
+  inversion:
+    label: Cloud inversion
+    aggregate: best-hour
+    factors:
+      inversionStrength: { weight: 3, good: 3, bad: 0 }
+      cloudSeaClearance: { weight: 3, good: 250, bad: 50 }
+      summitDryness: { weight: 2, good: 70, bad: 90 }
+      lightWinds: { weight: 2, good: 15, bad: 30 }
+      highPressure: { weight: 1, good: 1020, bad: 1010 }
+      nightCooling: { weight: 1, good: 30, bad: 70 }
+      moisture: { weight: 1, good: 1, bad: 4 }
+    gates:
+      summitClearance: { min: 0 }
+      summitWind: { max: 35 }
+
+  sky:
+    label: Golden-hour sky
+    aggregate: best-hour
+    factors:
+      midHighCloud: { weight: 3, band: [20, 70], zero: [0, 95] }
+      lowCloud: { weight: 2, good: 30, bad: 70 }
+      precipitation: { weight: 2, good: 0, bad: 0.5 }
+      visibility: { weight: 1, good: 15, bad: 5 }
+    gates:
+      totalCloud: { max: 95 }
+
+  reflections:
+    label: Still reflections
+    aggregate: best-hour
+    factors:
+      wind: { weight: 3, good: 5, bad: 12 }
+      gusts: { weight: 2, good: 10, bad: 20 }
+      precipitation: { weight: 1, good: 0, bad: 0.2 }

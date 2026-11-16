@@ -1,0 +1,78 @@
+# Forecast zones (v1 draft: review the points before relying on them).
+#
+# Each zone is forecast at ONE low-lying point: a valley floor, village or lochside.
+# The model column then starts near the valley floor, where inversions and mist form,
+# and its upper levels cover every summit in the zone. Hills are assigned to the
+# nearest zone point within `maxAssignKm`; hills further away are left unzoned.
+
+maxAssignKm: 45
+
+zones:
+  # Scotland: south
+  - { id: galloway, name: Galloway Hills, nation: scotland, forecastPoint: { lat: 55.087, lon: -4.484 } } # Glen Trool
+  - { id: moffat, name: Moffat and Tweedsmuir Hills, nation: scotland, forecastPoint: { lat: 55.333, lon: -3.441 } } # Moffat
+  - { id: borders, name: Pentlands and Borders, nation: scotland, forecastPoint: { lat: 55.652, lon: -3.193 } } # Peebles
+  - { id: ochils, name: Ochils and Lomonds, nation: scotland, forecastPoint: { lat: 56.162, lon: -3.672 } } # Dollar
+  - { id: arran, name: Arran, nation: scotland, forecastPoint: { lat: 55.576, lon: -5.151 } } # Brodick
+  - { id: islay-jura, name: Islay and Jura, nation: scotland, forecastPoint: { lat: 55.838, lon: -5.950 } } # Craighouse
+
+  # Scotland: southern and central Highlands
+  - { id: arrochar, name: Arrochar Alps, nation: scotland, forecastPoint: { lat: 56.200, lon: -4.742 } } # Arrochar
+  - { id: cowal, name: Cowal and Inveraray, nation: scotland, forecastPoint: { lat: 56.231, lon: -5.073 } } # Inveraray
+  - { id: trossachs, name: Trossachs, nation: scotland, forecastPoint: { lat: 56.244, lon: -4.214 } } # Callander
+  - { id: crianlarich, name: Crianlarich and Tyndrum, nation: scotland, forecastPoint: { lat: 56.391, lon: -4.618 } } # Crianlarich
+  - { id: breadalbane, name: Ben Lawers and Breadalbane, nation: scotland, forecastPoint: { lat: 56.466, lon: -4.316 } } # Killin
+  - { id: atholl, name: Atholl and Schiehallion, nation: scotland, forecastPoint: { lat: 56.703, lon: -3.734 } } # Pitlochry
+  - { id: glencoe, name: Glen Coe, nation: scotland, forecastPoint: { lat: 56.682, lon: -5.103 } } # Glencoe village
+  - { id: lochaber, name: Ben Nevis and the Mamores, nation: scotland, forecastPoint: { lat: 56.819, lon: -5.105 } } # Fort William
+  - { id: laggan, name: Creag Meagaidh and Laggan, nation: scotland, forecastPoint: { lat: 56.948, lon: -4.495 } } # Loch Laggan
+  - { id: drumochter, name: Drumochter, nation: scotland, forecastPoint: { lat: 56.934, lon: -4.244 } } # Dalwhinnie
+  - { id: monadhliath, name: Monadhliath, nation: scotland, forecastPoint: { lat: 57.059, lon: -4.124 } } # Newtonmore
+
+  # Scotland: Cairngorms and the east
+  - { id: cairngorms-north, name: Northern Cairngorms, nation: scotland, forecastPoint: { lat: 57.195, lon: -3.826 } } # Aviemore
+  - { id: cairngorms-south, name: Southern Cairngorms, nation: scotland, forecastPoint: { lat: 57.006, lon: -3.398 } } # Braemar
+  - { id: lochnagar, name: Lochnagar and Deeside, nation: scotland, forecastPoint: { lat: 57.049, lon: -3.038 } } # Ballater
+  - { id: angus-glens, name: Angus Glens, nation: scotland, forecastPoint: { lat: 56.838, lon: -3.101 } } # Clova
+
+  # Scotland: west and north-west
+  - { id: mull, name: Mull, nation: scotland, forecastPoint: { lat: 56.516, lon: -5.947 } } # Salen
+  - { id: ardgour, name: Ardgour and Morvern, nation: scotland, forecastPoint: { lat: 56.694, lon: -5.564 } } # Strontian
+  - { id: glenfinnan, name: Glenfinnan and Knoydart, nation: scotland, forecastPoint: { lat: 56.871, lon: -5.438 } } # Glenfinnan
+  - { id: kintail, name: Glen Shiel and Kintail, nation: scotland, forecastPoint: { lat: 57.207, lon: -5.430 } } # Shiel Bridge
+  - { id: affric, name: Glen Affric and Strathfarrar, nation: scotland, forecastPoint: { lat: 57.352, lon: -4.765 } } # Cannich
+  - { id: skye, name: Skye, nation: scotland, forecastPoint: { lat: 57.289, lon: -6.171 } } # Sligachan
+  - { id: torridon, name: Torridon, nation: scotland, forecastPoint: { lat: 57.546, lon: -5.511 } } # Torridon village
+  - { id: wyvis, name: Ben Wyvis and Strathconon, nation: scotland, forecastPoint: { lat: 57.611, lon: -4.686 } } # Garve
+  - { id: fannichs, name: Fannichs and Beinn Dearg, nation: scotland, forecastPoint: { lat: 57.755, lon: -5.032 } } # Braemore
+  - { id: fisherfield, name: An Teallach and Fisherfield, nation: scotland, forecastPoint: { lat: 57.870, lon: -5.200 } } # Dundonnell
+  - { id: assynt, name: Assynt and Coigach, nation: scotland, forecastPoint: { lat: 58.148, lon: -5.243 } } # Lochinver
+  - { id: far-north, name: Ben Hope and Ben Loyal, nation: scotland, forecastPoint: { lat: 58.477, lon: -4.418 } } # Tongue
+  - { id: harris, name: Harris and Lewis, nation: scotland, forecastPoint: { lat: 57.897, lon: -6.800 } } # Tarbert
+
+  # England
+  - { id: lakes-north, name: Northern and Western Lakes, nation: england, forecastPoint: { lat: 54.601, lon: -3.135 } } # Keswick
+  - { id: lakes-south, name: Central and Southern Lakes, nation: england, forecastPoint: { lat: 54.432, lon: -2.963 } } # Ambleside
+  - { id: north-pennines, name: North Pennines, nation: england, forecastPoint: { lat: 54.627, lon: -2.081 } } # Middleton-in-Teesdale
+  - { id: cheviots, name: Cheviots, nation: england, forecastPoint: { lat: 55.547, lon: -2.011 } } # Wooler
+  - { id: dales-west, name: Yorkshire Dales and Howgills, nation: england, forecastPoint: { lat: 54.153, lon: -2.469 } } # Ingleton
+  - { id: dales-north, name: Wensleydale and Swaledale, nation: england, forecastPoint: { lat: 54.304, lon: -2.198 } } # Hawes
+  - { id: north-york-moors, name: North York Moors, nation: england, forecastPoint: { lat: 54.246, lon: -1.063 } } # Helmsley
+  - { id: peak, name: Peak District, nation: england, forecastPoint: { lat: 53.373, lon: -1.817 } } # Edale
+  - { id: shropshire, name: Shropshire Hills, nation: england, forecastPoint: { lat: 52.538, lon: -2.806 } } # Church Stretton
+  - { id: exmoor, name: Exmoor, nation: england, forecastPoint: { lat: 51.209, lon: -3.596 } } # Porlock
+  - { id: dartmoor, name: Dartmoor, nation: england, forecastPoint: { lat: 50.592, lon: -3.912 } } # Postbridge
+
+  # Wales
+  - { id: eryri-north, name: "Eryri north (Yr Wyddfa, Glyderau, Carneddau)", nation: wales, forecastPoint: { lat: 53.119, lon: -4.129 } } # Llanberis
+  - { id: eryri-south, name: "Eryri south (Cadair Idris, Rhinogydd)", nation: wales, forecastPoint: { lat: 52.743, lon: -3.886 } } # Dolgellau
+  - { id: berwyn, name: Berwyn and Arenig, nation: wales, forecastPoint: { lat: 52.909, lon: -3.597 } } # Bala
+  - { id: clwydian, name: Clwydian Range, nation: wales, forecastPoint: { lat: 53.115, lon: -3.311 } } # Ruthin
+  - { id: elenydd, name: Elenydd and Pumlumon, nation: wales, forecastPoint: { lat: 52.302, lon: -3.513 } } # Rhayader
+  - { id: bannau, name: Bannau Brycheiniog, nation: wales, forecastPoint: { lat: 51.947, lon: -3.391 } } # Brecon
+  - { id: black-mountains, name: Black Mountains, nation: wales, forecastPoint: { lat: 51.824, lon: -3.017 } } # Abergavenny
+
+  # Northern Ireland
+  - { id: mournes, name: Mourne Mountains, nation: northern-ireland, forecastPoint: { lat: 54.214, lon: -5.892 } } # Newcastle
+  - { id: sperrins, name: Sperrins, nation: northern-ireland, forecastPoint: { lat: 54.770, lon: -7.245 } } # Plumbridge
+  - { id: antrim-hills, name: Antrim Hills, nation: northern-ireland, forecastPoint: { lat: 55.081, lon: -6.060 } } # Cushendall
