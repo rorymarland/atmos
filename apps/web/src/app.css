@@ -1,0 +1,167 @@
+@import '@fontsource-variable/archivo/wdth.css';
+
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+  --paper: #eef2f1; /* morning mist */
+  --surface: #f8faf9;
+  --ink: #1b2731; /* slate */
+  --ink-soft: #4c5b67;
+  --line: #d3dcdd;
+  --mist: #c9d3d6; /* cloud layers in charts */
+  --gold: #d9a13b; /* the sun: times, light windows */
+  --go: #2f7a50; /* moss */
+  --maybe: #b98318; /* ochre */
+  --no: #a3412b; /* rust */
+  --nodata: #8a979f;
+  --focus: #2a6f97;
+  --on-verdict: #ffffff;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --paper: #141d24;
+  --surface: #1b262f;
+  --ink: #e4eaec;
+  --ink-soft: #a5b3bc;
+  --line: #2c3a45;
+  --mist: #3a4954;
+  --gold: #e3b354;
+  --go: #5fb383;
+  --maybe: #d8a83e;
+  --no: #d56e55;
+  --nodata: #75838c;
+  --focus: #7cb9dc;
+  --on-verdict: #141d24;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Archivo Variable', system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  font-stretch: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+h1,
+h2,
+h3 {
+  font-stretch: 75%;
+  font-weight: 750;
+  line-height: 1.15;
+  letter-spacing: -0.005em;
+  margin: 0;
+}
+
+h1 {
+  font-size: 1.9rem;
+}
+h2 {
+  font-size: 1.35rem;
+}
+h3 {
+  font-size: 1.1rem;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 0.18em;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--ink-soft);
+}
+
+.small {
+  font-size: 0.875rem;
+}
+
+/* Chips: profile, day and list pickers. */
+.chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.chip {
+  flex: none;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 6px 13px;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+.chip[aria-pressed='true'] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: 8px;
+  padding: 8px 14px;
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+.button.quiet {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

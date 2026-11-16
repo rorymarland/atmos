@@ -1,0 +1,143 @@
+<script lang="ts">
+  import '../app.css';
+  import { page } from '$app/state';
+  import { onMount, untrack } from 'svelte';
+  import { conditions } from '#lib/conditions.svelte.ts';
+  import { watchSettings } from '#lib/settings.svelte.ts';
+  import DetailSheet from '#lib/components/DetailSheet.svelte';
+
+  let { children } = $props();
+
+  watchSettings();
+
+  onMount(() => {
+    conditions.init();
+  });
+
+  // Fetch whenever the set of zones the filters need changes. Cached zones cost nothing.
+  // Only the zone list is tracked: refresh() reads its own loading flag, which must not
+  // re-trigger this effect.
+  $effect(() => {
+    const zones = conditions.neededZones;
+    if (zones.length > 0) untrack(() => conditions.refresh());
+  });
+
+  const NAV = [
+    { href: '/', label: 'Today' },
+    { href: '/map', label: 'Map' },
+    { href: '/settings', label: 'Settings' },
+    { href: '/about', label: 'About' },
+  ];
+</script>
+
+<div class="shell">
+  <header class="top">
+    <a href="/" class="brand" aria-label="Atmos home">
+      <span class="name">Atmos</span>
+      <span class="tagline">Find the conditions. Capture the moment.</span>
+    </a>
+    <nav aria-label="Main">
+      {#each NAV as item (item.href)}
+        <a href={item.href} aria-current={page.url.pathname === item.href ? 'page' : undefined}>
+          {item.label}
+        </a>
+      {/each}
+    </nav>
+  </header>
+
+  <!-- Opening a hill or zone sheet keeps the page where it is. -->
+  <main data-sveltekit-reset="false">
+    {@render children()}
+  </main>
+
+  <footer class="small muted">
+    A guide, not a safety service. Always check the
+    <a href="https://www.metoffice.gov.uk/weather/specialist-forecasts/mountain" target="_blank" rel="noopener">Met Office mountain forecast</a>
+    and <a href="https://www.mwis.org.uk/" target="_blank" rel="noopener">MWIS</a> before going onto the hills.
+    <a href="/about">Data sources</a>.
+  </footer>
+</div>
+
+<DetailSheet />
+
+<style>
+  .shell {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  .top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper);
+  }
+  .brand {
+    text-decoration: none;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .name {
+    font-size: 1.6rem;
+    font-weight: 850;
+    font-stretch: 62%;
+    letter-spacing: 0.01em;
+  }
+  .tagline {
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+  }
+  nav {
+    display: flex;
+    gap: 4px;
+  }
+  nav a {
+    text-decoration: none;
+    padding: 6px 10px;
+    border-radius: 6px;
+    color: var(--ink-soft);
+  }
+  nav a[aria-current='page'] {
+    color: var(--ink);
+    background: var(--surface);
+    font-weight: 650;
+  }
+  main {
+    flex: 1;
+    width: 100%;
+  }
+  footer {
+    padding: 16px 20px 24px;
+    border-top: 1px solid var(--line);
+  }
+
+  /* Phones: tagline goes, navigation moves to a bottom bar within thumb reach. */
+  @media (max-width: 640px) {
+    .tagline {
+      display: none;
+    }
+    nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 5;
+      justify-content: space-around;
+      background: var(--surface);
+      border-top: 1px solid var(--line);
+      padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    }
+    nav a {
+      flex: 1;
+      text-align: center;
+      padding: 8px 4px;
+    }
+    footer {
+      padding-bottom: 84px;
+    }
+  }
+</style>

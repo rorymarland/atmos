@@ -47,7 +47,14 @@ function factorReason(f: FactorResult, options: FormatOptions): Reason {
   return { status, source: f.id, text };
 }
 
-export function explain(result: TargetResult, options: FormatOptions = DEFAULT_FORMAT): Reason[] {
+/**
+ * @param modelLabel turns a model id into a name for people, e.g. "ECMWF".
+ */
+export function explain(
+  result: TargetResult,
+  options: FormatOptions = DEFAULT_FORMAT,
+  modelLabel: (id: string) => string = (id) => id,
+): Reason[] {
   const reference = result.byModel.find((m) => m.model === result.referenceModel);
   const hour = reference?.keyHour;
   if (!hour)
@@ -65,7 +72,9 @@ export function explain(result: TargetResult, options: FormatOptions = DEFAULT_F
     (m) => m.verdict !== 'nodata' && m.verdict !== result.verdict,
   );
   if (dissent.length > 0) {
-    const list = dissent.map((m) => `${m.model} says ${VERDICT_WORD[m.verdict]}`).join('; ');
+    const list = dissent
+      .map((m) => `${modelLabel(m.model)} says ${VERDICT_WORD[m.verdict]}`)
+      .join('; ');
     reasons.push({ status: 'info', source: 'models', text: `Models disagree: ${list}.` });
   }
   return reasons;

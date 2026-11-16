@@ -84,7 +84,8 @@ export const inversionMorning: ForecastSpec = {
     precipitationProbability: 0,
     visibility: 200,
   },
-  surfaceBefore: { cloudCover: 10, cloudCoverLow: 10 },
+  // Overnight: fog forming below, clear sky above.
+  surfaceBefore: { cloudCover: 90, cloudCoverLow: 90, cloudCoverMid: 5, cloudCoverHigh: 5 },
   levels: [
     { heightM: 250, t: -1.5, rh: 100, wind: 4 },
     { heightM: 400, t: -0.5, rh: 98, wind: 5 },

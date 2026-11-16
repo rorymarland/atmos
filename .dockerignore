@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/build
+**/.svelte-kit
+apps/web/static/data
+data/generated
+.git
+.github
+.env
+*.tsbuildinfo
+coverage
