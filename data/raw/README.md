@@ -1,6 +1,7 @@
 # Raw data
 
-Files here are downloaded by hand and never committed (see `.gitignore`).
+For local development. Files here are downloaded by hand and never committed (see `.gitignore`).
+On the NAS the CSV sits next to `docker-compose.yml` instead.
 
 ## Database of British and Irish Hills (DoBIH)
 

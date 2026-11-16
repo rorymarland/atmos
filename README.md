@@ -16,8 +16,9 @@ static host.
 
 ## Status
 
-Milestone M3: the first working app. Today (best bet and ranked zones), Map, a detail sheet for
-every hill or zone, and Settings. Four profiles so far: hill walking, cloud inversion, golden-hour
+Milestone M3: the first working app. The map is the home page, with a collapsible panel for
+choosing a profile, day, filters and start point and for the ranked areas; a detail sheet explains
+every hill or zone. Four profiles so far: hill walking, cloud inversion, golden-hour
 sky and still reflections.
 
 ## Repository layout
@@ -30,7 +31,7 @@ config/              zones, photo spots, scoring profiles, hill lists, attributi
 scripts/             build-time data pipeline (`pnpm build:data`)
 data/raw/            hand-downloaded source data, never committed
 data/generated/      output of the pipeline, never committed
-docker/              multi-stage Dockerfile (builds from source) and nginx config
+docker/              Dockerfile, nginx config and the container start-up script
 tools/spike/         browser check of every live data source (open the HTML file in a browser)
 ```
 
@@ -49,22 +50,31 @@ Both builds need the DoBIH CSV at `data/raw/DoBIH.csv`: see [data/raw/README.md]
 
 ## Running on the NAS
 
-Docker Compose builds the site from this checkout, so the NAS needs only Docker.
+The image is built by GitHub Actions on every merge to `main` and published as
+`ghcr.io/rorymarland/atmos:latest`. The NAS needs only three files in one folder:
 
-```sh
-git clone https://github.com/rorymarland/atmos.git && cd atmos
-# put the DoBIH CSV at data/raw/DoBIH.csv
-cp .env.example .env               # set ATMOS_PORT, DOBIH_VERSION, defaults
-docker compose up -d --build
+```
+atmos/
+├── docker-compose.yml   from this repository
+├── .env                 from .env.example
+└── DoBIH_v18_6.csv      the hills database download (keep its name)
 ```
 
-Then point an Nginx Proxy Manager proxy host at `http://<nas>:ATMOS_PORT` (or use the shared proxy
-network option commented in `docker-compose.yml`). To update: `git pull && docker compose up -d
---build`.
+```sh
+docker compose up -d                          # first run
+docker compose pull && docker compose up -d   # update to the latest version
+```
 
-There are no secrets. `.env` holds the port, the DoBIH version and display defaults, which are baked
-in at build time; choices made in the app's Settings override them. Serve it over HTTPS (NPM does
-this) if you want "Use my location" to work: browsers only share location with secure sites.
+The folder is mounted read-only; each time the container starts it builds the hill data from the
+CSV (about two seconds) and writes the display defaults from `.env`. A new DoBIH release only
+needs the new CSV in place of the old one and `docker compose restart`.
+
+Point an Nginx Proxy Manager proxy host at `http://<nas>:ATMOS_PORT`, or use the shared proxy
+network option commented in `docker-compose.yml`. Serve it over HTTPS if you want "Use my location"
+to work: browsers only share location with secure sites. "Pick on map" works either way.
+
+To build the image from a checkout instead:
+`docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
 ## Data and attribution
 

@@ -7,11 +7,13 @@
     <meta name="description" content="Atmos. Find the conditions. Capture the moment." />
     <link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
     <title>Atmos</title>
+    <script src="%sveltekit.assets%/defaults.js"></script>
     <script>
-      // Apply the saved theme before first paint, so dark mode doesn't flash light.
+      // Apply the theme before first paint, so dark mode doesn't flash light.
       try {
+        const d = window.__ATMOS_DEFAULTS__ || {};
         const s = JSON.parse(localStorage.getItem('atmos.settings') || '{}');
-        if (s.theme) document.documentElement.dataset.theme = s.theme;
+        document.documentElement.dataset.theme = s.theme || d.theme || 'light';
       } catch {}
     </script>
     %sveltekit.head%

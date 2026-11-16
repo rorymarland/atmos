@@ -1,8 +1,10 @@
 /// <reference types="vite/client" />
 // See https://svelte.dev/docs/kit/types#app.d.ts
 declare global {
-  /** Build-time defaults injected by vite.config.ts. */
-  const __ATMOS_DEFAULTS__: { theme: 'light' | 'dark'; wind: 'kmh' | 'mph' };
+  interface Window {
+    /** Display defaults from /defaults.js, written by the container at start-up. */
+    __ATMOS_DEFAULTS__?: { theme?: string; wind?: string };
+  }
 
   namespace App {
     // interface Error {}

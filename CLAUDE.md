@@ -33,6 +33,15 @@
 - `tsconfig.json` extends `$app/tsconfig`.
 - `goto` takes `replace` and `reset` (no `noScroll`/`keepFocus`); links use
   `data-sveltekit-reset="false"` to keep scroll position.
-- Build-time defaults reach the client through Vite `define` (`__ATMOS_DEFAULTS__`).
+- Display defaults are runtime, not build time: `static/defaults.js` sets
+  `window.__ATMOS_DEFAULTS__`, and the container rewrites it at start from `.env` (deleting the
+  precompressed `.gz`/`.br` copies so nginx doesn't serve stale ones).
+
+## Docker image
+
+- Published to `ghcr.io/rorymarland/atmos` by `.github/workflows/publish.yml` on merges to main.
+- The image contains no hill data. `docker/entrypoint/40-atmos-data.sh` runs the bundled
+  `dist/build-data.mjs` at container start against the CSV mounted at `/data`.
+- nginx must serve `.mjs` as JavaScript (the MapLibre worker); see `docker/nginx.conf`.
 - MapLibre 6 needs `setWorkerUrl(...)` with the worker module imported via `?url`. Layer
   errors arrive as `error` events, not exceptions; zoom expressions must be top-level.

@@ -1,27 +1,29 @@
-# Atmos on the NAS: builds from this checkout and serves the static site with nginx.
+# Atmos on the NAS. Only three files are needed in this folder:
 #
-#   cp .env.example .env        # then edit it
-#   docker compose up -d --build
+#   docker-compose.yml   this file
+#   .env                 copied from .env.example
+#   DoBIH_v18_6.csv      the hills database download (any name ending .csv)
 #
-# Rebuild (`--build`) after pulling new code, changing .env, or updating the DoBIH CSV.
+#   docker compose up -d                          # first run
+#   docker compose pull && docker compose up -d   # update to the latest version
+#
+# The hill data is rebuilt from the CSV each time the container starts, so a new CSV
+# only needs `docker compose restart`.
 
 services:
   atmos:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
-      args:
-        # Optional: read from the CSV's file name (DoBIH_v18_6.csv) when left empty.
-        DOBIH_VERSION: ${DOBIH_VERSION:-}
-        ATMOS_DEFAULT_THEME: ${ATMOS_DEFAULT_THEME:-light}
-        ATMOS_DEFAULT_WIND_UNIT: ${ATMOS_DEFAULT_WIND_UNIT:-kmh}
-    image: atmos:local
-    # Built here, never pulled: stops Compose looking for "atmos" on Docker Hub first.
-    pull_policy: build
+    image: ghcr.io/rorymarland/atmos:latest
     container_name: atmos
     restart: unless-stopped
     environment:
       TZ: ${TZ:-Europe/London}
+      ATMOS_DEFAULT_THEME: ${ATMOS_DEFAULT_THEME:-light}
+      ATMOS_DEFAULT_WIND_UNIT: ${ATMOS_DEFAULT_WIND_UNIT:-kmh}
+      # Optional: read from the CSV's file name (DoBIH_v18_6.csv) when empty.
+      DOBIH_VERSION: ${DOBIH_VERSION:-}
+    volumes:
+      # This folder, read-only: the container looks for the one .csv in it.
+      - ./:/data:ro
     ports:
       - '${ATMOS_PORT:-8085}:80'
     # To reach it only through Nginx Proxy Manager on a shared Docker network instead of
