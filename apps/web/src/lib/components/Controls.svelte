@@ -12,9 +12,9 @@
   }: { picking?: boolean; onPickStart?: () => void } = $props();
 
   const GROUPS: { label: string; ids: string[] }[] = [
-    { label: 'Light and sky', ids: ['sky', 'dramatic', 'clarity'] },
+    { label: 'Light and sky', ids: ['sky', 'dramatic', 'clarity', 'lenticular'] },
     { label: 'Cloud and water', ids: ['inversion', 'mist', 'reflections', 'waterfalls'] },
-    { label: 'Winter', ids: ['snow', 'frost'] },
+    { label: 'Winter', ids: ['snow', 'alpenglow', 'frost', 'frozen'] },
     { label: 'Night', ids: ['astro', 'aurora'] },
     { label: 'On foot', ids: ['walking'] },
   ];

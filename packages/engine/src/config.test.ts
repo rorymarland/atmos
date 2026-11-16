@@ -7,12 +7,16 @@ describe('scoring config', () => {
     const config = loadRealConfig();
     expect(Object.keys(config.profiles).sort()).toEqual(
       [
+        'alpenglow',
         'astro',
         'aurora',
         'clarity',
         'dramatic',
         'frost',
+        'frozen',
         'inversion',
+        'lenticular',
+        'midges',
         'mist',
         'reflections',
         'sky',

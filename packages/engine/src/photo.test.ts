@@ -89,3 +89,79 @@ describe('aurora', () => {
     expect(r.verdict).toBe('go');
   });
 });
+
+describe('clear horizon towards the sun', () => {
+  // Good sky overhead: mid and high cloud to catch colour, no low cloud, dry.
+  const f = makeForecast({
+    surface: {
+      cloudCover: 60,
+      cloudCoverLow: 5,
+      cloudCoverMid: 40,
+      cloudCoverHigh: 30,
+      precipitation: 0,
+      visibility: 30_000,
+    },
+    levels,
+  });
+  const w = { start: T0, end: T0 + 2 * HOUR };
+
+  it('turns a promising sky into a no when a cloud bank blocks the sun', () => {
+    const clear = evaluateTarget([f], w, valley, 'sky', config, {
+      now,
+      extras: { horizon: () => ({ low: 5, mid: 10 }) },
+    });
+    const blocked = evaluateTarget([f], w, valley, 'sky', config, {
+      now,
+      extras: { horizon: () => ({ low: 95, mid: 80 }) },
+    });
+    expect(clear.verdict).toBe('go');
+    expect(blocked.score!).toBeLessThan(clear.score! - 0.3);
+  });
+});
+
+describe('agreement rule', () => {
+  it('makes a Go a Maybe when the average says Go but most models do not', () => {
+    const good = makeForecast({
+      surface: { temperature2m: -4, relativeHumidity2m: 95, windSpeed10m: 2, cloudCover: 5 },
+      levels,
+    });
+    const middling = makeForecast({
+      model: 'ecmwf_ifs025',
+      surface: { temperature2m: -0.5, relativeHumidity2m: 86, windSpeed10m: 8, cloudCover: 40 },
+      levels,
+    });
+    const w = { start: T0, end: T0 + 2 * HOUR };
+    const r = evaluateTarget([good, middling], w, valley, 'frost', config, { now });
+    expect(r.score!).toBeGreaterThanOrEqual(config.verdict.go);
+    expect(r.agreement).toEqual({ go: 1, models: 2, outvoted: true });
+    expect(r.verdict).toBe('maybe');
+    // Both saying Go stays a Go.
+    const both = evaluateTarget(
+      [good, { ...good, model: 'ecmwf_ifs025' }],
+      w,
+      valley,
+      'frost',
+      config,
+      { now },
+    );
+    expect(both.verdict).toBe('go');
+  });
+});
+
+describe('midges', () => {
+  const muggy = { temperature2m: 16, windSpeed10m: 2, relativeHumidity2m: 92, precipitation: 0 };
+  it('are bad on a still, damp July evening and absent in December', () => {
+    const july = Date.UTC(2026, 6, 15, 19);
+    const summer = makeForecast({ surface: muggy, levels });
+    summer.time = summer.time.map((t) => t - T0 + july);
+    const w = { start: july, end: july + 2 * HOUR };
+    expect(
+      evaluateTarget([summer], w, valley, 'midges', config, { now: july - 86_400_000 }).verdict,
+    ).toBe('go');
+    const winter = makeForecast({ surface: muggy, levels });
+    expect(
+      evaluateTarget([winter], { start: T0, end: T0 + 2 * HOUR }, valley, 'midges', config, { now })
+        .verdict,
+    ).toBe('no');
+  });
+});

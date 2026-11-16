@@ -52,6 +52,11 @@
     conditions.data && conditions.data.config.profiles[c.profileId]!.periods.length > 1
       ? ` ${c.period === 'morning' ? 'am' : 'pm'}`
       : '';
+  /** High midge risk at dawn or dusk. */
+  const midgy = (h: HillResult) =>
+    h.conditions.some(
+      (c) => conditions.data?.config.profiles[c.profileId]?.risk && c.result.verdict === 'go',
+    );
   /** The conditions worth mentioning on a row: Go and Maybe, best first. */
   const highlights = (h: HillResult) => h.counted.filter((c) => c.result.verdict === 'go' || c.result.verdict === 'maybe').slice(0, 4);
   const tripLine = (t: Trip) => `leave ${clock(t.plan.leaveAt)}, ${formatDuration(t.driveMinutes)} drive`;
@@ -98,13 +103,14 @@
 
 {#snippet badges(h: HillResult)}
   {@const hl = highlights(h)}
-  {#if hl.length}
+  {#if hl.length || midgy(h)}
     <span class="badges">
       {#each hl as c (c.profileId + c.period)}
         <span class="badge {c.result.verdict}" title="{conditions.label(c.profileId)}, {PERIOD_LABELS[c.period].toLowerCase()}: {pct(c.result.score)}">
           {conditions.short(c.profileId)}{periodWord(c)}
         </span>
       {/each}
+      {#if midgy(h)}<span class="badge midge" title="High midge risk at dawn or dusk">Midges</span>{/if}
     </span>
   {/if}
 {/snippet}
@@ -313,6 +319,10 @@
   }
   .badge.go {
     color: var(--go);
+  }
+  .badge.midge {
+    color: var(--no);
+    border-style: dashed;
   }
   .badge.maybe {
     color: var(--maybe);

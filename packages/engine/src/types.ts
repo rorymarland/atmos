@@ -90,4 +90,5 @@ export type Unit =
   | 'mm'
   | 'km'
   | 'degrees'
-  | 'kp';
+  | 'kp'
+  | 'hours';

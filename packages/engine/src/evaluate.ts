@@ -55,6 +55,8 @@ export interface TargetResult {
   confidence: Confidence;
   /** Model whose key hour is used for the explanation. */
   referenceModel: string | null;
+  /** How many models said Go, and whether that was too few for a Go overall. */
+  agreement?: { go: number; models: number; outvoted: boolean };
   byModel: WindowResult[];
 }
 
@@ -232,13 +234,19 @@ export function evaluateTarget(
   const spread = Math.max(...scores) - Math.min(...scores);
   // A majority of gated models means the hazard is real enough to say no.
   const gatedCount = scored.filter((r) => r.keyHour?.gated).length;
-  const verdict = verdictFor(score, gatedCount > scored.length / 2, config);
+  let verdict = verdictFor(score, gatedCount > scored.length / 2, config);
+  // Agreement rule: a Go needs most models to say Go. A high average carried by one
+  // enthusiastic model becomes a Maybe instead of a false positive.
+  const goVotes = scored.filter((r) => r.verdict === 'go').length;
+  const outvoted = verdict === 'go' && scored.length >= 2 && goVotes <= scored.length / 2;
+  if (outvoted) verdict = 'maybe';
 
   return {
     target,
     profileId,
     score,
     verdict,
+    agreement: { go: goVotes, models: scored.length, outvoted },
     confidence: confidenceFor(spread, scored.length, window, config, options),
     referenceModel: pickReferenceModel(scored, config),
     byModel,

@@ -1,5 +1,18 @@
 import { inversion } from './inversion.js';
-import { astro, aurora, clarity, dramatic, frost, mist, snow, waterfalls } from './photo.js';
+import {
+  alpenglow,
+  astro,
+  aurora,
+  clarity,
+  dramatic,
+  frost,
+  frozen,
+  lenticular,
+  midges,
+  mist,
+  snow,
+  waterfalls,
+} from './photo.js';
 import { reflections } from './reflections.js';
 import { sky } from './sky.js';
 import type { ProfileDefinition } from './types.js';
@@ -18,6 +31,10 @@ export const PROFILE_DEFINITIONS: Record<string, ProfileDefinition> = {
   waterfalls,
   astro,
   aurora,
+  alpenglow,
+  lenticular,
+  frozen,
+  midges,
 };
 
 export type {

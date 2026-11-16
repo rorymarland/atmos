@@ -5,7 +5,7 @@
  */
 import { kpNeeded } from '../astro.js';
 import type { HourContext } from '../context.js';
-import { cloudBase, dewPointAt2m, mean, round } from './shared.js';
+import { cloudBase, dewPointAt2m, horizonClear, mean, round } from './shared.js';
 import type { FactorDefinition, ProfileDefinition } from './types.js';
 
 /** Snow usually falls to about 300 m below the freezing level. */
@@ -200,6 +200,7 @@ export const dramatic: ProfileDefinition = {
       },
     },
     dryNow: rainNow,
+    horizonClear,
     movingSky: {
       label: 'Wind (moving sky)',
       unit: 'kmh',
@@ -281,4 +282,151 @@ export const aurora: ProfileDefinition = {
     moonlight,
   },
   gates: {},
+};
+
+/** A pressure-level value at this hour, e.g. wind at 850 hPa. */
+function level(
+  ctx: HourContext,
+  label: string,
+  field: 'temperatureC' | 'relativeHumidity' | 'windSpeedKmh',
+): number | null {
+  const l = ctx.forecast.levels.find((x) => x.label === label);
+  return l?.[field][ctx.i] ?? null;
+}
+
+/** Freshly fallen snow on the summit over the last two days, as rain-equivalent mm. */
+const freshSnow: FactorDefinition = {
+  label: 'Snow on the summit in the last two days',
+  unit: 'mm',
+  read: (ctx) => {
+    let total = 0;
+    let hours = 0;
+    for (let o = -48; o <= 0; o++) {
+      const p = ctx.surface('precipitation', o);
+      const fl = ctx.surface('freezingLevelHeight', o);
+      if (p === null || fl === null) continue;
+      hours++;
+      if (fl - SNOW_BELOW_FREEZING_LEVEL_M <= ctx.target.altitudeM) total += p;
+    }
+    return hours < 12 ? { value: null } : { value: total, detail: 'as rain-equivalent' };
+  },
+};
+
+export const alpenglow: ProfileDefinition = {
+  id: 'alpenglow',
+  factors: {
+    freshSnow,
+    cold: {
+      label: 'Freezing level below the summit',
+      unit: 'metres',
+      read: (ctx) => {
+        const fl = ctx.surface('freezingLevelHeight');
+        return fl === null ? { value: null } : { value: ctx.target.altitudeM - fl };
+      },
+    },
+    cloudBase: cloudBaseMargin,
+    horizonClear,
+    skyAbove: {
+      label: 'Total cloud',
+      unit: 'percent',
+      read: (ctx) => ({ value: ctx.surface('cloudCover') }),
+    },
+  },
+  gates: {
+    rain: { label: 'Rain', unit: 'mm', read: (ctx) => ctx.surface('precipitation') },
+  },
+};
+
+export const lenticular: ProfileDefinition = {
+  id: 'lenticular',
+  factors: {
+    ridgeWind: {
+      label: 'Wind at about 1,500 m (850 hPa)',
+      unit: 'kmh',
+      read: (ctx) => ({ value: level(ctx, '850hPa', 'windSpeedKmh') }),
+    },
+    stability: {
+      label: 'Cooling from 925 to 850 hPa (less is more stable)',
+      unit: 'celsiusDelta',
+      read: (ctx) => {
+        const lower = level(ctx, '925hPa', 'temperatureC');
+        const upper = level(ctx, '850hPa', 'temperatureC');
+        return lower === null || upper === null ? { value: null } : { value: lower - upper };
+      },
+    },
+    moisture: {
+      label: 'Humidity at 850 hPa',
+      unit: 'percent',
+      read: (ctx) => ({ value: level(ctx, '850hPa', 'relativeHumidity') }),
+    },
+    lowCloud: {
+      label: 'Low cloud (in the way)',
+      unit: 'percent',
+      read: (ctx) => ({ value: ctx.surface('cloudCoverLow') }),
+    },
+    rain: rainNow,
+  },
+  gates: {},
+};
+
+export const frozen: ProfileDefinition = {
+  id: 'frozen',
+  factors: {
+    coldSpell: {
+      label: 'Average temperature over the last three days',
+      unit: 'celsius',
+      read: (ctx) => {
+        const values = ctx.surfaceRange('temperature2m', -72, 0);
+        return values.length >= 36 ? { value: mean(values) } : { value: null };
+      },
+    },
+    frostHours: {
+      label: 'Hours below freezing in the last three days',
+      unit: 'hours',
+      read: (ctx) => {
+        const values = ctx.surfaceRange('temperature2m', -72, 0);
+        return values.length >= 36
+          ? { value: values.filter((t) => t < 0).length }
+          : { value: null };
+      },
+    },
+    stillAir: valleyWind,
+    rain: rainNow,
+  },
+  gates: {},
+};
+
+/** Midges fly from late May to September, peaking in July and August. */
+function midgeSeason(time: number): number {
+  const m = new Date(time).getUTCMonth(); // 0 = January
+  return [0, 0, 0, 0, 0.3, 0.8, 1, 1, 0.7, 0.2, 0, 0][m]!;
+}
+
+/**
+ * Midge risk, not a photo condition: high when it's warm, damp and still around dawn and
+ * dusk in season. A higher score means more midges.
+ */
+export const midges: ProfileDefinition = {
+  id: 'midges',
+  factors: {
+    season: {
+      label: 'Midge season',
+      unit: 'percent',
+      read: (ctx) => ({ value: 100 * midgeSeason(ctx.time) }),
+    },
+    warmth: {
+      label: 'Temperature',
+      unit: 'celsius',
+      read: (ctx) => ({ value: ctx.surface('temperature2m') }),
+    },
+    calm: valleyWind,
+    damp: {
+      label: 'Humidity',
+      unit: 'percent',
+      read: (ctx) => ({ value: ctx.surface('relativeHumidity2m') }),
+    },
+  },
+  gates: {
+    rain: { label: 'Heavy rain', unit: 'mm', read: (ctx) => ctx.surface('precipitation') },
+  },
 };

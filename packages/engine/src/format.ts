@@ -35,6 +35,8 @@ export function formatValue(
       return `${value >= 10 ? Math.round(value) : value.toFixed(1)} km`;
     case 'degrees':
       return `${Math.round(value)}°`;
+    case 'hours':
+      return `${Math.round(value)} h`;
     case 'kp':
       return `Kp ${value.toFixed(1)}`;
   }

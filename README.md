@@ -35,16 +35,20 @@
   the timeline adds the sun and moon now, and you scrub it through the day.
 - **Maps the aurora.** With Aurora ticked, tonight's NOAA OVATION nowcast is shaded over the UK,
   and each night has a view line from the Kp forecast showing how far south it should reach.
+- **Checks itself.** Three models (Met Office, ECMWF and, for the first two and a half days,
+  KNMI's HARMONIE): a Go needs most of them to agree. Sunrise and sunset conditions check the
+  cloud 60 km towards the sun, and each hill's panel shows how many of ECMWF's 51 ensemble runs
+  back the forecast.
 - **Finds anywhere.** Search hills, UK places and postcodes. Every other UK hill in the database
   (mostly Tumps, such as Ben A'an) can be searched and scored without cluttering the map.
 
-| Condition group | Conditions                                                           |
-| --------------- | -------------------------------------------------------------------- |
-| Light and sky   | Golden-hour sky, dramatic light, clear air and long views            |
-| Cloud and water | Cloud inversion, valley mist, still reflections, waterfalls in spate |
-| Winter          | Snow on the tops, hoar frost                                         |
-| Night           | Milky Way and stars, aurora (NOAA Kp forecast and OVATION nowcast)   |
-| On foot         | Hill walking (not in the photo score unless ticked)                  |
+| Condition group | Conditions                                                             |
+| --------------- | ---------------------------------------------------------------------- |
+| Light and sky   | Golden-hour sky, dramatic light, clear air, wave and lenticular clouds |
+| Cloud and water | Cloud inversion, valley mist, still reflections, waterfalls in spate   |
+| Winter          | Snow on the tops, alpenglow on snow, hoar frost, frozen lochs          |
+| Night           | Milky Way and stars, aurora (NOAA Kp forecast and OVATION nowcast)     |
+| On foot         | Hill walking (not in the photo score unless ticked); midge warnings    |
 
 <table>
   <tr>

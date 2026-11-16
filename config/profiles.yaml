@@ -23,6 +23,7 @@ modelPriority:
   - ukmo_seamless
   - ukmo_global_deterministic_10km
   - ecmwf_ifs025
+  - knmi_harmonie_arome_europe
   - icon_seamless
 
 profiles:
@@ -72,6 +73,8 @@ profiles:
     aggregate: best-hour
     factors:
       midHighCloud: { weight: 3, band: [20, 70], zero: [0, 95] }
+      # The low sun needs a gap towards it to light the cloud overhead.
+      horizonClear: { weight: 3, good: 20, bad: 75 }
       lowCloud: { weight: 2, good: 30, bad: 70 }
       precipitation: { weight: 2, good: 0, bad: 0.5 }
       visibility: { weight: 1, good: 15, bad: 5 }
@@ -161,6 +164,7 @@ profiles:
       # Showers help but aren't essential: no showers still scores 0.6.
       showersNearby: { weight: 2, good: 1, bad: -1.5 }
       dryNow: { weight: 2, good: 0, bad: 1 }
+      horizonClear: { weight: 2, good: 30, bad: 85 }
       movingSky: { weight: 1, good: 20, bad: 3 }
       visibility: { weight: 1, good: 20, bad: 5 }
     gates:
@@ -206,3 +210,64 @@ profiles:
       clearSky: { weight: 2, good: 20, bad: 70 }
       darkness: { weight: 2, good: 15, bad: 8 }
       moonlight: { weight: 1, good: 20, bad: 90 }
+
+  alpenglow:
+    label: Alpenglow on snow
+    short: Alpenglow
+    blurb: 'Snowy summits lit pink and gold by a low sun, with a clear horizon towards it.'
+    scope: summit
+    periods: [morning, evening]
+    aggregate: best-hour
+    factors:
+      freshSnow: { weight: 3, good: 5, bad: 0.5 }
+      cold: { weight: 2, good: 200, bad: -100 }
+      cloudBase: { weight: 2, good: 200, bad: 0 }
+      horizonClear: { weight: 3, good: 20, bad: 70 }
+      skyAbove: { weight: 1, good: 40, bad: 95 }
+    gates:
+      rain: { max: 0.5 }
+
+  lenticular:
+    label: Wave and lenticular clouds
+    short: Wave cloud
+    blurb: 'Lens-shaped clouds over the hills: strong winds across the ridges with a moist, stable layer above.'
+    scope: valley
+    periods: [morning, day, evening]
+    aggregate: best-hour
+    factors:
+      ridgeWind: { weight: 3, good: 55, bad: 25 }
+      # Dry air cools about 7 °C over this layer; much less means stable air that makes waves.
+      stability: { weight: 2, good: 3, bad: 7 }
+      moisture: { weight: 2, band: [65, 90], zero: [35, 100] }
+      lowCloud: { weight: 1, good: 30, bad: 85 }
+      rain: { weight: 1, good: 0, bad: 1 }
+
+  frozen:
+    label: Frozen lochs
+    short: Frozen lochs
+    blurb: 'Ice on lochans and lake edges after a cold spell, often with frost and still air.'
+    scope: valley
+    periods: [morning, day]
+    aggregate: best-hour
+    factors:
+      coldSpell: { weight: 3, good: -4, bad: 1 }
+      frostHours: { weight: 2, good: 60, bad: 24 }
+      stillAir: { weight: 1, good: 5, bad: 20 }
+      rain: { weight: 1, good: 0, bad: 1 }
+
+  midges:
+    label: Midges
+    short: Midges
+    blurb: 'Midge risk: warm, damp, still air around dawn and dusk, late May to September.'
+    scope: valley
+    periods: [morning, evening]
+    photo: false
+    risk: true
+    aggregate: best-hour
+    factors:
+      season: { weight: 3, good: 100, bad: 0 }
+      warmth: { weight: 2, good: 14, bad: 7 }
+      calm: { weight: 3, good: 4, bad: 13 }
+      damp: { weight: 1, good: 85, bad: 60 }
+    gates:
+      rain: { max: 4 }

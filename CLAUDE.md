@@ -28,6 +28,9 @@
 - Scoring thresholds and weights live in `config/profiles.yaml`, not in code. Each condition
   there also declares `scope` (summit or valley), `periods` and whether it counts towards the
   photo score; the web app scores every hill for every condition and period.
+- Open-Meteo allows 600 call-equivalents a minute. `packages/data-client/src/zones.ts` keeps a
+  shared budget: the main forecast loads first, then HARMONIE and the horizon points (which may
+  wait for the next minute). Check `estimateCallWeight` before adding variables or models.
 - Every change keeps `pnpm check` green (lint, format, typecheck, tests).
 
 ## SvelteKit 3 notes (apps/web)

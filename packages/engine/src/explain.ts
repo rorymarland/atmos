@@ -71,6 +71,13 @@ export function explain(
   const dissent = result.byModel.filter(
     (m) => m.verdict !== 'nodata' && m.verdict !== result.verdict,
   );
+  if (result.agreement?.outvoted) {
+    reasons.push({
+      status: 'info',
+      source: 'models',
+      text: `Only ${result.agreement.go} of ${result.agreement.models} models say Go, so this is a Maybe.`,
+    });
+  }
   if (dissent.length > 0) {
     const list = dissent
       .map((m) => `${modelLabel(m.model)} says ${VERDICT_WORD[m.verdict]}`)
