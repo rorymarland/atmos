@@ -178,6 +178,15 @@
               {profiles[id]?.short}
             </label>
           {/each}
+          {#if g.ids.includes('aurora')}
+            <label
+              class="tick"
+              title="Show the aurora model on the map: NOAA's OVATION nowcast for tonight and a view line from the Kp forecast"
+            >
+              <input type="checkbox" bind:checked={settings.ovation} disabled={!ticked.has('aurora')} />
+              Ovation
+            </label>
+          {/if}
         </div>
       </div>
     {/each}
@@ -319,6 +328,10 @@
     font-size: 0.88rem;
     cursor: pointer;
     white-space: nowrap;
+  }
+  .tick:has(input:disabled) {
+    opacity: 0.5;
+    cursor: default;
   }
   .tick input {
     accent-color: var(--ink);

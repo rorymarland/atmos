@@ -153,9 +153,9 @@ class Conditions {
   ovation = $state.raw<Ovation | null>(null);
   #ovationAt = 0;
 
-  /** Whether the aurora layers belong on the map: aurora and night both ticked. */
+  /** Whether the aurora layers belong on the map: aurora, night and Ovation all ticked. */
   get auroraShown(): boolean {
-    return this.ticked.has('aurora') && settings.periods.includes('night');
+    return settings.ovation && this.ticked.has('aurora') && settings.periods.includes('night');
   }
 
   /**

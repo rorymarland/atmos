@@ -19,6 +19,8 @@ export interface Settings {
   conditions: string[] | null;
   /** Parts of the day to consider. */
   periods: Period[];
+  /** Show the aurora model (OVATION shading and the Kp view line) on the map. */
+  ovation: boolean;
   /** Results order. */
   sort: 'best' | 'worst' | 'nearest' | 'highest';
   /** Countries to include; empty means the whole UK. */
@@ -67,6 +69,7 @@ export const DEFAULT_SETTINGS: Settings = {
   conditions: null,
   periods: ['morning', 'day', 'evening', 'night'],
   sort: 'best',
+  ovation: false,
   countries: [],
   lists: [],
   minHeight: 0,
@@ -122,6 +125,7 @@ export function resetFilters(): void {
     conditions: d.conditions,
     periods: [...d.periods],
     sort: d.sort,
+    ovation: d.ovation,
     countries: [],
     lists: [],
     minHeight: d.minHeight,
@@ -138,6 +142,7 @@ export function filtersChanged(): boolean {
     settings.conditions !== null ||
     settings.periods.length !== d.periods.length ||
     settings.sort !== d.sort ||
+    settings.ovation !== d.ovation ||
     settings.countries.length > 0 ||
     settings.lists.length > 0 ||
     settings.minHeight !== d.minHeight ||
