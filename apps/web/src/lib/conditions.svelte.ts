@@ -61,8 +61,6 @@ import { londonMidnight } from './time';
 const MINUTE = 60_000;
 /** After a failed route lookup, wait this long before trying that hill again. */
 const ROUTE_RETRY_MS = 10 * 60_000;
-/** Valley conditions: a short walk from the car to the viewpoint. */
-const VIEWPOINT_WALK_MINUTES = 15;
 /**
  * Photo score weights for the best, second and third conditions. A hill with one perfect
  * condition scores 81; three perfect conditions make 100.
@@ -76,7 +74,7 @@ export interface Trip {
   roadMiles: number;
   walkMinutes: number;
   /** Where the walk time came from: a worked-out route, a rough estimate, or a stroll. */
-  walkSource: 'route' | 'estimate' | 'viewpoint';
+  walkSource: 'route' | 'estimate';
   /** e.g. "golden hour". */
   targetLabel: string;
   /** Why it doesn't fit the limits, or null. */
@@ -622,11 +620,9 @@ class Conditions {
           c.window,
           ref?.keyHour?.time ?? null,
         );
-        // Where you'd stand: the summit means the walk up, the valley a short stroll.
-        const cfg = this.data?.config.profiles[c.profileId];
-        const onTop = (cfg?.standAt ?? c.scope) === 'summit';
-        const walkMinutes = onTop ? summitWalk : VIEWPOINT_WALK_MINUTES;
-        const walkSource = !onTop ? 'viewpoint' : found ? 'route' : 'estimate';
+        // Opening a hill means going to its top: every condition's trip includes the walk up.
+        const walkMinutes = summitWalk;
+        const walkSource = found ? 'route' : 'estimate';
         const plan = planTrip({
           target: target.at,
           driveMinutes: drive.minutes,

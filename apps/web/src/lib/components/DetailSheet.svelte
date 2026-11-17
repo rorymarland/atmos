@@ -317,7 +317,7 @@
               <li><span class="t">{clock(trip.plan.wakeAt)}</span> {chosen.period === 'morning' ? 'Get up' : 'Get ready'}</li>
               <li class="leave"><span class="t">{clock(trip.plan.leaveAt)}</span> Leave {leaveName}</li>
               <li><span class="t">{clock(trip.plan.parkAt)}</span> {routeFound ? `Park at ${routeStartLabel}` : 'Park'}, after about {formatDuration(trip.driveMinutes)} and {Math.round(trip.roadMiles)} miles</li>
-              <li><span class="t">{clock(trip.plan.arriveAt)}</span> In place{settings.earlyMinutes ? `, ${settings.earlyMinutes} min early` : ''}, after a {formatDuration(trip.walkMinutes)} {trip.walkSource === 'viewpoint' ? 'walk' : 'walk up'}</li>
+              <li><span class="t">{clock(trip.plan.arriveAt)}</span> In place{settings.earlyMinutes ? `, ${settings.earlyMinutes} min early` : ''}, after a {formatDuration(trip.walkMinutes)} walk up</li>
               <li><span class="t">{clock(trip.plan.target)}</span> {trip.targetLabel.charAt(0).toUpperCase() + trip.targetLabel.slice(1)}</li>
             </ol>
             {#if trip.walkSource === 'estimate' && hillResult.route === 'loading'}
@@ -332,10 +332,8 @@
               The drive is a rough estimate from straight-line distance and typical road speeds; check
               the real route below. The walk is
               {trip.walkSource === 'route'
-                ? 'from the route above'
-                : trip.walkSource === 'estimate'
-                  ? 'a rough estimate by Naismith’s rule from the valley floor'
-                  : 'a short stroll from parking, since this is shot from the valley'}.
+                ? 'the walk up from the route above'
+                : 'a rough estimate of the walk up by Naismith’s rule from the valley floor'}.
             </p>
           {:else}
             <p class="small muted">Set a start point or <a href="/settings#home">your home</a> to see when to leave.</p>

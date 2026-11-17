@@ -69,7 +69,6 @@ profiles:
     short: Sky
     blurb: 'Mid and high cloud to catch colour at sunrise or sunset, with a clear horizon.'
     scope: valley
-    standAt: summit
     periods: [morning, evening]
     aggregate: best-hour
     factors:
@@ -158,7 +157,6 @@ profiles:
     short: Drama
     blurb: 'Broken cloud and passing showers with a low sun: shafts of light, rainbows, moving skies.'
     scope: valley
-    standAt: summit
     periods: [morning, evening]
     aggregate: best-hour
     factors:
@@ -188,7 +186,6 @@ profiles:
     short: Stars
     blurb: 'Clear, dark, moonless skies for stars and the Milky Way.'
     scope: valley
-    standAt: summit
     periods: [night]
     aggregate: best-hour
     factors:
@@ -206,7 +203,6 @@ profiles:
     short: Aurora
     blurb: 'Northern lights: enough geomagnetic activity for this latitude, with a clear, dark sky.'
     scope: valley
-    standAt: summit
     periods: [night]
     aggregate: best-hour
     factors:
@@ -236,7 +232,6 @@ profiles:
     short: Wave cloud
     blurb: 'Lens-shaped clouds over the hills: strong winds across the ridges with a moist, stable layer above.'
     scope: valley
-    standAt: summit
     periods: [morning, day, evening]
     aggregate: best-hour
     factors:
