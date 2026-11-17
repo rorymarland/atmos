@@ -249,6 +249,71 @@ describe('ensembles', () => {
     expect(ensembleShare(e, 'cloud_cover', 4_600_000, (c) => c < 40)).toEqual({ yes: 0, of: 2 });
     expect(ensembleShare(e, 'visibility', 1_000_000, () => true)).toBeNull();
   });
+
+  it('drops variables a model sends as all nulls', async () => {
+    const { parseEnsemble } = await import('./ensemble.js');
+    const e = parseEnsemble({
+      hourly: {
+        time: [1000],
+        cloud_cover_low: [null],
+        cloud_cover_low_member01: [null],
+        cloud_cover: [5],
+      },
+    });
+    expect(e.members.cloud_cover_low).toBeUndefined();
+    expect(e.members.cloud_cover).toHaveLength(1);
+  });
+
+  it('builds the Met Office ensemble from MOGREPS-G with MOGREPS-UK low cloud', async () => {
+    const { fetchMetOfficeEnsemble, ensembleShare, MET_OFFICE_GLOBAL, MET_OFFICE_UK } =
+      await import('./ensemble.js');
+    const urls: string[] = [];
+    const fake = (async (url: string) => {
+      urls.push(url);
+      const body = url.includes(MET_OFFICE_UK)
+        ? {
+            hourly: {
+              time: [4600, 8200],
+              cloud_cover_low: [90, 10],
+              cloud_cover_low_member01: [80, 20],
+            },
+          }
+        : {
+            hourly: {
+              time: [1000, 4600],
+              cloud_cover: [10, 20],
+              cloud_cover_member01: [50, 60],
+              cloud_cover_low: [null, null],
+              cloud_cover_low_member01: [null, null],
+            },
+          };
+      return new Response(JSON.stringify(body));
+    }) as typeof fetch;
+    const e = await fetchMetOfficeEnsemble(56.8, -5, fake);
+    expect(urls.some((u) => u.includes(MET_OFFICE_GLOBAL))).toBe(true);
+    expect(e.model).toBe(MET_OFFICE_GLOBAL);
+    expect(e.sources?.cloud_cover_low).toBe(MET_OFFICE_UK);
+    // 1000 s isn't in MOGREPS-UK, so no low-cloud runs there; 4600 s has both.
+    expect(ensembleShare(e, 'cloud_cover_low', 1_000_000, () => true)).toBeNull();
+    expect(ensembleShare(e, 'cloud_cover_low', 4_600_000, (v) => v > 70)).toEqual({
+      yes: 2,
+      of: 2,
+    });
+    expect(ensembleShare(e, 'cloud_cover', 1_000_000, (v) => v < 30)).toEqual({ yes: 1, of: 2 });
+  });
+
+  it('keeps MOGREPS-G when MOGREPS-UK fails', async () => {
+    const { fetchMetOfficeEnsemble, MET_OFFICE_UK } = await import('./ensemble.js');
+    const fake = (async (url: string) =>
+      url.includes(MET_OFFICE_UK)
+        ? new Response('no', { status: 500 })
+        : new Response(
+            JSON.stringify({ hourly: { time: [1000], cloud_cover: [10] } }),
+          )) as typeof fetch;
+    const e = await fetchMetOfficeEnsemble(56.8, -5, fake);
+    expect(e.members.cloud_cover).toHaveLength(1);
+    expect(e.members.cloud_cover_low).toBeUndefined();
+  });
 });
 
 describe('Overpass', () => {
