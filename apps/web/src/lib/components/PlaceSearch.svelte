@@ -1,8 +1,12 @@
 <script lang="ts">
   /**
    * Search box for the map: hills from Atmos's own list as you type, plus UK places and
-   * postcodes from free geocoders.
+   * postcodes from free geocoders. With nothing typed it lists your favourite hills, and
+   * every hill row has a star to add or remove it.
    */
+  import { favourites } from '#lib/favourites.svelte.ts';
+  import Star from '#lib/components/Star.svelte';
+  import VerdictMark from '#lib/components/VerdictMark.svelte';
   import { conditions } from '#lib/conditions.svelte.ts';
   import { suggestPlaces } from '#lib/geocode.ts';
   import { loadSearchHills } from '#lib/static-data.ts';
@@ -27,6 +31,7 @@
         number: number;
         lat: number;
         lon: number;
+        hill: Hill;
         other?: Hill;
       }
     | { kind: 'place'; key: string; label: string; detail: string; place: StartPoint };
@@ -63,6 +68,7 @@
           number: h.number,
           lat: h.lat,
           lon: h.lon,
+          hill: h,
           ...(other ? { other: h } : {}),
         };
         (i === 0 ? starts : contains).push(s);
@@ -74,10 +80,31 @@
     return [...listed, ...find(others, true, 7 - listed.length)];
   });
 
-  const suggestions = $derived<Suggestion[]>([
-    ...hills,
-    ...places.map((p, i) => ({ kind: 'place' as const, key: `p${i}${p.label}`, label: p.label, detail: 'Place', place: p })),
-  ]);
+  const typing = $derived(query.trim().length >= 2);
+  /** Favourites, in the order they were starred. */
+  const favs = $derived.by((): Suggestion[] => {
+    const data = conditions.data;
+    return favourites.list.map(({ hill: h, other }) => ({
+      kind: 'hill' as const,
+      key: `f${h.number}`,
+      label: h.name,
+      detail: `${Math.round(h.metres)} m, ${data?.zones[h.zone]?.name ?? ''}`,
+      number: h.number,
+      lat: h.lat,
+      lon: h.lon,
+      hill: h,
+      ...(other ? { other: h } : {}),
+    }));
+  });
+  const suggestions = $derived<Suggestion[]>(
+    typing
+      ? [
+          ...hills,
+          ...places.map((p, i) => ({ kind: 'place' as const, key: `p${i}${p.label}`, label: p.label, detail: 'Place', place: p })),
+        ]
+      : favs,
+  );
+  const verdictOf = (n: number) => conditions.ranking.hillsByNumber.get(n)?.verdict;
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   let controller: AbortController | undefined;
@@ -143,8 +170,9 @@
     onkeydown={onKey}
     onfocus={() => {
       loadOthers();
-      open = query.trim().length >= 2;
+      open = true;
     }}
+    onclick={() => (open = true)}
     onblur={() => setTimeout(() => (open = false), 150)}
     type="search"
     placeholder="Search hills, places or postcodes"
@@ -156,8 +184,11 @@
     autocomplete="off"
     spellcheck="false"
   />
-  {#if open && query.trim().length >= 2}
-    <ul id="search-results" role="listbox">
+  {#if open}
+    <ul id="search-results" role="listbox" aria-label={typing ? 'Search results' : 'Favourite hills'}>
+      {#if !typing && favs.length}
+        <li class="heading small muted" role="presentation">Favourites</li>
+      {/if}
       {#each suggestions as s, i (s.key)}
         <li
           id="sr-{s.key}"
@@ -172,9 +203,26 @@
         >
           <span class="kind {s.kind}" aria-hidden="true"></span>
           <span class="text"><span>{s.label}</span><span class="small muted">{s.kind === 'hill' ? s.detail : 'Place'}</span></span>
+          {#if s.kind === 'hill'}
+            {@const v = verdictOf(s.number)}
+            {#if !typing && v}<VerdictMark verdict={v} />{/if}
+            <Star
+              on={favourites.has(s.number)}
+              name={s.label}
+              onToggle={() => favourites.toggle(s.hill, !!s.other)}
+            />
+          {/if}
         </li>
       {/each}
-      {#if searching}
+      {#if !typing}
+        {#if favs.length === 0}
+          <li class="note small muted" role="presentation">
+            Star a hill to keep it here: use the star next to its name in the panel or in these results.
+          </li>
+        {:else}
+          <li class="note small muted" role="presentation">Type to search hills, places or postcodes.</li>
+        {/if}
+      {:else if searching}
         <li class="note small muted" role="presentation">Searching places…</li>
       {:else if suggestions.length === 0}
         <li class="note small muted" role="presentation">Nothing found. Try a town, a postcode or a hill name.</li>
@@ -229,8 +277,16 @@
   li.active {
     background: var(--surface);
   }
-  li.note {
+  li.note,
+  li.heading {
     cursor: default;
+  }
+  li.heading {
+    padding: 4px 8px 2px;
+  }
+  .text {
+    flex: 1;
+    min-width: 0;
   }
   .text {
     display: flex;

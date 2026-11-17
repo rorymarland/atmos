@@ -4,6 +4,8 @@
    * condition broken down, the trip and the reasons. Not modal, so the map and the
    * timeline stay usable alongside it.
    */
+  import Star from '#lib/components/Star.svelte';
+  import { favourites } from '#lib/favourites.svelte.ts';
   import {
     explain,
     formatDuration,
@@ -216,7 +218,17 @@
     </div>
     <header>
       <div>
-        <h2 id="sheet-title" tabindex="-1">{hillResult?.hill.name ?? 'Hill'}</h2>
+        <div class="title-row">
+          <h2 id="sheet-title" tabindex="-1">{hillResult?.hill.name ?? 'Hill'}</h2>
+          {#if hillResult}
+            <Star
+              on={favourites.has(hillResult.hill.number)}
+              name={hillResult.hill.name}
+              size={22}
+              onToggle={() => favourites.toggle(hillResult!.hill, hillResult!.searchOnly)}
+            />
+          {/if}
+        </div>
         {#if hillResult}
           <p class="muted small">
             {Math.round(hillResult.hill.metres)} m{#if lists.length}, {lists.join(', ')}{/if}. {hillResult.zone.name}.
@@ -429,6 +441,15 @@
 {/if}
 
 <style>
+  .title-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .title-row h2 {
+    flex: 1;
+    min-width: 0;
+  }
   .working {
     display: flex;
     gap: 8px;
