@@ -320,9 +320,42 @@ describe('Overpass', () => {
   it('asks for highways and car parks around the summit', async () => {
     const { overpassQuery } = await import('./overpass.js');
     const q = overpassQuery(56.79686, -5.0036, 5000);
-    expect(q).toContain('way["highway"](around:5000,56.79686,-5.00360)');
+    expect(q).toMatch(
+      /way\["highway"\]\["highway"!~"\^\(motorway\|[^"]*\)\$"\]\(around:5000,56\.79686,-5\.00360\)/,
+    );
     expect(q).toContain('nw["amenity"="parking"](around:5000,56.79686,-5.00360)');
-    expect(q).toContain('>;out skel qt;');
+    expect(q).toContain('out body geom qt;');
+    expect(q).not.toContain('>;');
+  });
+
+  it('reads way nodes from inline geometry (out geom)', async () => {
+    const { parseOverpass } = await import('./overpass.js');
+    const area = parseOverpass({
+      elements: [
+        {
+          type: 'way',
+          id: 1,
+          nodes: [10, 11, 12],
+          geometry: [{ lat: 56, lon: -5 }, null, { lat: 56.2, lon: -5.2 }],
+          tags: { highway: 'path' },
+        },
+        {
+          type: 'way',
+          id: 2,
+          nodes: [20, 21],
+          geometry: [
+            { lat: 56, lon: -5 },
+            { lat: 56.02, lon: -5 },
+          ],
+          tags: { amenity: 'parking' },
+        },
+      ],
+    });
+    expect(area.ways).toHaveLength(1);
+    expect(area.nodes.get(10)).toEqual({ lat: 56, lon: -5 });
+    expect(area.nodes.has(11)).toBe(false);
+    expect(area.nodes.size).toBe(4);
+    expect(area.parkings[0]!.lat).toBeCloseTo(56.01);
   });
 
   it('reads nodes, highways and public car parks (points and areas)', async () => {
@@ -388,5 +421,11 @@ describe('Overpass time limit', () => {
     expect(area.ways).toEqual([]);
     expect(calls).toEqual(OVERPASS_ENDPOINTS);
     expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it('waits long enough for the main server’s usual 30 to 45 s', async () => {
+    const { OVERPASS_TIMEOUT_MS, MIRROR_TIMEOUT_MS } = await import('./overpass.js');
+    expect(OVERPASS_TIMEOUT_MS).toBeGreaterThanOrEqual(60_000);
+    expect(MIRROR_TIMEOUT_MS).toBeLessThan(OVERPASS_TIMEOUT_MS);
   });
 });

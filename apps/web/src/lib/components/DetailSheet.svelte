@@ -344,7 +344,7 @@
               try again in ten minutes.
             </p>
           {:else}
-            <p class="small muted working"><Spinner label="Working out the route" /> Working out the route from OpenStreetMap paths…</p>
+            <p class="small muted working"><Spinner label="Working out the route" /> Working out the route from OpenStreetMap paths. This usually takes under a minute.</p>
           {/if}
         </section>
 

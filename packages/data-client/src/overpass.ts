@@ -5,10 +5,19 @@
  */
 import type { OsmNode, OsmWay, Parking } from '@atmos/engine';
 
+/**
+ * The main server, then a mirror for when it's down. Checked from a browser in November
+ * 2026: the main server answered every query in 32 to 44 s; the kumi and private.coffee
+ * mirrors answered none within 90 s, so the mirror is a long shot.
+ */
 export const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
 ];
+
+/** Highways the router never uses (see isWalkable and isCarRoad), left out to save time. */
+const UNUSED_HIGHWAYS =
+  'motorway|motorway_link|trunk|trunk_link|construction|proposed|raceway|bus_guideway|abandoned|platform|corridor|elevator|bus_stop|services|rest_area';
 
 export interface OsmArea {
   nodes: Map<number, OsmNode>;
@@ -16,10 +25,14 @@ export interface OsmArea {
   parkings: Parking[];
 }
 
-/** Every highway and public car park within `radiusM` of a point. */
+/**
+ * Usable highways and public car parks within `radiusM` of a point, each way with its
+ * node ids and coordinates inline (`out body geom`), which is much less for the server to
+ * send than every node separately.
+ */
 export function overpassQuery(lat: number, lon: number, radiusM: number): string {
   const around = `around:${Math.round(radiusM)},${lat.toFixed(5)},${lon.toFixed(5)}`;
-  return `[out:json][timeout:25];(way["highway"](${around});nw["amenity"="parking"](${around}););out body;>;out skel qt;`;
+  return `[out:json][timeout:60];(way["highway"]["highway"!~"^(${UNUSED_HIGHWAYS})$"](${around});nw["amenity"="parking"](${around}););out body geom qt;`;
 }
 
 interface Element {
@@ -28,6 +41,8 @@ interface Element {
   lat?: number;
   lon?: number;
   nodes?: number[];
+  /** With `out geom`: each node's position, in the order of `nodes`. */
+  geometry?: ({ lat: number; lon: number } | null)[];
   tags?: Record<string, string>;
 }
 
@@ -39,6 +54,11 @@ export function parseOverpass(json: unknown): OsmArea {
   for (const e of elements) {
     if (e.type === 'node' && typeof e.lat === 'number' && typeof e.lon === 'number') {
       nodes.set(e.id, { lat: e.lat, lon: e.lon });
+    } else if (e.type === 'way' && e.nodes && e.geometry) {
+      e.nodes.forEach((id, i) => {
+        const g = e.geometry![i];
+        if (g && !nodes.has(id)) nodes.set(id, { lat: g.lat, lon: g.lon });
+      });
     }
   }
   const ways: OsmWay[] = [];
@@ -70,11 +90,12 @@ export function parseOverpass(json: unknown): OsmArea {
 }
 
 /**
- * How long to wait for one server. The main one sometimes queues requests for most of a
- * minute when it's busy (47 s for a tiny query in one check), so give up and try the
- * mirror rather than leaving a route hanging.
+ * How long to wait for the main server. It routinely takes 30 to 45 s (queueing for one of
+ * its two slots per user, then the query), so a shorter wait gives up on answers that were
+ * nearly there. The mirror gets a shorter wait: it rarely answers at all.
  */
-export const OVERPASS_TIMEOUT_MS = 30_000;
+export const OVERPASS_TIMEOUT_MS = 75_000;
+export const MIRROR_TIMEOUT_MS = 30_000;
 
 export async function fetchOsmArea(
   lat: number,
@@ -86,9 +107,12 @@ export async function fetchOsmArea(
   const body = new URLSearchParams({ data: overpassQuery(lat, lon, radiusM) });
   let last: unknown;
   // The main server first, then a mirror if it's busy, slow or down.
-  for (const url of OVERPASS_ENDPOINTS) {
+  for (const [i, url] of OVERPASS_ENDPOINTS.entries()) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(
+      () => controller.abort(),
+      i === 0 ? timeoutMs : Math.min(timeoutMs, MIRROR_TIMEOUT_MS),
+    );
     try {
       const res = await fetchImpl(url, { method: 'POST', body, signal: controller.signal });
       if (res.ok) return parseOverpass(await res.json());

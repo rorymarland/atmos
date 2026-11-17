@@ -15,15 +15,17 @@ import { fetchOsmArea } from '@atmos/data-client';
 import { createStore, get, set } from 'idb-keyval';
 
 /** Bump when the route maths changes, so saved routes are worked out again. */
-const ROUTE_VERSION = 1;
+const ROUTE_VERSION = 2;
 const KEEP_MS = 30 * 24 * 3_600_000;
 /** Failed lookups are retried sooner: OpenStreetMap may have gained a path. */
 const KEEP_NONE_MS = 7 * 24 * 3_600_000;
 
-/** First look within 5 km; a long walk-in (Ben Alder, say) needs 12. */
+/** First look within 8 km; a long walk-in (Ben Alder, say) needs 15. */
 const TRIES = [
-  { radiusM: 5000, zoom: 11 },
-  { radiusM: 12000, zoom: 10 },
+  // One query that covers most hills' usual starts; a second only when it finds none.
+  // Each Overpass query costs 30 to 45 s, so a small first try that often misses is slower.
+  { radiusM: 8000, zoom: 11 },
+  { radiusM: 15000, zoom: 10 },
 ];
 
 let store: ReturnType<typeof createStore> | null = null;
@@ -97,7 +99,7 @@ async function loadTerrain(lat: number, lon: number, radiusKm: number, zoom: num
 
 /**
  * The quickest route up a hill from a car park or road, or null when there isn't one
- * within 12 km (an island, or a hill with no paths and no road near). Throws when the
+ * within 15 km (an island, or a hill with no paths and no road near). Throws when the
  * services can't be reached, so a failure isn't saved as "no route".
  */
 export async function findRoute(hill: {
