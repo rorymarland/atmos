@@ -48,6 +48,7 @@ import {
 import { forecastCache, newestFetch } from './cache';
 import { places } from './places.svelte';
 import {
+  createEvaluateMemo,
   evaluatePlaces,
   horizonLookup,
   horizonSites,
@@ -459,7 +460,8 @@ class Conditions {
         onProgress: (done, total) => (this.progress = total > 0 ? { done, total } : null),
       });
       const next = new Map(this.forecasts);
-      for (const r of results) next.set(r.zoneId, r.forecasts);
+      for (const r of results)
+        if (this.#isNew('main', r.zoneId, r.fetchedAt)) next.set(r.zoneId, r.forecasts);
       this.forecasts = next;
       this.fetchedAt = newestFetch(results);
       this.now = Date.now();
@@ -494,7 +496,8 @@ class Conditions {
         maxAgeMs,
       });
       const next = new Map(this.harmonie);
-      for (const r of h) next.set(r.zoneId, r.forecasts);
+      for (const r of h)
+        if (this.#isNew('harmonie', r.zoneId, r.fetchedAt)) next.set(r.zoneId, r.forecasts);
       this.harmonie = next;
     } catch (e) {
       console.warn('HARMONIE:', e);
@@ -508,6 +511,7 @@ class Conditions {
       });
       const next = new Map(this.horizons);
       for (const r of res) {
+        if (!this.#isNew('horizon', r.zoneId, r.fetchedAt)) continue;
         const [zoneId, side] = r.zoneId.split('|') as [string, 'am' | 'pm'];
         next.set(zoneId, { ...next.get(zoneId), [side]: r.forecasts[0] });
       }
@@ -519,13 +523,40 @@ class Conditions {
 
   /** Every model for a zone: the main two plus HARMONIE when it's arrived. */
   modelsFor(zoneId: string): ModelForecast[] {
-    return [...(this.forecasts.get(zoneId) ?? []), ...(this.harmonie.get(zoneId) ?? [])];
+    const main = this.forecasts.get(zoneId);
+    const harm = this.harmonie.get(zoneId);
+    // The same array while neither part changes, so the scoring memo can reuse results.
+    const known = this.#merged.get(zoneId);
+    if (known && known.main === main && known.harm === harm) return known.merged;
+    const merged = [...(main ?? []), ...(harm ?? [])];
+    this.#merged.set(zoneId, { main, harm, merged });
+    return merged;
   }
+  #merged = new Map<
+    string,
+    { main?: ModelForecast[]; harm?: ModelForecast[]; merged: ModelForecast[] }
+  >();
 
   /** The horizon lookup the engine uses for a zone. */
   horizonFor(zoneId: string): (time: number) => { low: number | null; mid: number | null } | null {
     return horizonLookup(this.horizons.get(zoneId));
   }
+
+  /**
+   * Whether a fetch result is new data. Changing a filter re-reads every needed zone, mostly
+   * from cache: keeping the old object when the data hasn't changed lets the scoring memo
+   * keep its results, instead of re-scoring every hill because the copies are new.
+   */
+  #isNew(kind: string, key: string, fetchedAt: number): boolean {
+    const k = `${kind}|${key}`;
+    if (this.#fetchedAt.get(k) === fetchedAt) return false;
+    this.#fetchedAt.set(k, fetchedAt);
+    return true;
+  }
+  #fetchedAt = new Map<string, number>();
+
+  /** Scores kept between recalculations: see evaluatePlaces. */
+  #memo = createEvaluateMemo();
 
   /** Layer 1: every condition for every listed hill with a forecast. The costly part. */
   evaluated = $derived.by((): Evaluated[] => {
@@ -541,8 +572,9 @@ class Conditions {
       dayOffset: settings.dayOffset,
       now: this.now,
       modelsFor: (zoneId) => this.modelsFor(zoneId),
-      horizonFor: (zoneId) => this.horizonFor(zoneId),
+      horizonsFor: (zoneId) => this.horizons.get(zoneId),
       kp: this.kp,
+      memo: this.#memo,
     }).map((e) => ({ ...e, searchOnly: addExtra && e.hill === extra }));
   });
 
