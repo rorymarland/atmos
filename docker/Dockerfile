@@ -28,6 +28,7 @@ COPY docker/entrypoint/40-atmos-data.sh /docker-entrypoint.d/40-atmos-data.sh
 COPY --from=build /src/apps/web/build/ /usr/share/nginx/html/
 COPY --from=build /src/dist/build-data.mjs /opt/atmos/build-data.mjs
 COPY config/ /opt/atmos/config/
+COPY data/water/ /opt/atmos/water/
 RUN chmod +x /docker-entrypoint.d/40-atmos-data.sh
 
 # The folder holding the DoBIH CSV (any name, e.g. DoBIH_v18_6.csv), mounted read-only.

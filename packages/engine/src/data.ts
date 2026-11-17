@@ -23,10 +23,33 @@ export interface Hill {
   zone: number;
   /** Countries the hill is in: more than one for hills on a border. */
   nations: Nation[];
+  /**
+   * The still water within 3 km of the summit (index into waters.json), if any, with the
+   * nearest bit of its shore: where water conditions are shot from.
+   */
+  water?: { index: number; distanceM: number; shore?: { lat: number; lon: number } };
+  /** A loch opened as a place: scored from the shore, with no summit (see waterAsPlace). */
+  kind?: 'water';
 }
 
-/** [number, name, lat, lon, metres, lists, zone, nations as letters, e.g. "ES"] */
-export type HillRow = [number, string, number, number, number, number, number, string?];
+/**
+ * [number, name, lat, lon, metres, lists, zone, nations as letters (e.g. "ES"),
+ *  water index, metres from the summit to that water's shore, shore lat, shore lon]
+ */
+export type HillRow = [
+  number,
+  string,
+  number,
+  number,
+  number,
+  number,
+  number,
+  string?,
+  number?,
+  number?,
+  number?,
+  number?,
+];
 
 const NATION_LETTERS: Record<string, Nation> = {
   S: 'scotland',
@@ -60,7 +83,7 @@ export interface HillsFile {
 }
 
 export function encodeHill(h: Hill): HillRow {
-  return [
+  const row: HillRow = [
     h.number,
     h.name,
     h.lat,
@@ -70,10 +93,15 @@ export function encodeHill(h: Hill): HillRow {
     h.zone,
     h.nations.map((n) => LETTER_FOR[n]).join(''),
   ];
+  if (h.water) {
+    row.push(h.water.index, h.water.distanceM);
+    if (h.water.shore) row.push(h.water.shore.lat, h.water.shore.lon);
+  }
+  return row;
 }
 
 export function decodeHill(row: HillRow): Hill {
-  const [number, name, lat, lon, metres, lists, zone, nations] = row;
+  const [number, name, lat, lon, metres, lists, zone, nations, water, waterM, sLat, sLon] = row;
   return {
     number,
     name,
@@ -83,6 +111,17 @@ export function decodeHill(row: HillRow): Hill {
     lists,
     zone,
     nations: nationsFromLetters(nations ?? ''),
+    ...(water !== undefined && water >= 0
+      ? {
+          water: {
+            index: water,
+            distanceM: waterM ?? 0,
+            ...(sLat !== undefined && sLon !== undefined
+              ? { shore: { lat: sLat, lon: sLon } }
+              : {}),
+          },
+        }
+      : {}),
   };
 }
 

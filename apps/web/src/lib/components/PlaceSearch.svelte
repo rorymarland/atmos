@@ -10,7 +10,7 @@
   import { conditions } from '#lib/conditions.svelte.ts';
   import { suggestPlaces } from '#lib/geocode.ts';
   import { loadSearchHills } from '#lib/static-data.ts';
-  import type { Hill } from '@atmos/engine';
+  import { waterAsPlace, type Hill } from '@atmos/engine';
   import type { StartPoint } from '#lib/settings.svelte.ts';
 
   let {
@@ -80,6 +80,39 @@
     return [...listed, ...find(others, true, 7 - listed.length)];
   });
 
+  /** Named lochs and lakes: up to three, names starting with the query first, then bigger. */
+  const lochs = $derived.by((): Suggestion[] => {
+    const q = query.trim().toLowerCase();
+    const data = conditions.data;
+    if (q.length < 2 || !data?.waters) return [];
+    const hits: { i: number; starts: boolean; ha: number }[] = [];
+    data.waters.forEach((w, i) => {
+      if (!w.name || w.zone < 0) return;
+      const at = w.name.toLowerCase().indexOf(q);
+      if (at >= 0) hits.push({ i, starts: at === 0, ha: w.ha });
+    });
+    hits.sort((a, b) => Number(b.starts) - Number(a.starts) || b.ha - a.ha);
+    return hits.slice(0, 3).map(({ i }) => {
+      const w = data.waters![i]!;
+      const place = waterAsPlace(w, i);
+      return {
+        kind: 'hill' as const,
+        key: `w${i}`,
+        label: w.name,
+        detail: waterDetail(w.ha, w.spanKm, data.zones[w.zone]?.name),
+        number: place.number,
+        lat: w.lat,
+        lon: w.lon,
+        hill: place,
+        other: place,
+      };
+    });
+  });
+  function waterDetail(ha: number, spanKm: number, zone?: string) {
+    const size = spanKm >= 1 ? `${spanKm.toFixed(1)} km long` : `${Math.round(ha)} ha`;
+    return `Loch or lake, ${size}${zone ? `, ${zone}` : ''}`;
+  }
+
   const typing = $derived(query.trim().length >= 2);
   /** Favourites, in the order they were starred. */
   const favs = $derived.by((): Suggestion[] => {
@@ -88,7 +121,10 @@
       kind: 'hill' as const,
       key: `f${h.number}`,
       label: h.name,
-      detail: `${Math.round(h.metres)} m, ${data?.zones[h.zone]?.name ?? ''}`,
+      detail:
+        h.kind === 'water'
+          ? `Loch or lake, ${data?.zones[h.zone]?.name ?? ''}`
+          : `${Math.round(h.metres)} m, ${data?.zones[h.zone]?.name ?? ''}`,
       number: h.number,
       lat: h.lat,
       lon: h.lon,
@@ -100,6 +136,7 @@
     typing
       ? [
           ...hills,
+          ...lochs,
           ...places.map((p, i) => ({ kind: 'place' as const, key: `p${i}${p.label}`, label: p.label, detail: 'Place', place: p })),
         ]
       : favs,
@@ -201,7 +238,7 @@
           }}
           onmouseenter={() => (active = i)}
         >
-          <span class="kind {s.kind}" aria-hidden="true"></span>
+          <span class="kind {s.kind}" class:water={s.kind === 'hill' && s.hill.kind === 'water'} aria-hidden="true"></span>
           <span class="text"><span>{s.label}</span><span class="small muted">{s.kind === 'hill' ? s.detail : 'Place'}</span></span>
           {#if s.kind === 'hill'}
             {@const v = verdictOf(s.number)}
@@ -300,6 +337,13 @@
     border-left: 6px solid transparent;
     border-right: 6px solid transparent;
     border-bottom: 10px solid var(--ink-soft);
+  }
+  .kind.water {
+    width: 12px;
+    height: 8px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--water, #3b82c4);
   }
   .kind.place {
     width: 10px;

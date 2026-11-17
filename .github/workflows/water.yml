@@ -1,0 +1,90 @@
+name: Water data
+
+# Rebuilds data/water/uk-water.json (the UK's still water from OpenStreetMap) from the
+# Geofabrik UK extract. Run by hand from the Actions tab, or monthly; either way it opens a
+# pull request with the new file. On a pull request that changes the build itself, it
+# commits the rebuilt file to that pull request's branch so it can be checked there.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 4 3 * *'
+  pull_request:
+    paths:
+      - scripts/build-water.ts
+      - scripts/lib/water.ts
+      - .github/workflows/water.yml
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # On a pull request, the branch itself (not the merge commit), so it can push back.
+          ref: ${{ github.head_ref || github.ref }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: sudo apt-get update -q && sudo apt-get install -yq osmium-tool
+
+      - name: Download the UK extract
+        run: |
+          curl -fsSL -o uk.osm.pbf https://download.geofabrik.de/europe/united-kingdom-latest.osm.pbf
+          osmium fileinfo -e -g header.option.osmosis_replication_timestamp uk.osm.pbf | tee stamp.txt || true
+          ls -lh uk.osm.pbf
+
+      - name: Filter still water and car parks
+        run: |
+          osmium tags-filter uk.osm.pbf nwr/natural=water wr/landuse=reservoir -o water.osm.pbf
+          osmium export water.osm.pbf -f geojsonseq --geometry-types=polygon --add-unique-id=type_id -o water.geojsonseq
+          osmium tags-filter uk.osm.pbf nwr/amenity=parking -o parking.osm.pbf
+          osmium export parking.osm.pbf -f geojsonseq --geometry-types=point,polygon -o parking.geojsonseq
+          ls -lh *.geojsonseq
+
+      - name: Build uk-water.json
+        run: |
+          STAMP=$(head -c 10 stamp.txt || true)
+          pnpm exec tsx scripts/build-water.ts --water water.geojsonseq --parking parking.geojsonseq \
+            --source "OpenStreetMap via Geofabrik united-kingdom extract ${STAMP:-$(date -u +%F)}"
+          ls -lh data/water
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uk-water
+          path: data/water/uk-water.json
+
+      - name: Commit the file to this pull request
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          if [ -z "$(git status --porcelain -- data/water)" ]; then echo "No change"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/water/uk-water.json
+          git commit -m "Rebuild water data from OpenStreetMap"
+          git push
+
+      - name: Open a pull request with the new file
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$(git status --porcelain -- data/water)" ]; then echo "No change"; exit 0; fi
+          BRANCH=water-data-$(date -u +%Y%m%d)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add data/water/uk-water.json
+          git commit -m "Update water data from OpenStreetMap"
+          git push -u origin "$BRANCH"
+          gh pr create --title "Update water data from OpenStreetMap" \
+            --body "Rebuilt by the Water data workflow. Check the counts in the run log before merging." \
+            || echo "Couldn't open the PR (Actions may not be allowed to); the branch $BRANCH is pushed."

@@ -41,10 +41,14 @@
   and each night has a view line from the Kp forecast showing how far south it should reach.
 - **Checks itself.** Three models (Met Office, ECMWF and, for the first two and a half days,
   KNMI's HARMONIE): a Go needs most of them to agree. Sunrise and sunset conditions check the
-  cloud 60 km towards the sun, and each hill's panel shows how many of ECMWF's 51 ensemble runs
-  back the forecast.
-- **Finds anywhere.** Search hills, UK places and postcodes. Every other UK hill in the database
-  (mostly Tumps, such as Ben A'an) can be searched and scored without cluttering the map.
+  cloud 60 km towards the sun, and each hill's panel shows how many runs of the ECMWF (51) and
+  Met Office (18) ensembles back the forecast.
+- **Finds anywhere.** Search hills, lochs, UK places and postcodes. Every other UK hill in the
+  database (mostly Tumps, such as Ben A'an) can be searched and scored without cluttering the map.
+  Star a hill or loch to keep it in your favourites, at the top of the search box.
+- **Knows where the water is.** Reflections and frozen lochs are only scored where there's still
+  water within 3 km, from about 20,000 UK lochs, lakes and reservoirs in OpenStreetMap. A long loch
+  needs calmer air than a lochan, and those trips end at the lochside by the nearest car park.
 
 | Condition group | Conditions                                                             |
 | --------------- | ---------------------------------------------------------------------- |
@@ -130,15 +134,15 @@ To build the image from a checkout instead:
 
 ## Data and attribution
 
-| Source                                                                                                                                        | Use                                             | Licence / terms                               |
-| --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------- |
-| [Open-Meteo](https://open-meteo.com/) (UK Met Office, ECMWF, DWD ICON models)                                                                 | Forecasts, fetched live by the browser          | CC BY 4.0; free API is for non-commercial use |
-| [Database of British and Irish Hills](https://www.hills-database.co.uk/) (DoBIH)                                                              | Hill names, heights, positions, lists           | CC BY 4.0                                     |
-| [Postcodes.io](https://postcodes.io/) (OS, Royal Mail and ONS data)                                                                           | Finding home from a postcode                    | OGL v3.0                                      |
-| [GeoNames](https://www.geonames.org/) via Open-Meteo geocoding                                                                                | Finding home from a place name                  | CC BY 4.0                                     |
-| [NOAA SWPC](https://www.swpc.noaa.gov/)                                                                                                       | Kp forecast and OVATION nowcast                 | Public domain                                 |
-| [OpenStreetMap](https://www.openstreetmap.org/copyright) via [OpenFreeMap](https://openfreemap.org/) and [Overpass](https://overpass-api.de/) | Basemap; paths and car parks for walking routes | ODbL                                          |
-| [Mapterhorn](https://mapterhorn.com/attribution)                                                                                              | Hillshade terrain; route height profiles        | Open data; see the attribution page           |
+| Source                                                                                                                                                                                     | Use                                                                                  | Licence / terms                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | --------------------------------------------- |
+| [Open-Meteo](https://open-meteo.com/) (UK Met Office, ECMWF, DWD ICON models)                                                                                                              | Forecasts, fetched live by the browser                                               | CC BY 4.0; free API is for non-commercial use |
+| [Database of British and Irish Hills](https://www.hills-database.co.uk/) (DoBIH)                                                                                                           | Hill names, heights, positions, lists                                                | CC BY 4.0                                     |
+| [Postcodes.io](https://postcodes.io/) (OS, Royal Mail and ONS data)                                                                                                                        | Finding home from a postcode                                                         | OGL v3.0                                      |
+| [GeoNames](https://www.geonames.org/) via Open-Meteo geocoding                                                                                                                             | Finding home from a place name                                                       | CC BY 4.0                                     |
+| [NOAA SWPC](https://www.swpc.noaa.gov/)                                                                                                                                                    | Kp forecast and OVATION nowcast                                                      | Public domain                                 |
+| [OpenStreetMap](https://www.openstreetmap.org/copyright) via [OpenFreeMap](https://openfreemap.org/), [Overpass](https://overpass-api.de/) and [Geofabrik](https://download.geofabrik.de/) | Basemap; paths and car parks for walking routes; lochs, lakes and lochside car parks | ODbL                                          |
+| [Mapterhorn](https://mapterhorn.com/attribution)                                                                                                                                           | Hillshade terrain; route height profiles                                             | Open data; see the attribution page           |
 
 ## Licence
 

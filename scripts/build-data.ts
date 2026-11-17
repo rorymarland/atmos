@@ -7,12 +7,17 @@
  * can keep its original name). The version comes from --dobih-version, then the
  * DOBIH_VERSION environment variable, then the file name (DoBIH_v18_6.csv -> 18.6).
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { parse as parseYaml } from 'yaml';
 import {
   encodeHill,
+  encodeWaterBody,
+  nearest,
+  type Hill,
+  type WaterBody,
+  type WatersFile,
   parseScoringConfig,
   type AttributionsFile,
   type HillsFile,
@@ -21,6 +26,7 @@ import {
 import { decodeCsv, hillListsConfigSchema, parseDobih } from './lib/hills.js';
 import { findDobihCsv, versionFromFilename } from './lib/source.js';
 import { assignZones, parseZones } from './lib/zones.js';
+import { decodeWaterRow, linkHillsToWater, type WaterFile } from './lib/water.js';
 
 const ROOT = resolve(import.meta.dirname, '..');
 
@@ -37,6 +43,8 @@ const { values: args } = parseArgs({
     // Folder holding profiles.yaml, zones.yaml, hill-lists.yaml and attributions.yaml.
     config: { type: 'string', default: join(ROOT, 'config') },
     'dobih-version': { type: 'string' },
+    // Still water from OpenStreetMap (see .github/workflows/water.yml).
+    water: { type: 'string', default: join(ROOT, 'data/water/uk-water.json') },
     out: { type: 'string', default: join(ROOT, 'data/generated') },
   },
 });
@@ -85,18 +93,85 @@ try {
 const listsConfig = hillListsConfigSchema.parse(readYaml('hill-lists.yaml'));
 const parsed = parseDobih(decodeCsv(csvBytes), listsConfig);
 const zoned = assignZones(parsed.hills, zonesConfig.zones, zonesConfig.maxAssignKm);
+// Every other UK hill (mostly Tumps), for the search box only. Loaded on demand.
+const zonedOthers = assignZones(parsed.others, zonesConfig.zones, zonesConfig.maxAssignKm);
+const searchHills = zonedOthers.hills.filter((h) => h.zone >= 0);
+
+// Still water: lochs become places, and hills learn which water is near them. Without the
+// file the app scores water conditions everywhere, as it did before.
+const water = buildWaters([...zoned.hills, ...searchHills]);
+
 const hillsFile: HillsFile = {
   source: `Database of British and Irish Hills v${dobihVersion} (CC BY 4.0)`,
   lists: parsed.lists,
   hills: zoned.hills.map(encodeHill),
 };
-// Every other UK hill (mostly Tumps), for the search box only. Loaded on demand.
-const zonedOthers = assignZones(parsed.others, zonesConfig.zones, zonesConfig.maxAssignKm);
 const searchFile: HillsFile = {
   source: hillsFile.source,
   lists: [],
-  hills: zonedOthers.hills.filter((h) => h.zone >= 0).map(encodeHill),
+  hills: searchHills.map(encodeHill),
 };
+
+function buildWaters(hills: Hill[]): { file: WatersFile; stats: string } | null {
+  if (!existsSync(args.water!)) {
+    console.warn(`No water data at ${args.water}: water conditions won't be limited to lochs.`);
+    return null;
+  }
+  const raw = JSON.parse(readFileSync(args.water!, 'utf8')) as WaterFile;
+  const decoded = raw.waters.map(decodeWaterRow);
+  const points = zonesConfig.zones.map((z) => z.forecastPoint);
+  const zoneOf = decoded.map(({ water: w }) => {
+    const hit = nearest(w, points);
+    return hit && hit.km <= zonesConfig.maxAssignKm ? hit.index : -1;
+  });
+  const links = linkHillsToWater(
+    hills,
+    decoded.map((d) => d.water),
+  );
+  // Keep named water (places you can search for) and any water a hill uses.
+  const used = new Set(links.filter((l) => l !== null).map((l) => l!.index));
+  const keep: number[] = [];
+  const newIndex = new Map<number, number>();
+  decoded.forEach((d, i) => {
+    if (zoneOf[i]! < 0) return;
+    if (!d.water.name && !used.has(i)) return;
+    newIndex.set(i, keep.length);
+    keep.push(i);
+  });
+  hills.forEach((h, i) => {
+    const l = links[i];
+    const idx = l ? newIndex.get(l.index) : undefined;
+    if (l && idx !== undefined) {
+      h.water = { index: idx, distanceM: l.distanceM, shore: { lat: l.shore[0], lon: l.shore[1] } };
+    }
+  });
+  const waters: WaterBody[] = keep.map((i) => {
+    const { water: w, access } = decoded[i]!;
+    const shorePt = access[0]?.shore;
+    return {
+      id: w.id,
+      name: w.name,
+      lat: w.lat,
+      lon: w.lon,
+      ha: w.ha,
+      spanKm: w.spanKm,
+      zone: zoneOf[i]!,
+      shore: shorePt ? { lat: shorePt[0], lon: shorePt[1] } : { lat: w.lat, lon: w.lon },
+      parkings: access.map((a) => ({
+        lat: a.lat,
+        lon: a.lon,
+        name: a.name,
+        distanceM: a.distanceM,
+        shore: { lat: a.shore[0], lon: a.shore[1] },
+      })),
+    };
+  });
+  const linked = hills.filter((h) => h.water).length;
+  return {
+    file: { source: raw.source, waters: waters.map(encodeWaterBody) },
+    stats: `${waters.length} of ${raw.waters.length} waters kept (${waters.filter((w) => w.name).length} named); ${linked} of ${hills.length} hills have water within 3 km`,
+  };
+}
 
 // Attributions.
 const attributionsRaw = JSON.stringify(readYaml('attributions.yaml')).replaceAll(
@@ -118,6 +193,7 @@ const written = [
   write('zones.json', zonesFile),
   write('profiles.json', profiles),
   write('attributions.json', attributionsFile),
+  ...(water ? [write('waters.json', water.file)] : []),
 ];
 
 const s = parsed.stats;
@@ -131,5 +207,6 @@ const empty = Object.entries(zoned.perZone)
   .filter(([, n]) => n === 0)
   .map(([id]) => id);
 if (empty.length > 0) console.log(`  zones with no hills: ${empty.join(', ')}`);
+if (water) console.log(`  water: ${water.stats}`);
 console.log(`Wrote to ${args.out}:`);
 for (const line of written) console.log(`  ${line}`);

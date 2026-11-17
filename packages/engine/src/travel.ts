@@ -114,6 +114,8 @@ export function tripProblem(
 
 /** "1 h 50" or "35 min". */
 export function formatDuration(minutes: number): string {
+  // Rounded to 5 minutes, but a short walk never reads as "0 min".
+  if (minutes > 0 && minutes < 5) return `${Math.max(1, Math.round(minutes))} min`;
   const m = Math.max(0, Math.round(minutes / 5) * 5);
   if (m < 60) return `${m} min`;
   const h = Math.floor(m / 60);

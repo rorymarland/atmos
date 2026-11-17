@@ -6,7 +6,7 @@ set -eu
 HTML=/usr/share/nginx/html
 
 echo "atmos: building hill data from the CSV in /data"
-if ! node /opt/atmos/build-data.mjs --raw /data --config /opt/atmos/config --out "$HTML/data"; then
+if ! node /opt/atmos/build-data.mjs --raw /data --config /opt/atmos/config --water /opt/atmos/water/uk-water.json --out "$HTML/data"; then
   echo "atmos: ERROR: couldn't build the hill data. Put the DoBIH CSV (e.g. DoBIH_v18_6.csv)" >&2
   echo "atmos: next to docker-compose.yml; it's mounted at /data. /data contains:" >&2
   ls -la /data >&2 || true

@@ -16,6 +16,7 @@
   import { londonMidnight } from '#lib/time.ts';
   import { filtersChanged, resetFilters, type StartPoint } from '#lib/settings.svelte.ts';
   import { loadSearchHills } from '#lib/static-data.ts';
+  import { waterAsPlace, waterIndexOf } from '@atmos/engine';
   import type { Hill } from '@atmos/engine';
   import ResultsList, { type Pick } from '#lib/components/ResultsList.svelte';
   import VerdictMark from '#lib/components/VerdictMark.svelte';
@@ -125,6 +126,12 @@
     const n = Number(page.url.searchParams.get('hill'));
     const data = conditions.data;
     if (!n || !data || data.hillsByNumber.has(n) || conditions.extra?.number === n) return;
+    const w = waterIndexOf(n);
+    if (w !== null) {
+      const body = data.waters?.[w];
+      if (body) conditions.extra = waterAsPlace(body, w);
+      return;
+    }
     void loadSearchHills().then((others) => {
       const h = others.find((x) => x.number === n);
       if (h) conditions.extra = h;
@@ -883,7 +890,7 @@
   {#if panelOpen}
     <aside class="panel" aria-label="Where to go">
       <header class="panel-head">
-        <h1>{hillOpen ? 'Hill' : 'Where to go'}</h1>
+        <h1>{hillOpen ? (Number(page.url.searchParams.get('hill')) < 0 ? 'Loch' : 'Hill') : 'Where to go'}</h1>
         <div class="head-buttons">
           <button
             class="hide"
