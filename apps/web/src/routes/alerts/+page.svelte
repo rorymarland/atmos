@@ -122,7 +122,7 @@
       Atmos checks the forecast for each alert and emails when it matches. Alerts here are shared by everyone using
       this Atmos; each goes only to the address it names.
       {#if !alerts.status.email}
-        <strong class="warn">Email isn’t set up yet, so nothing will be sent: fill in the SMTP settings in <code>.env</code>.</strong>
+        <strong class="warn">Email isn’t set up yet, so nothing will be sent: set <code>SMTP2GO_API_KEY</code> and <code>ALERTS_FROM</code> in <code>.env</code>.</strong>
       {/if}
     </p>
 
