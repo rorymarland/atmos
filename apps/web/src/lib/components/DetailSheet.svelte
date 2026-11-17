@@ -462,7 +462,7 @@
     grid-column: 1 / -1;
   }
   .ens-fam {
-    color: var(--muted);
+    color: var(--ink-soft);
     font-size: 0.8rem;
     padding-left: 6px;
   }
