@@ -4,7 +4,13 @@
    * condition broken down, the trip and the reasons. Not modal, so the map and the
    * timeline stay usable alongside it.
    */
-  import { explain, formatDuration, googleMapsDirectionsUrl, hillIsOnList } from '@atmos/engine';
+  import {
+    explain,
+    formatDuration,
+    googleMapsDirectionsUrl,
+    hillIsOnList,
+    PACE_FACTOR,
+  } from '@atmos/engine';
   import { ensembleShare, type EnsembleVariable } from '@atmos/data-client';
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
@@ -112,6 +118,16 @@
       : [],
   );
   const trip = $derived(chosen?.trip ?? null);
+  const routeFound = $derived(
+    hillResult?.route && typeof hillResult.route === 'object' ? hillResult.route : null,
+  );
+  const routeStartLabel = $derived(
+    routeFound
+      ? routeFound.start.kind === 'parking'
+        ? (routeFound.start.name ?? 'the car park')
+        : 'the roadside'
+      : '',
+  );
   const dayStart = $derived(londonMidnight(settings.dayOffset, conditions.now));
   const clock = (ms: number) => formatClock(ms, dayStart);
   const pct = (score: number | null) => (score === null ? '–' : String(Math.round(score * 100)));
@@ -263,13 +279,43 @@
           </div>
         </section>
 
+        <section class="walk">
+          <h3>The walk up</h3>
+          {#if routeFound}
+            <p>
+              From <strong>{routeStartLabel}</strong>: {routeFound.distanceKm.toFixed(1)} km and
+              {routeFound.ascentM.toLocaleString('en-GB')} m of ascent, about
+              <strong>{formatDuration(Math.round(routeFound.minutes * PACE_FACTOR[settings.pace]))}</strong> up at a
+              {settings.pace} pace.{#if routeFound.offPathKm >= 0.2}
+                {' '}{routeFound.offPathKm.toFixed(1)} km of it is off any path.{/if}
+            </p>
+            <p class="small muted">
+              Worked out from OpenStreetMap paths and car parks and Mapterhorn terrain, timed by
+              Naismith’s rule with Langmuir’s corrections, and drawn on the map. Real routes, weather
+              and stops vary: allow extra.
+            </p>
+          {:else if hillResult.route === null}
+            <p class="small muted">
+              No route from a road within 12 km (an island, or a hill without paths in OpenStreetMap),
+              so the walk time is a rough estimate from the valley floor.
+            </p>
+          {:else if hillResult.route === 'failed'}
+            <p class="small muted">
+              Couldn’t reach the path or terrain services, so the walk time is a rough estimate. It’ll
+              try again in ten minutes.
+            </p>
+          {:else}
+            <p class="small muted">Working out the route from OpenStreetMap paths…</p>
+          {/if}
+        </section>
+
         <section class="plan">
           <h3>Your trip</h3>
           {#if trip}
             <ol class="timeline">
               <li><span class="t">{clock(trip.plan.wakeAt)}</span> {chosen.period === 'morning' ? 'Get up' : 'Get ready'}</li>
               <li class="leave"><span class="t">{clock(trip.plan.leaveAt)}</span> Leave {leaveName}</li>
-              <li><span class="t">{clock(trip.plan.parkAt)}</span> Park, after about {formatDuration(trip.driveMinutes)} and {Math.round(trip.roadMiles)} miles</li>
+              <li><span class="t">{clock(trip.plan.parkAt)}</span> {routeFound && trip.walkSource !== 'viewpoint' ? `Park at ${routeStartLabel}` : 'Park'}, after about {formatDuration(trip.driveMinutes)} and {Math.round(trip.roadMiles)} miles</li>
               <li><span class="t">{clock(trip.plan.arriveAt)}</span> In place, after a {formatDuration(trip.walkMinutes)} {chosen.scope === 'summit' ? 'walk up' : 'walk'}</li>
               <li><span class="t">{clock(trip.plan.target)}</span> {trip.targetLabel.charAt(0).toUpperCase() + trip.targetLabel.slice(1)}</li>
             </ol>
@@ -279,8 +325,13 @@
               <p class="small warn">You’d already need to have left.</p>
             {/if}
             <p class="small muted">
-              Rough estimates: the drive from straight-line distance with typical road speeds, the walk
-              {chosen.scope === 'summit' ? 'by Naismith’s rule from the valley floor' : 'a short stroll from parking'}. Check the real route below.
+              The drive is a rough estimate from straight-line distance and typical road speeds; check
+              the real route below. The walk is
+              {trip.walkSource === 'route'
+                ? 'from the route above'
+                : trip.walkSource === 'estimate'
+                  ? 'a rough estimate by Naismith’s rule from the valley floor'
+                  : 'a short stroll from parking'}.
             </p>
           {:else}
             <p class="small muted">Set a start point or <a href="/settings#home">your home</a> to see when to leave.</p>
@@ -312,8 +363,8 @@
       </section>
 
       <section class="links">
-        <a class="button" href={googleMapsDirectionsUrl({ lat: hillResult.hill.lat, lon: hillResult.hill.lon }, settings.start ?? undefined)} target="_blank" rel="noopener">
-          Directions in Google Maps
+        <a class="button" href={googleMapsDirectionsUrl(routeFound ? routeFound.start : { lat: hillResult.hill.lat, lon: hillResult.hill.lon }, settings.start ?? undefined)} target="_blank" rel="noopener">
+          {routeFound ? `Directions to ${routeStartLabel} in Google Maps` : 'Directions in Google Maps'}
         </a>
         {#if hillResult.miles != null}
           <span class="small muted">{Math.round(hillResult.miles)} miles in a straight line</span>

@@ -31,6 +31,10 @@
 - Open-Meteo allows 600 call-equivalents a minute. `packages/data-client/src/zones.ts` keeps a
   shared budget: the main forecast loads first, then HARMONIE and the horizon points (which may
   wait for the next minute). Check `estimateCallWeight` before adding variables or models.
+- Walking routes (`packages/engine/src/route.ts`) are worked out in the browser on demand: the
+  open hill, then the top three results, one at a time, saved in IndexedDB for 30 days. Keep
+  Overpass use to that (its fair-use policy); never route every hill from the browser. Bump
+  `ROUTE_VERSION` in `apps/web/src/lib/routes.ts` when the route maths changes.
 - Every change keeps `pnpm check` green (lint, format, typecheck, tests).
 
 ## SvelteKit 3 notes (apps/web)

@@ -19,3 +19,5 @@ export { cloudBase, cloudSea, type CloudSea } from './profiles/shared.js';
 export * from './data.js';
 export * from './travel.js';
 export * from './astro.js';
+export * from './route.js';
+export * from './terrain.js';

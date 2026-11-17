@@ -3,3 +3,4 @@ export * from './zones.js';
 export * from './kp.js';
 export * from './ovation.js';
 export * from './ensemble.js';
+export * from './overpass.js';

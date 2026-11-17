@@ -250,3 +250,56 @@ describe('ensembles', () => {
     expect(ensembleShare(e, 'visibility', 1_000_000, () => true)).toBeNull();
   });
 });
+
+describe('Overpass', () => {
+  it('asks for highways and car parks around the summit', async () => {
+    const { overpassQuery } = await import('./overpass.js');
+    const q = overpassQuery(56.79686, -5.0036, 5000);
+    expect(q).toContain('way["highway"](around:5000,56.79686,-5.00360)');
+    expect(q).toContain('nw["amenity"="parking"](around:5000,56.79686,-5.00360)');
+    expect(q).toContain('>;out skel qt;');
+  });
+
+  it('reads nodes, highways and public car parks (points and areas)', async () => {
+    const { parseOverpass } = await import('./overpass.js');
+    const area = parseOverpass({
+      elements: [
+        { type: 'way', id: 1, nodes: [10, 11], tags: { highway: 'path' } },
+        {
+          type: 'way',
+          id: 2,
+          nodes: [20, 21, 22],
+          tags: { amenity: 'parking', name: 'Glen Nevis' },
+        },
+        { type: 'way', id: 3, nodes: [20, 21], tags: { amenity: 'parking', access: 'private' } },
+        { type: 'node', id: 30, lat: 56.5, lon: -5, tags: { amenity: 'parking' } },
+        { type: 'node', id: 10, lat: 56.0, lon: -5.0 },
+        { type: 'node', id: 11, lat: 56.1, lon: -5.1 },
+        { type: 'node', id: 20, lat: 56.0, lon: -5.0 },
+        { type: 'node', id: 21, lat: 56.0, lon: -5.02 },
+        { type: 'node', id: 22, lat: 56.03, lon: -5.01 },
+      ],
+    });
+    expect(area.ways).toHaveLength(1);
+    expect(area.nodes.size).toBe(6);
+    expect(area.parkings).toHaveLength(2);
+    expect(area.parkings).toContainEqual({ lat: 56.5, lon: -5 });
+    const glen = area.parkings.find((p) => p.name === 'Glen Nevis')!;
+    expect(glen.lat).toBeCloseTo(56.01);
+    expect(glen.lon).toBeCloseTo(-5.01);
+  });
+
+  it('falls back to the mirror when the main server fails', async () => {
+    const { fetchOsmArea, OVERPASS_ENDPOINTS } = await import('./overpass.js');
+    const calls: string[] = [];
+    const f = async (url: string) => {
+      calls.push(url);
+      return url === OVERPASS_ENDPOINTS[0]
+        ? new Response('busy', { status: 429 })
+        : new Response(JSON.stringify({ elements: [] }), { status: 200 });
+    };
+    const area = await fetchOsmArea(56, -5, 5000, f as unknown as typeof fetch);
+    expect(area.ways).toEqual([]);
+    expect(calls).toEqual(OVERPASS_ENDPOINTS);
+  });
+});

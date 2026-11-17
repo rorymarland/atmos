@@ -16,6 +16,8 @@ import {
   saturatedLayers,
   tripProblem,
   type Hill,
+  type HillRoute,
+  PACE_FACTOR,
   viewLineLatitude,
   type Layer,
   type ModelForecast,
@@ -41,6 +43,7 @@ import {
   type KpBin,
 } from '@atmos/data-client';
 import { forecastCache, newestFetch } from './cache';
+import { findRoute, savedRoute } from './routes';
 import { settings } from './settings.svelte';
 import { loadStaticData, type StaticData } from './static-data';
 import {
@@ -56,6 +59,8 @@ import {
 import { londonMidnight } from './time';
 
 const MINUTE = 60_000;
+/** After a failed route lookup, wait this long before trying that hill again. */
+const ROUTE_RETRY_MS = 10 * 60_000;
 /** Valley conditions: a short walk from the car to the viewpoint. */
 const VIEWPOINT_WALK_MINUTES = 15;
 /**
@@ -70,6 +75,8 @@ export interface Trip {
   driveMinutes: number;
   roadMiles: number;
   walkMinutes: number;
+  /** Where the walk time came from: a worked-out route, a rough estimate, or a stroll. */
+  walkSource: 'route' | 'estimate' | 'viewpoint';
   /** e.g. "golden hour". */
   targetLabel: string;
   /** Why it doesn't fit the limits, or null. */
@@ -90,10 +97,15 @@ export interface ConditionTrip extends ConditionResult {
   trip: Trip | null;
 }
 
+/** A hill's walking route: found, none within reach, still working, or unreachable. */
+export type RouteState = HillRoute | null | 'loading' | 'failed';
+
 export interface HillResult {
   hill: Hill;
   zone: Zone;
   sun: SunTimes;
+  /** Undefined until it's been asked for. */
+  route: RouteState | undefined;
   /** Every condition and part of the day, best score first. */
   conditions: ConditionTrip[];
   /** The ticked ones that fit the limits, best first. */
@@ -220,6 +232,80 @@ class Conditions {
     } catch (err) {
       console.warn('Ensemble:', err);
       this.ensembles = new Map(this.ensembles).set(hillNumber, 'failed');
+    }
+  }
+
+  /** Walking routes by hill number. */
+  routes = $state.raw<Map<number, RouteState>>(new Map());
+  #routeQueue: { hill: Hill }[] = [];
+  #routing = false;
+  /** Hills being looked up in the saved routes, so a second request doesn't queue twice. */
+  #checking = new Set<number>();
+  /**
+   * When each failed lookup failed. Results refresh whenever a route arrives, which asks
+   * for routes again: without this pause a service outage would become a retry loop.
+   */
+  #failedAt = new Map<number, number>();
+
+  /**
+   * Works out a hill's route: from the saved copy if there is one, otherwise from
+   * OpenStreetMap and the terrain. One at a time, a second apart, to be kind to the
+   * Overpass servers. `first` jumps the queue (the hill you've just opened).
+   */
+  async requestRoute(hill: Hill, first = false) {
+    const known = this.routes.get(hill.number);
+    if (known !== undefined && known !== 'failed') return;
+    if (
+      known === 'failed' &&
+      Date.now() - (this.#failedAt.get(hill.number) ?? 0) < ROUTE_RETRY_MS
+    ) {
+      return;
+    }
+    if (this.#routeQueue.some((q) => q.hill.number === hill.number)) {
+      if (first) {
+        this.#routeQueue = [
+          { hill },
+          ...this.#routeQueue.filter((q) => q.hill.number !== hill.number),
+        ];
+      }
+      return;
+    }
+    if (this.#checking.has(hill.number)) return;
+    this.#checking.add(hill.number);
+    let saved: HillRoute | null | undefined;
+    try {
+      saved = await savedRoute(hill.number);
+    } finally {
+      this.#checking.delete(hill.number);
+    }
+    if (saved !== undefined) {
+      this.routes = new Map(this.routes).set(hill.number, saved);
+      return;
+    }
+    if (first) this.#routeQueue.unshift({ hill });
+    else this.#routeQueue.push({ hill });
+    this.routes = new Map(this.routes).set(hill.number, 'loading');
+    void this.#drainRoutes();
+  }
+
+  async #drainRoutes() {
+    if (this.#routing) return;
+    this.#routing = true;
+    try {
+      for (let next = this.#routeQueue.shift(); next; next = this.#routeQueue.shift()) {
+        let result: RouteState;
+        try {
+          result = await findRoute(next.hill);
+        } catch (e) {
+          console.warn('Route:', e);
+          result = 'failed';
+          this.#failedAt.set(next.hill.number, Date.now());
+        }
+        this.routes = new Map(this.routes).set(next.hill.number, result);
+        if (this.#routeQueue.length) await new Promise((r) => setTimeout(r, 1000));
+      }
+    } finally {
+      this.#routing = false;
     }
   }
 
@@ -516,9 +602,15 @@ class Conditions {
       maxDriveMinutes: null,
       now: this.now,
     };
+    const routes = this.routes;
     return this.evaluated.map((e) => {
-      const drive = start ? estimateDrive(start, e.hill) : null;
-      const summitWalk = estimateSummitWalk(e.hill.metres, e.valleyM, settings.pace).minutes;
+      const route = routes.get(e.hill.number);
+      const found = route && typeof route === 'object' ? route : null;
+      // With a route, drive to where the walk starts; otherwise towards the summit.
+      const drive = start ? estimateDrive(start, found ? found.start : e.hill) : null;
+      const summitWalk = found
+        ? Math.round(found.minutes * PACE_FACTOR[settings.pace])
+        : estimateSummitWalk(e.hill.metres, e.valleyM, settings.pace).minutes;
       const conditions: ConditionTrip[] = e.conditions.map((c) => {
         if (!drive) return { ...c, trip: null };
         const ref = c.result.byModel.find((m) => m.model === c.result.referenceModel);
@@ -530,7 +622,9 @@ class Conditions {
           c.window,
           ref?.keyHour?.time ?? null,
         );
-        const walkMinutes = c.scope === 'summit' ? summitWalk : VIEWPOINT_WALK_MINUTES;
+        const summitScope = c.scope === 'summit';
+        const walkMinutes = summitScope ? summitWalk : VIEWPOINT_WALK_MINUTES;
+        const walkSource = !summitScope ? 'viewpoint' : found ? 'route' : 'estimate';
         const plan = planTrip({
           target: target.at,
           driveMinutes: drive.minutes,
@@ -545,6 +639,7 @@ class Conditions {
             driveMinutes: drive.minutes,
             roadMiles: drive.roadMiles,
             walkMinutes,
+            walkSource,
             targetLabel: target.label,
             problem: tripProblem(plan, drive.minutes, limits),
           },
@@ -554,6 +649,7 @@ class Conditions {
       return {
         ...e,
         conditions,
+        route,
         miles: start ? distanceMiles(start, e.hill) : null,
         driveMinutes: drive?.minutes ?? null,
         roadMiles: drive?.roadMiles ?? null,
