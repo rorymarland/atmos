@@ -28,6 +28,10 @@
   on the map.
 - **Explains every verdict.** Pick a hill to see each condition with its weather reasons, how
   closely the models agree, and the air above the valley.
+- **Works out the walk up.** For the hill you open and the top results, Atmos finds the quickest
+  way up from a car park or road along OpenStreetMap paths, reads the height profile from terrain
+  data and times it by Naismith's rule with Langmuir's corrections. The route is drawn on the map,
+  and the leave time and Google Maps directions use its start.
 - **Plans the trip.** Set a home, say what to be there for (blue hour, golden hour, sunrise or
   sunset), the earliest you'll get up and how far you'll drive. Each hill gets a rough get-up and
   leave time, with a Google Maps link for the real route.
@@ -126,15 +130,15 @@ To build the image from a checkout instead:
 
 ## Data and attribution
 
-| Source                                                                                               | Use                                    | Licence / terms                               |
-| ---------------------------------------------------------------------------------------------------- | -------------------------------------- | --------------------------------------------- |
-| [Open-Meteo](https://open-meteo.com/) (UK Met Office, ECMWF, DWD ICON models)                        | Forecasts, fetched live by the browser | CC BY 4.0; free API is for non-commercial use |
-| [Database of British and Irish Hills](https://www.hills-database.co.uk/) (DoBIH)                     | Hill names, heights, positions, lists  | CC BY 4.0                                     |
-| [Postcodes.io](https://postcodes.io/) (OS, Royal Mail and ONS data)                                  | Finding home from a postcode           | OGL v3.0                                      |
-| [GeoNames](https://www.geonames.org/) via Open-Meteo geocoding                                       | Finding home from a place name         | CC BY 4.0                                     |
-| [NOAA SWPC](https://www.swpc.noaa.gov/)                                                              | Kp forecast and OVATION nowcast        | Public domain                                 |
-| [OpenStreetMap](https://www.openstreetmap.org/copyright) via [OpenFreeMap](https://openfreemap.org/) | Basemap                                | ODbL                                          |
-| [Mapterhorn](https://mapterhorn.com/attribution)                                                     | Hillshade terrain                      | Open data; see the attribution page           |
+| Source                                                                                                                                        | Use                                             | Licence / terms                               |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------- |
+| [Open-Meteo](https://open-meteo.com/) (UK Met Office, ECMWF, DWD ICON models)                                                                 | Forecasts, fetched live by the browser          | CC BY 4.0; free API is for non-commercial use |
+| [Database of British and Irish Hills](https://www.hills-database.co.uk/) (DoBIH)                                                              | Hill names, heights, positions, lists           | CC BY 4.0                                     |
+| [Postcodes.io](https://postcodes.io/) (OS, Royal Mail and ONS data)                                                                           | Finding home from a postcode                    | OGL v3.0                                      |
+| [GeoNames](https://www.geonames.org/) via Open-Meteo geocoding                                                                                | Finding home from a place name                  | CC BY 4.0                                     |
+| [NOAA SWPC](https://www.swpc.noaa.gov/)                                                                                                       | Kp forecast and OVATION nowcast                 | Public domain                                 |
+| [OpenStreetMap](https://www.openstreetmap.org/copyright) via [OpenFreeMap](https://openfreemap.org/) and [Overpass](https://overpass-api.de/) | Basemap; paths and car parks for walking routes | ODbL                                          |
+| [Mapterhorn](https://mapterhorn.com/attribution)                                                                                              | Hillshade terrain; route height profiles        | Open data; see the attribution page           |
 
 ## Licence
 

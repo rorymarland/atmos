@@ -33,7 +33,7 @@ export function estimateDrive(from: LatLon, to: LatLon): DriveEstimate {
 
 export type Pace = 'relaxed' | 'steady' | 'brisk';
 
-const PACE_FACTOR: Record<Pace, number> = { relaxed: 1.25, steady: 1, brisk: 0.85 };
+export const PACE_FACTOR: Record<Pace, number> = { relaxed: 1.25, steady: 1, brisk: 0.85 };
 
 /** Naismith's rule: 5 km/h on the flat, plus 10 minutes per 100 m of ascent. */
 export function naismithMinutes(

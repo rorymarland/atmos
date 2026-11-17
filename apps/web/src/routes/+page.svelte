@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { version } from '$app/env';
   import { goto } from '$app/navigation';
   import type { ExpressionSpecification, GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from 'maplibre-gl';
@@ -120,6 +120,42 @@
   const openHill = $derived(
     hillOpen ? ranking.hillsByNumber.get(Number(page.url.searchParams.get('hill'))) : undefined,
   );
+
+  // Walking routes: the open hill first, then the best bet and the next two.
+  $effect(() => {
+    const h = openHill?.hill;
+    if (h) untrack(() => conditions.requestRoute(h, true));
+  });
+  $effect(() => {
+    const top = ranking.go.slice(0, 3).map((r) => r.hill);
+    untrack(() => {
+      for (const h of top) void conditions.requestRoute(h);
+    });
+  });
+  const openRoute = $derived(
+    openHill?.route && typeof openHill.route === 'object' ? openHill.route : null,
+  );
+  $effect(() => {
+    const r = openRoute;
+    const data = r
+      ? {
+          type: 'FeatureCollection' as const,
+          features: [
+            {
+              type: 'Feature' as const,
+              geometry: { type: 'LineString' as const, coordinates: r.path },
+              properties: {},
+            },
+            {
+              type: 'Feature' as const,
+              geometry: { type: 'Point' as const, coordinates: [r.start.lon, r.start.lat] },
+              properties: { label: r.start.kind === 'parking' ? 'P' : '' },
+            },
+          ],
+        }
+      : empty;
+    if (map && loaded) setSource('route', data);
+  });
 
   // The sun and moon timeline.
   const SKY_KEY = 'atmos.skyOpen';
@@ -412,6 +448,53 @@
         });
         // The best bet (always) and whatever's hovered in the list: a bright blue ring on a
         // white halo, which stands out from the green, amber and red points and the map.
+        // The open hill's walking route: a purple line on a white casing, and its start.
+        m.addSource('route', { type: 'geojson', data: empty });
+        m.addLayer({
+          id: 'route-casing',
+          type: 'line',
+          source: 'route',
+          filter: ['==', ['geometry-type'], 'LineString'],
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: { 'line-color': '#ffffff', 'line-width': 7 },
+        });
+        m.addLayer({
+          id: 'route-line',
+          type: 'line',
+          source: 'route',
+          filter: ['==', ['geometry-type'], 'LineString'],
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: { 'line-color': '#7b3fa8', 'line-width': 4 },
+        });
+        m.addLayer({
+          id: 'route-start',
+          type: 'circle',
+          source: 'route',
+          filter: ['==', ['geometry-type'], 'Point'],
+          paint: {
+            'circle-radius': 9,
+            'circle-color': '#1f4fa0',
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-width': 2,
+          },
+        });
+        try {
+          m.addLayer({
+            id: 'route-start-label',
+            type: 'symbol',
+            source: 'route',
+            filter: ['==', ['geometry-type'], 'Point'],
+            layout: {
+              'text-field': ['get', 'label'],
+              'text-font': ['Noto Sans Bold'],
+              'text-size': 12,
+              'text-allow-overlap': true,
+            },
+            paint: { 'text-color': '#ffffff' },
+          });
+        } catch (e) {
+          console.warn('Car park label unavailable', e);
+        }
         m.addSource('best', { type: 'geojson', data: empty });
         for (const id of ['best', 'highlight']) {
           m.addLayer({
@@ -761,6 +844,7 @@
       <span aria-hidden="true"><i style="background: var(--maybe)"></i>Maybe</span>
       <span aria-hidden="true"><i style="background: var(--no)"></i>No</span>
       {#if best}<span aria-hidden="true"><i class="best-ring"></i>Best bet</span>{/if}
+      {#if openRoute}<span aria-hidden="true"><i class="route-key"></i>Walking route</span>{/if}
       {#if showOvation && conditions.ovation}
         <span title="NOAA SWPC OVATION nowcast: chance of aurora overhead">
           <i class="aurora-scale" aria-hidden="true"></i>Aurora chance now (to {formatTime(conditions.ovation.forecastFor)})
@@ -1051,6 +1135,13 @@
     height: 0;
     border-radius: 0;
     border-top: 3px dashed #2f9e5b;
+    vertical-align: 3px;
+  }
+  .legend .route-key {
+    width: 16px;
+    height: 0;
+    border-radius: 0;
+    border-top: 4px solid #7b3fa8;
     vertical-align: 3px;
   }
   .legend .best-ring {
