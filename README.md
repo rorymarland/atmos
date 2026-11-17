@@ -144,10 +144,10 @@ Atmos on your LAN or VPN.
 - It checks hourly for "as soon as it's spotted" alerts (nothing is sent between 22:00 and 06:00)
   and at each daily alert's chosen time, scoring with the same code as the website. It tells you
   once, again if it gets better, and when something sent has fallen through.
-- Email goes through any SMTP service. With [SMTP2GO](https://www.smtp2go.com/) (free for 1,000
-  emails a month): verify your domain under Sending > Verified Senders, add the DNS records it
-  gives you, create an SMTP user under Sending > SMTP Users, and put the user, password and a
-  from address on that domain in `.env` (see `.env.example`).
+- Email goes through [SMTP2GO](https://www.smtp2go.com/) (free for 1,000 emails a month):
+  verify your domain under Sending > Verified Senders and add the DNS records it gives you,
+  then put an API key (Sending > API Keys) and a from address on that domain in `.env` (see
+  `.env.example`). Any other SMTP service works too, with the `SMTP_` settings instead.
 - Alerts are kept in `./alerts/alerts.json` next to `docker-compose.yml`.
 - Atmos's nginx passes `/api/alerts` to the container, so browsers only talk to Atmos. Without
   the container, the Alerts page and buttons hide themselves.
