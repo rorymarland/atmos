@@ -13,13 +13,14 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc -b && pnpm --filter web check",
+    "typecheck": "tsc -b && tsc -p apps/alerts && pnpm --filter web check",
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test",
     "build": "tsx scripts/build-data.ts --out apps/web/static/data && pnpm --filter web build",
     "dev": "pnpm --filter web dev",
     "build:web": "pnpm --filter web build",
+    "bundle:alerts": "pnpm --filter @atmos/alerts bundle",
     "bundle:data": "esbuild scripts/build-data.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/build-data.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\""
   },
   "devDependencies": {

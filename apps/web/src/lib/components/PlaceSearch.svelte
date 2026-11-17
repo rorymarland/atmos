@@ -16,10 +16,18 @@
   let {
     onHill,
     onPlace,
+    placeholder = 'Search hills, places or postcodes',
+    keepQuery = false,
+    hillsOnly = false,
   }: {
+    /** Hills and lochs only: no towns or postcodes. */
+    hillsOnly?: boolean;
+    placeholder?: string;
+    /** Leave the chosen name in the box (the map) or clear it for the next search. */
+    keepQuery?: boolean;
     /** `other` is set for hills not on the lists (mostly Tumps), which aren't loaded yet. */
-    onHill: (hill: { number: number; lat: number; lon: number; other?: Hill }) => void;
-    onPlace: (place: StartPoint) => void;
+    onHill: (hill: { number: number; lat: number; lon: number; other?: Hill; hill: Hill }) => void;
+    onPlace?: (place: StartPoint) => void;
   } = $props();
 
   type Suggestion =
@@ -36,6 +44,8 @@
       }
     | { kind: 'place'; key: string; label: string; detail: string; place: StartPoint };
 
+  /** Unique per search box: the map's and the alert editor's can be on screen together. */
+  const uid = $props.id();
   let query = $state('');
   let places = $state<StartPoint[]>([]);
   let searching = $state(false);
@@ -152,7 +162,7 @@
     clearTimeout(timer);
     controller?.abort();
     const q = query.trim();
-    if (q.length < 2) {
+    if (q.length < 2 || hillsOnly) {
       places = [];
       searching = false;
       return;
@@ -172,9 +182,10 @@
 
   function choose(s: Suggestion) {
     open = false;
-    query = s.label;
-    if (s.kind === 'hill') onHill({ number: s.number, lat: s.lat, lon: s.lon, ...(s.other ? { other: s.other } : {}) });
-    else onPlace(s.place);
+    query = keepQuery ? s.label : '';
+    if (s.kind === 'hill')
+      onHill({ number: s.number, lat: s.lat, lon: s.lon, hill: s.hill, ...(s.other ? { other: s.other } : {}) });
+    else onPlace?.(s.place);
     input?.blur();
   }
 
@@ -212,23 +223,23 @@
     onclick={() => (open = true)}
     onblur={() => setTimeout(() => (open = false), 150)}
     type="search"
-    placeholder="Search hills, places or postcodes"
-    aria-label="Search hills, places or postcodes"
+    {placeholder}
+    aria-label={placeholder}
     role="combobox"
     aria-expanded={open && suggestions.length > 0}
-    aria-controls="search-results"
-    aria-activedescendant={open && suggestions[active] ? `sr-${suggestions[active]!.key}` : undefined}
+    aria-controls="{uid}-results"
+    aria-activedescendant={open && suggestions[active] ? `${uid}-${suggestions[active]!.key}` : undefined}
     autocomplete="off"
     spellcheck="false"
   />
   {#if open}
-    <ul id="search-results" role="listbox" aria-label={typing ? 'Search results' : 'Favourite hills'}>
+    <ul id="{uid}-results" class="results" role="listbox" aria-label={typing ? 'Search results' : 'Favourite hills'}>
       {#if !typing && favs.length}
         <li class="heading small muted" role="presentation">Favourites</li>
       {/if}
       {#each suggestions as s, i (s.key)}
         <li
-          id="sr-{s.key}"
+          id="{uid}-{s.key}"
           role="option"
           aria-selected={i === active}
           class:active={i === active}

@@ -15,3 +15,6 @@ data/generated/
 
 # Static data copied into the web app by `pnpm build`.
 apps/web/static/data/
+
+# Alerts kept by the atmos-alerts container when run from a checkout.
+/alerts/

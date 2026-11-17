@@ -113,7 +113,8 @@ The image is built by GitHub Actions on every merge to `main` and published as
 atmos/
 ├── docker-compose.yml   from this repository
 ├── .env                 from .env.example
-└── DoBIH_v18_6.csv      the hills database download (keep its name)
+├── DoBIH_v18_6.csv      the hills database download (keep its name)
+└── alerts/              made by the optional alerts container
 ```
 
 ```sh
@@ -131,6 +132,25 @@ to work: browsers only share location with secure sites. "Pick on map" works eit
 
 To build the image from a checkout instead:
 `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
+
+### Alerts (optional)
+
+The `atmos-alerts` service in `docker-compose.yml` emails people when the forecast matches their
+alerts: "snow and clear air on Ben A'an in the next two days", "still air at Loch Ard tomorrow
+morning". Anyone using Atmos can set alerts on the **Alerts** page or with **Alert me** on a hill
+or loch; each alert goes only to the email address it names. There are no accounts, so keep
+Atmos on your LAN or VPN.
+
+- It checks hourly for "as soon as it's spotted" alerts (nothing is sent between 22:00 and 06:00)
+  and at each daily alert's chosen time, scoring with the same code as the website. It tells you
+  once, again if it gets better, and when something sent has fallen through.
+- Email goes through any SMTP service. With [SMTP2GO](https://www.smtp2go.com/) (free for 1,000
+  emails a month): verify your domain under Sending > Verified Senders, add the DNS records it
+  gives you, create an SMTP user under Sending > SMTP Users, and put the user, password and a
+  from address on that domain in `.env` (see `.env.example`).
+- Alerts are kept in `./alerts/alerts.json` next to `docker-compose.yml`.
+- Atmos's nginx passes `/api/alerts` to the container, so browsers only talk to Atmos. Without
+  the container, the Alerts page and buttons hide themselves.
 
 ## Data and attribution
 

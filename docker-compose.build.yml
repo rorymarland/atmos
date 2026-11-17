@@ -11,3 +11,9 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
+  atmos-alerts:
+    image: atmos-alerts:local
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: docker/alerts.Dockerfile

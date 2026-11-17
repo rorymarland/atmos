@@ -5,6 +5,12 @@
 - Atmos is a **fully static** site. No application server, no database, no proxy. Live data is
   fetched by the browser from free public APIs that allow CORS; everything else is generated at
   build time into small static files.
+- The one exception is **alerts** (`apps/alerts`), a separate, optional container: a small
+  Node API at `/api/alerts` (proxied by the site's nginx) plus an hourly scheduler that emails
+  people over SMTP. The site must keep working without it (the Alerts UI hides when
+  `/api/alerts/status` fails). It scores with `apps/web/src/lib/evaluate-places.ts`, the same
+  code as the website: change scoring there, not in a copy. No accounts: Atmos is LAN/VPN only
+  and each alert just names an email address.
 - **UK only** (England, Scotland, Wales, Northern Ireland). Republic of Ireland hills are excluded.
 - **Free, keyless data only.** Never add a source that needs a paid plan or an API key embedded in the
   client.

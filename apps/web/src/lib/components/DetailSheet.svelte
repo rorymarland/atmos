@@ -5,6 +5,8 @@
    * timeline stay usable alongside it.
    */
   import Star from '#lib/components/Star.svelte';
+  import AlertEditor from '#lib/components/AlertEditor.svelte';
+  import { alerts, placeRefOf, type AlertInput } from '#lib/alerts.svelte.ts';
   import { favourites } from '#lib/favourites.svelte.ts';
   import {
     explain,
@@ -159,6 +161,20 @@
       : '',
   );
   const isWater = $derived(hillResult?.hill.kind === 'water');
+
+  // "Alert me": a new alert for this place, starting from the condition being looked at.
+  let alertOpen = $state(false);
+  let alertPreset = $state<Partial<AlertInput> | null>(null);
+  function openAlert() {
+    if (!hillResult) return;
+    const ref = placeRefOf(hillResult.hill, conditions.data);
+    alertPreset = {
+      places: ref ? [ref] : [],
+      conditions: chosen ? [chosen.profileId] : [],
+      periods: chosen ? [chosen.period] : ['morning', 'evening'],
+    };
+    alertOpen = true;
+  }
   const hillWater = $derived.by(() => {
     const link = hillResult?.hill.water;
     const body = link ? conditions.data?.waters?.[link.index] : undefined;
@@ -264,6 +280,9 @@
             />
           {/if}
         </div>
+        {#if hillResult && alerts.status}
+          <button class="alert-me small" onclick={openAlert}>Alert me</button>
+        {/if}
         {#if hillResult}
           {#if isWater && hillWater}
             <p class="muted small">
@@ -505,7 +524,17 @@
   </div>
 {/if}
 
+<AlertEditor bind:open={alertOpen} preset={alertPreset} />
+
 <style>
+  .alert-me {
+    margin-top: 4px;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    border-radius: 6px;
+    padding: 3px 10px;
+    cursor: pointer;
+  }
   .title-row {
     display: flex;
     align-items: flex-start;
