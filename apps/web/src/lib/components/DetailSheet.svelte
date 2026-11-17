@@ -20,6 +20,7 @@
   import { PERIOD_LABELS } from '#lib/sun.ts';
   import { formatClock, formatTime, londonMidnight } from '#lib/time.ts';
   import AirColumn from './AirColumn.svelte';
+  import Spinner from './Spinner.svelte';
   import HourStrip from './HourStrip.svelte';
   import VerdictMark from './VerdictMark.svelte';
 
@@ -305,7 +306,7 @@
               try again in ten minutes.
             </p>
           {:else}
-            <p class="small muted">Working out the route from OpenStreetMap paths…</p>
+            <p class="small muted working"><Spinner label="Working out the route" /> Working out the route from OpenStreetMap paths…</p>
           {/if}
         </section>
 
@@ -315,10 +316,13 @@
             <ol class="timeline">
               <li><span class="t">{clock(trip.plan.wakeAt)}</span> {chosen.period === 'morning' ? 'Get up' : 'Get ready'}</li>
               <li class="leave"><span class="t">{clock(trip.plan.leaveAt)}</span> Leave {leaveName}</li>
-              <li><span class="t">{clock(trip.plan.parkAt)}</span> {routeFound && trip.walkSource !== 'viewpoint' ? `Park at ${routeStartLabel}` : 'Park'}, after about {formatDuration(trip.driveMinutes)} and {Math.round(trip.roadMiles)} miles</li>
-              <li><span class="t">{clock(trip.plan.arriveAt)}</span> In place, after a {formatDuration(trip.walkMinutes)} {chosen.scope === 'summit' ? 'walk up' : 'walk'}</li>
+              <li><span class="t">{clock(trip.plan.parkAt)}</span> {routeFound ? `Park at ${routeStartLabel}` : 'Park'}, after about {formatDuration(trip.driveMinutes)} and {Math.round(trip.roadMiles)} miles</li>
+              <li><span class="t">{clock(trip.plan.arriveAt)}</span> In place{settings.earlyMinutes ? `, ${settings.earlyMinutes} min early` : ''}, after a {formatDuration(trip.walkMinutes)} {trip.walkSource === 'viewpoint' ? 'walk' : 'walk up'}</li>
               <li><span class="t">{clock(trip.plan.target)}</span> {trip.targetLabel.charAt(0).toUpperCase() + trip.targetLabel.slice(1)}</li>
             </ol>
+            {#if trip.walkSource === 'estimate' && hillResult.route === 'loading'}
+              <p class="small muted working"><Spinner label="Updating the walk time" /> Using a rough walk time until the route is worked out.</p>
+            {/if}
             {#if trip.problem === 'too-early'}
               <p class="small warn">That means getting up before {settings.earliestUp}.</p>
             {:else if trip.problem === 'too-late'}
@@ -331,7 +335,7 @@
                 ? 'from the route above'
                 : trip.walkSource === 'estimate'
                   ? 'a rough estimate by Naismith’s rule from the valley floor'
-                  : 'a short stroll from parking'}.
+                  : 'a short stroll from parking, since this is shot from the valley'}.
             </p>
           {:else}
             <p class="small muted">Set a start point or <a href="/settings#home">your home</a> to see when to leave.</p>
@@ -380,6 +384,11 @@
 {/if}
 
 <style>
+  .working {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
   .midges {
     margin: 8px 0 0;
     padding: 6px 10px;

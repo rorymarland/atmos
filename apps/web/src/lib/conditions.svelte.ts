@@ -622,9 +622,11 @@ class Conditions {
           c.window,
           ref?.keyHour?.time ?? null,
         );
-        const summitScope = c.scope === 'summit';
-        const walkMinutes = summitScope ? summitWalk : VIEWPOINT_WALK_MINUTES;
-        const walkSource = !summitScope ? 'viewpoint' : found ? 'route' : 'estimate';
+        // Where you'd stand: the summit means the walk up, the valley a short stroll.
+        const cfg = this.data?.config.profiles[c.profileId];
+        const onTop = (cfg?.standAt ?? c.scope) === 'summit';
+        const walkMinutes = onTop ? summitWalk : VIEWPOINT_WALK_MINUTES;
+        const walkSource = !onTop ? 'viewpoint' : found ? 'route' : 'estimate';
         const plan = planTrip({
           target: target.at,
           driveMinutes: drive.minutes,

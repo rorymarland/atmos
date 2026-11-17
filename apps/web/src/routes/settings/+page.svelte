@@ -163,7 +163,7 @@
     </label>
     <label class="field">Be in place early by
       <select bind:value={settings.earlyMinutes}>
-        {#each [0, 10, 15, 20, 30, 45] as m (m)}<option value={m}>{m} min</option>{/each}
+        {#each [0, 10, 15, 20, 30, 45, 60] as m (m)}<option value={m}>{m} min</option>{/each}
       </select>
     </label>
     <label class="field">Walking pace

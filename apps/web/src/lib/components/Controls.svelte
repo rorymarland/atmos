@@ -254,6 +254,13 @@
         {#each driveMiles as d (d)}<option value={d}>{d} miles</option>{/each}
       </select>
     </label>
+
+      <label class="row">
+        <span class="label">Be in place early by</span>
+        <select bind:value={settings.earlyMinutes}>
+          {#each [0, 10, 15, 20, 30, 45, 60] as m (m)}<option value={m}>{m} min</option>{/each}
+        </select>
+      </label>
   </div>
   </details>
 
