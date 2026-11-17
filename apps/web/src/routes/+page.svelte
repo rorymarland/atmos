@@ -19,6 +19,7 @@
   import type { Hill } from '@atmos/engine';
   import ResultsList, { type Pick } from '#lib/components/ResultsList.svelte';
   import VerdictMark from '#lib/components/VerdictMark.svelte';
+  import Quiz from '#lib/components/Quiz.svelte';
 
   const PANEL_KEY = 'atmos.panelOpen';
   const VERDICT_COLOURS = { go: '#2f7a50', maybe: '#b98318', no: '#a3412b', nodata: '#8a979f' };
@@ -100,6 +101,18 @@
   function resetAll() {
     resetFilters();
     pin = null;
+    if (hillOpen) {
+      const url = new URL(page.url.href);
+      url.searchParams.delete('hill');
+      goto(url, { replace: true, reset: false });
+    }
+  }
+
+  let quizOpen = $state(false);
+  /** The quiz filled in the search: show its results, not an open hill. */
+  function quizDone() {
+    pin = null;
+    panelOpen = true;
     if (hillOpen) {
       const url = new URL(page.url.href);
       url.searchParams.delete('hill');
@@ -865,11 +878,18 @@
     </div>
   </div>
 
+  <Quiz bind:open={quizOpen} onDone={quizDone} />
+
   {#if panelOpen}
     <aside class="panel" aria-label="Where to go">
       <header class="panel-head">
         <h1>{hillOpen ? 'Hill' : 'Where to go'}</h1>
         <div class="head-buttons">
+          <button
+            class="hide"
+            onclick={() => (quizOpen = true)}
+            title="Answer a few questions and Atmos fills in the filters for you."
+          >Filter quiz</button>
           <button
             class="hide"
             onclick={resetAll}

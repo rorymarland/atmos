@@ -5,19 +5,14 @@
   import { settings } from '#lib/settings.svelte.ts';
   import { MOMENT_LABELS, PERIOD_LABELS, type Moment, type Period } from '#lib/sun.ts';
   import { dayLabel } from '#lib/time.ts';
+  import { CONDITION_GROUPS } from '#lib/groups.ts';
 
   let {
     picking = false,
     onPickStart,
   }: { picking?: boolean; onPickStart?: () => void } = $props();
 
-  const GROUPS: { label: string; ids: string[] }[] = [
-    { label: 'Light and sky', ids: ['sky', 'dramatic', 'clarity', 'lenticular'] },
-    { label: 'Cloud and water', ids: ['inversion', 'mist', 'reflections', 'waterfalls'] },
-    { label: 'Winter', ids: ['snow', 'alpenglow', 'frost', 'frozen'] },
-    { label: 'Night', ids: ['astro', 'aurora'] },
-    { label: 'On foot', ids: ['walking'] },
-  ];
+  const GROUPS = CONDITION_GROUPS;
   const ALL_PERIODS: Period[] = ['morning', 'day', 'evening', 'night'];
 
   const profiles = $derived(conditions.data?.config.profiles ?? {});
