@@ -30,6 +30,7 @@ import {
 } from '@atmos/engine';
 import {
   fetchEnsemble,
+  fetchMetOfficeEnsemble,
   HARMONIE_REQUEST,
   HORIZON_REQUEST,
   type Ensemble,
@@ -97,6 +98,7 @@ export interface ConditionTrip extends ConditionResult {
 
 /** A hill's walking route: found, none within reach, still working, or unreachable. */
 export type RouteState = HillRoute | null | 'loading' | 'failed';
+export type EnsembleState = Ensemble | 'loading' | 'failed';
 
 export interface HillResult {
   hill: Hill;
@@ -217,20 +219,25 @@ class Conditions {
   harmonie = $state.raw<Map<string, ModelForecast[]>>(new Map());
   /** Cloud towards the sunrise (am) and sunset (pm) for each zone. */
   horizons = $state.raw<Map<string, { am?: ModelForecast; pm?: ModelForecast }>>(new Map());
-  /** Ensembles for hills that have been opened, by hill number. */
-  ensembles = $state.raw<Map<number, Ensemble | 'loading' | 'failed'>>(new Map());
+  /** Ensembles for hills that have been opened, by family and hill number. */
+  ensembles = $state.raw<Map<number, EnsembleState>>(new Map());
+  metOfficeEnsembles = $state.raw<Map<number, EnsembleState>>(new Map());
 
-  /** Fetches the ensemble for one place, once per page load. */
-  async loadEnsemble(hillNumber: number, lat: number, lon: number) {
-    if (this.ensembles.has(hillNumber)) return;
-    this.ensembles = new Map(this.ensembles).set(hillNumber, 'loading');
-    try {
-      const e = await fetchEnsemble(lat, lon);
-      this.ensembles = new Map(this.ensembles).set(hillNumber, e);
-    } catch (err) {
-      console.warn('Ensemble:', err);
-      this.ensembles = new Map(this.ensembles).set(hillNumber, 'failed');
-    }
+  /** Fetches both ensembles (ECMWF and Met Office) for one place, once per page load. */
+  loadEnsemble(hillNumber: number, lat: number, lon: number) {
+    const load = async (key: 'ensembles' | 'metOfficeEnsembles', get: () => Promise<Ensemble>) => {
+      if (this[key].has(hillNumber)) return;
+      this[key] = new Map(this[key]).set(hillNumber, 'loading');
+      try {
+        const e = await get();
+        this[key] = new Map(this[key]).set(hillNumber, e);
+      } catch (err) {
+        console.warn('Ensemble:', err);
+        this[key] = new Map(this[key]).set(hillNumber, 'failed');
+      }
+    };
+    void load('ensembles', () => fetchEnsemble(lat, lon));
+    void load('metOfficeEnsembles', () => fetchMetOfficeEnsemble(lat, lon));
   }
 
   /** Walking routes by hill number. */

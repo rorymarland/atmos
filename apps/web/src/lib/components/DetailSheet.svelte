@@ -14,7 +14,7 @@
   import { ensembleShare, type EnsembleVariable } from '@atmos/data-client';
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
-  import { conditions, keyHourProfile, type ConditionTrip } from '#lib/conditions.svelte.ts';
+  import { conditions, keyHourProfile, type ConditionTrip, type EnsembleState } from '#lib/conditions.svelte.ts';
   import { settings } from '#lib/settings.svelte.ts';
   import { modelLabel } from '#lib/static-data.ts';
   import { PERIOD_LABELS } from '#lib/sun.ts';
@@ -82,20 +82,44 @@
     frost: ['clear', 'calm'],
     snow: ['clear', 'dry'],
   };
+  const metOffice = $derived(hillResult ? conditions.metOfficeEnsembles.get(hillResult.hill.number) : undefined);
+  const ensembleAt = $derived.by(() => {
+    if (!chosen) return undefined;
+    return chosen.result.byModel.find((m) => m.model === chosen.result.referenceModel)?.keyHour?.time;
+  });
+  type Share = { yes: number; of: number } | null;
+  const shareOf = (e: EnsembleState | undefined, variable: EnsembleVariable, at: number, test: (v: number) => boolean): Share =>
+    e && typeof e === 'object' ? ensembleShare(e, variable, at, test) : null;
+  /** Each check for the chosen condition, asked of both ensembles at its best hour. */
   const ensembleRows = $derived.by(() => {
-    if (!chosen || !ensemble || typeof ensemble === 'string') return [];
-    const ref = chosen.result.byModel.find((m) => m.model === chosen.result.referenceModel);
-    const at = ref?.keyHour?.time;
-    if (at === undefined) return [];
+    if (!chosen || ensembleAt === undefined) return [];
+    const at = ensembleAt;
     return (CHECKS_FOR[chosen.profileId] ?? ['dry', 'calm'])
       .flatMap((k) => ENSEMBLE_CHECKS[k] ?? [])
-      .map((c) => ({ ...c, share: ensembleShare(ensemble, c.variable, at, c.test) }))
-      .filter((r) => r.share !== null);
+      .map((c) => ({
+        ...c,
+        ecmwf: shareOf(ensemble, c.variable, at, c.test),
+        ukmo: shareOf(metOffice, c.variable, at, c.test),
+      }))
+      .filter((r) => r.ecmwf !== null || r.ukmo !== null);
   });
-  /** The deciding check found in fewer than half the runs: worth a warning. */
-  const ensembleDoubt = $derived(
-    ensembleRows.some((r) => r.key && r.share && r.share.yes / r.share.of < 0.5),
+  const lowShare = (s: Share) => !!s && s.yes / s.of < 0.5;
+  /** How the deciding checks went: both ensembles doubtful, split, or fine. */
+  const ensembleDoubt = $derived.by((): 'both' | 'ecmwf' | 'ukmo' | null => {
+    const key = ensembleRows.filter((r) => r.key);
+    const e = key.some((r) => lowShare(r.ecmwf));
+    const u = key.some((r) => lowShare(r.ukmo));
+    const haveE = key.some((r) => r.ecmwf);
+    const haveU = key.some((r) => r.ukmo);
+    if ((e || !haveE) && (u || !haveU) && (e || u)) return 'both';
+    if (e) return 'ecmwf';
+    if (u) return 'ukmo';
+    return null;
+  });
+  const ensemblesLoading = $derived(
+    [ensemble, metOffice].some((x) => x === undefined || x === 'loading'),
   );
+  const ensemblesFailed = $derived(ensemble === 'failed' && metOffice === 'failed');
 
   let chosenKey = $state<string | null>(null);
   $effect(() => {
@@ -254,27 +278,41 @@
             <p class="small warn">Only {result.agreement.go} of {result.agreement.models} models say Go, so it’s a Maybe.</p>
           {/if}
           <div class="ensemble">
-            <h4 class="small">Ensemble check{#if ensembleRows.length}, ECMWF runs at {clock(chosen.result.byModel.find((m) => m.model === chosen.result.referenceModel)?.keyHour?.time ?? 0)}{/if}</h4>
-            {#if ensemble === 'loading' || ensemble === undefined}
-              <p class="small muted">Fetching the ensemble…</p>
-            {:else if ensemble === 'failed'}
-              <p class="small muted">The ensemble isn’t available right now.</p>
+            <h4 class="small">Ensemble check{#if ensembleRows.length && ensembleAt !== undefined}, runs at {clock(ensembleAt)}{/if}</h4>
+            {#if ensembleRows.length === 0 && ensemblesLoading}
+              <p class="small muted">Fetching the ensembles…</p>
+            {:else if ensemblesFailed}
+              <p class="small muted">The ensembles aren’t available right now.</p>
             {:else if ensembleRows.length === 0}
-              <p class="small muted">The ensemble doesn’t reach this hour.</p>
+              <p class="small muted">The ensembles don’t reach this hour.</p>
             {:else}
               <ul>
                 {#each ensembleRows as r (r.label)}
                   <li>
-                    <span>{r.label}</span>
-                    <span class="ens-bar" aria-hidden="true"><i style="width: {Math.round((r.share!.yes / r.share!.of) * 100)}%"></i></span>
-                    <strong>{r.share!.yes} of {r.share!.of}</strong>
+                    <span class="ens-label">{r.label}</span>
+                    {#each [{ name: 'ECMWF', s: r.ecmwf, state: ensemble }, { name: 'Met Office', s: r.ukmo, state: metOffice }] as fam (fam.name)}
+                      <span class="ens-fam">{fam.name}</span>
+                      {#if fam.s}
+                        <span class="ens-bar" aria-hidden="true"><i style="width: {Math.round((fam.s.yes / fam.s.of) * 100)}%"></i></span>
+                        <strong>{fam.s.yes} of {fam.s.of}</strong>
+                      {:else}
+                        <span class="ens-none small muted">{fam.state === 'loading' || fam.state === undefined ? 'Fetching…' : 'No data'}</span>
+                      {/if}
+                    {/each}
                   </li>
                 {/each}
               </ul>
-              {#if ensembleDoubt}
+              {#if ensembleDoubt === 'both'}
                 <p class="small warn">Most ensemble runs disagree with the main forecast here: treat it as a long shot.</p>
+              {:else if ensembleDoubt === 'ecmwf'}
+                <p class="small warn">The ensembles split: the Met Office’s runs back this, but most of ECMWF’s don’t.</p>
+              {:else if ensembleDoubt === 'ukmo'}
+                <p class="small warn">The ensembles split: ECMWF’s runs back this, but most of the Met Office’s don’t.</p>
               {:else}
-                <p class="small muted">Each run is the same model started from slightly different conditions; more runs agreeing means more confidence.</p>
+                <p class="small muted">Each run is the same model started from slightly different conditions; more runs agreeing, in both ensembles, means more confidence.</p>
+              {/if}
+              {#if typeof metOffice === 'object' && metOffice.sources?.cloud_cover_low && ensembleRows.some((r) => r.variable === 'cloud_cover_low')}
+                <p class="small muted">Met Office low cloud comes from its 2 km UK ensemble, which has only a few runs.</p>
               {/if}
             {/if}
           </div>
@@ -416,9 +454,20 @@
   }
   .ensemble li {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 60px auto;
-    gap: 8px;
+    grid-template-columns: auto minmax(40px, 1fr) auto;
+    gap: 2px 8px;
     align-items: center;
+  }
+  .ens-label {
+    grid-column: 1 / -1;
+  }
+  .ens-fam {
+    color: var(--muted);
+    font-size: 0.8rem;
+    padding-left: 6px;
+  }
+  .ens-none {
+    grid-column: 2 / -1;
   }
   .ens-bar {
     height: 6px;
