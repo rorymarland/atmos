@@ -370,11 +370,16 @@ class Conditions {
     this.data ? Object.entries(this.data.config.profiles) : [],
   );
 
+  /** Ticked when nothing is chosen: every photo condition, and hill walking. */
+  defaultTicked = $derived(
+    this.profiles.filter(([id, p]) => p.photo || id === 'walking').map(([id]) => id),
+  );
+
   /** The ticked conditions. */
   ticked = $derived.by(() => {
     const ids = this.profiles.map(([id]) => id);
     if (settings.conditions) return new Set(settings.conditions.filter((id) => ids.includes(id)));
-    return new Set(this.profiles.filter(([, p]) => p.photo).map(([id]) => id));
+    return new Set(this.defaultTicked);
   });
 
   /** Hills passing the list and height filters. */

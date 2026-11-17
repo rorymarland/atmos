@@ -15,7 +15,7 @@ export interface Settings {
   theme: 'light' | 'dark';
   wind: 'kmh' | 'mph';
   dayOffset: number;
-  /** Condition ids that count towards the photo score; null means every photo condition. */
+  /** Condition ids that count towards the photo score; null means the default set: every photo condition and hill walking. */
   conditions: string[] | null;
   /** Parts of the day to consider. */
   periods: Period[];

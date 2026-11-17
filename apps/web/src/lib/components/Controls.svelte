@@ -90,9 +90,8 @@
     settings.conditions = [...next];
   }
   function setAll(on: boolean) {
-    settings.conditions = on
-      ? Object.entries(profiles).filter(([, p]) => p.photo).map(([id]) => id)
-      : [];
+    // All is the default set (photo conditions and walking): stored as null like a reset.
+    settings.conditions = on ? null : [];
   }
   function togglePeriod(p: Period) {
     const has = settings.periods.includes(p);
@@ -160,7 +159,7 @@
     <summary>Look for <span class="small muted">{ticked.size} ticked, {settings.periods.length === 4 ? 'any time' : settings.periods.map((p) => PERIOD_LABELS[p].toLowerCase()).join(', ')}</span></summary>
     <div class="section-body">
     <div class="quick small">
-      <button class="link" onclick={() => setAll(true)}>All photo conditions</button>
+      <button class="link" onclick={() => setAll(true)}>All</button>
       <button class="link" onclick={() => setAll(false)}>None</button>
     </div>
     {#each groups as g (g.label)}
