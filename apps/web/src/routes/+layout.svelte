@@ -24,6 +24,18 @@
     if (zones.length > 0) untrack(() => conditions.refresh());
   });
 
+  // Shared forecasts: look for a newer copy every five minutes and when the tab is shown
+  // again. A no-op when this browser fetches from Open-Meteo itself.
+  $effect(() => {
+    const id = setInterval(() => conditions.poll(), 5 * 60_000);
+    const onShow = () => document.visibilityState === 'visible' && conditions.poll();
+    document.addEventListener('visibilitychange', onShow);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onShow);
+    };
+  });
+
   // The aurora nowcast: when the aurora is ticked for tonight, then every ten minutes.
   $effect(() => {
     if (!conditions.auroraShown || settings.dayOffset !== 0) return;

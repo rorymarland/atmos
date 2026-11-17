@@ -36,6 +36,7 @@ import {
 import { londonMidnight } from '../../web/src/lib/time';
 import type { PlaceRef } from './model';
 import type { DayConditions } from './rules';
+import type { Feeder } from './forecasts';
 
 export interface SiteData {
   hills: Map<number, Hill>;
@@ -132,6 +133,40 @@ export function londonDate(dayOffset: number, now = Date.now()): string {
 
 export const FORECAST_DAYS = 5;
 
+/** Fetches zones straight from Open-Meteo (no shared copy, or a zone it lacks). */
+async function fetchDirect(
+  zones: Zone[],
+  now: number,
+  horizons: Map<string, { am?: ModelForecast; pm?: ModelForecast }>,
+): Promise<Map<string, ModelForecast[]>> {
+  const out = new Map<string, ModelForecast[]>();
+  if (zones.length === 0) return out;
+  const main = await fetchZoneForecasts(zones, { cache, maxAgeMs: MAX_AGE_MS });
+  const forecasts = new Map<string, ModelForecast[]>(main.map((r) => [r.zoneId, r.forecasts]));
+  // HARMONIE, the horizon and Kp refine the scores; a failure there only costs the extra.
+  const harmonie = await fetchZoneForecasts(zones, {
+    request: HARMONIE_REQUEST,
+    cache,
+    maxAgeMs: MAX_AGE_MS,
+  })
+    .then((r) => new Map(r.map((x) => [x.zoneId, x.forecasts])))
+    .catch(() => new Map<string, ModelForecast[]>());
+  await fetchZoneForecasts(
+    zones.flatMap((z) => horizonSites(z, now)),
+    { request: HORIZON_REQUEST, cache, maxAgeMs: MAX_AGE_MS },
+  )
+    .then((res) => {
+      for (const r of res) {
+        const [zoneId, side] = r.zoneId.split('|') as [string, 'am' | 'pm'];
+        horizons.set(zoneId, { ...horizons.get(zoneId), [side]: r.forecasts[0] });
+      }
+    })
+    .catch(() => undefined);
+  for (const z of zones)
+    out.set(z.id, [...(forecasts.get(z.id) ?? []), ...(harmonie.get(z.id) ?? [])]);
+  return out;
+}
+
 /**
  * Scores the places for today and the next four days. Places whose data has gone (a hill
  * renumbered, a loch dropped) are reported back so the alert can say so.
@@ -140,6 +175,7 @@ export async function scorePlaces(
   refs: PlaceRef[],
   data: SiteData,
   now = Date.now(),
+  shared?: Pick<Feeder, 'zone'>,
 ): Promise<{ days: DayConditions[]; missing: PlaceRef[] }> {
   const resolved: { ref: PlaceRef; hill: Hill }[] = [];
   const missing: PlaceRef[] = [];
@@ -153,35 +189,27 @@ export async function scorePlaces(
   const zoneIds = new Set(resolved.map((r) => r.hill.zone));
   const zones = data.zones.filter((_, i) => zoneIds.has(i));
 
-  const main = await fetchZoneForecasts(zones, { cache, maxAgeMs: MAX_AGE_MS });
-  const forecasts = new Map<string, ModelForecast[]>(main.map((r) => [r.zoneId, r.forecasts]));
-  // HARMONIE, the horizon and Kp refine the scores; a failure there only costs the extra.
-  const harmonie = await fetchZoneForecasts(zones, {
-    request: HARMONIE_REQUEST,
-    cache,
-    maxAgeMs: MAX_AGE_MS,
-  })
-    .then((r) => new Map(r.map((x) => [x.zoneId, x.forecasts])))
-    .catch(() => new Map<string, ModelForecast[]>());
+  // The shared copy first; only zones it doesn't hold yet are fetched here.
+  const sharedModels = new Map<string, ModelForecast[]>();
   const horizons = new Map<string, { am?: ModelForecast; pm?: ModelForecast }>();
-  await fetchZoneForecasts(
-    zones.flatMap((z) => horizonSites(z, now)),
-    { request: HORIZON_REQUEST, cache, maxAgeMs: MAX_AGE_MS },
-  )
-    .then((res) => {
-      for (const r of res) {
-        const [zoneId, side] = r.zoneId.split('|') as [string, 'am' | 'pm'];
-        horizons.set(zoneId, { ...horizons.get(zoneId), [side]: r.forecasts[0] });
-      }
-    })
-    .catch(() => undefined);
+  for (const z of zones) {
+    const s = shared?.zone(z.id);
+    if (!s) continue;
+    sharedModels.set(z.id, s.models);
+    horizons.set(z.id, s.horizon);
+  }
+  const direct = await fetchDirect(
+    zones.filter((z) => !sharedModels.has(z.id)),
+    now,
+    horizons,
+  );
   const kp: KpBin[] = await fetchKpForecast().catch(() => []);
 
   // One merged array per zone, so evaluatePlaces shares each zone's work across its places.
   const models = new Map<string, ModelForecast[]>();
   const modelsFor = (id: string) => {
     let m = models.get(id);
-    if (!m) models.set(id, (m = [...(forecasts.get(id) ?? []), ...(harmonie.get(id) ?? [])]));
+    if (!m) models.set(id, (m = sharedModels.get(id) ?? direct.get(id) ?? []));
     return m;
   };
   const days: DayConditions[] = [];

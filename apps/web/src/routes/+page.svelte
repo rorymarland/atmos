@@ -1009,6 +1009,10 @@
             <button class="link" onclick={() => conditions.refresh(true)}>Try again</button>
           {:else if conditions.loading}
             Fetching forecasts{#if conditions.progress}, {conditions.progress.done} of {conditions.progress.total}{/if}…
+          {:else if conditions.shared?.met}
+            <span title="Fetched on the Atmos server for everyone and updated as new model runs come out.">
+              Met Office updated {formatTime(conditions.shared.met)}{#if conditions.shared.ecmwf}, ECMWF {formatTime(conditions.shared.ecmwf)}{/if}. Updates itself.
+            </span>
           {:else if conditions.fetchedAt}
             Forecasts from {formatTime(conditions.fetchedAt)} ({ageLabel(conditions.fetchedAt, conditions.now)}).
             <button class="link" onclick={() => conditions.refresh(true)}>Refresh</button>

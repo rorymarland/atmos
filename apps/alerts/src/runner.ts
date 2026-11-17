@@ -18,6 +18,7 @@ import {
 import { placeKey, type Alert, type PlaceRef } from './model';
 import { decide, findMatches } from './rules';
 import type { Store } from './store';
+import type { Feeder } from './forecasts';
 
 export interface RunnerOptions {
   store: Store;
@@ -26,6 +27,8 @@ export interface RunnerOptions {
   /** The Atmos address people use, for links in emails. */
   siteUrl: string;
   send: (email: Email) => Promise<void>;
+  /** The shared forecasts, when this service fetches them. */
+  forecasts?: Feeder;
   /** Custom places, scored like hills. */
   places: () => CustomPlace[];
   log?: (msg: string) => void;
@@ -99,7 +102,12 @@ export class Runner {
       const data = await this.data();
       const refs = new Map<string, PlaceRef>();
       for (const a of alerts) for (const p of a.places) refs.set(placeKey(p), p);
-      const { days, missing } = await scorePlaces([...refs.values()], data, now);
+      const { days, missing } = await scorePlaces(
+        [...refs.values()],
+        data,
+        now,
+        this.opts.forecasts,
+      );
       const today = londonDate(0, now);
       const tomorrow = londonDate(1, now);
 

@@ -76,7 +76,8 @@
 ## How it works
 
 A fully static site: the browser fetches forecasts directly from free, keyless public APIs, and
-the host only serves files. Summit conditions (inversion, snow, clear air, walking) are judged at
+the host only serves files. With the optional `atmos-alerts` container running, forecasts are
+fetched once on the server and shared instead (see below). Summit conditions (inversion, snow, clear air, walking) are judged at
 each summit's height from the vertical profile; the rest come from the area's valley forecast.
 Thresholds and weights live in `config/profiles.yaml`. Drive times are estimates from
 straight-line distance and typical road speeds; walk-ins use Naismith's rule.
@@ -137,7 +138,25 @@ to work: browsers only share location with secure sites. "Pick on map" works eit
 To build the image from a checkout instead:
 `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
-### Alerts and shared places (optional)
+### Alerts, shared forecasts and shared places (optional)
+
+The `atmos-alerts` container fetches the forecasts for every zone itself and shares them at
+`/api/forecasts`. Open-Meteo's free API allows about 10,000 calls a day per IP address, and a
+full refresh of every zone costs around 800, so a few devices each fetching hourly can use up the
+day by the evening. With the container running, the whole of Atmos uses about 5,000 to 6,000 a
+day however many people and devices use it:
+
+- The Met Office models are fetched at most every 2 hours, ECMWF, HARMONIE and the
+  sunrise and sunset horizons at most every 3. Each is fetched only once a one-point probe shows
+  a new model run has come out, so ECMWF (new runs every 6 hours) isn't downloaded again until
+  it changes. The Met Office's open data already runs about 4 hours behind, so the gap adds
+  little.
+- A daily budget skips the extras before the Met Office feed if spending ever gets close to the
+  limit, and it backs off for half an hour if Open-Meteo refuses a request.
+- The forecasts are kept in `./alerts/forecasts/`, so a restart costs nothing.
+- Browsers check for a newer copy every 5 minutes and when the tab is shown again, so
+  there's nothing to refresh by hand. The panel says when each model was last updated.
+- Without the container, each browser fetches from Open-Meteo itself, as before.
 
 The `atmos-alerts` container also keeps custom places (`./alerts/places.json`) so everyone
 using your Atmos sees the same ones on every device; without it, places are kept in each
@@ -155,14 +174,14 @@ Atmos on your LAN or VPN.
   then put an API key (Sending > API Keys) and a from address on that domain in `.env` (see
   `.env.example`). Any other SMTP service works too, with the `SMTP_` settings instead.
 - Alerts are kept in `./alerts/alerts.json` next to `docker-compose.yml`.
-- Atmos's nginx passes `/api/alerts` to the container, so browsers only talk to Atmos. Without
+- Atmos's nginx passes `/api/` to the container, so browsers only talk to Atmos. Without
   the container, the Alerts page and buttons hide themselves.
 
 ## Data and attribution
 
 | Source                                                                                                                                                                                     | Use                                                                                  | Licence / terms                               |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | --------------------------------------------- |
-| [Open-Meteo](https://open-meteo.com/) (UK Met Office, ECMWF, DWD ICON models)                                                                                                              | Forecasts, fetched live by the browser                                               | CC BY 4.0; free API is for non-commercial use |
+| [Open-Meteo](https://open-meteo.com/) (UK Met Office, ECMWF, DWD ICON models)                                                                                                              | Forecasts, fetched by the alerts container or live by the browser                    | CC BY 4.0; free API is for non-commercial use |
 | [Database of British and Irish Hills](https://www.hills-database.co.uk/) (DoBIH)                                                                                                           | Hill names, heights, positions, lists                                                | CC BY 4.0                                     |
 | [Postcodes.io](https://postcodes.io/) (OS, Royal Mail and ONS data)                                                                                                                        | Finding home from a postcode                                                         | OGL v3.0                                      |
 | [GeoNames](https://www.geonames.org/) via Open-Meteo geocoding                                                                                                                             | Finding home from a place name                                                       | CC BY 4.0                                     |
