@@ -84,7 +84,7 @@ scripts/             build-time data pipeline (`pnpm build:data`)
 data/raw/            hand-downloaded source data, never committed
 data/generated/      output of the pipeline, never committed
 docker/              Dockerfile, nginx config and the container start-up script
-tools/spike/         browser check of every live data source (open the HTML file in a browser)
+apps/web/static/check/  browser check of every live data source, served at /check
 ```
 
 ## Development

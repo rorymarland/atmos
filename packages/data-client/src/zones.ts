@@ -14,7 +14,7 @@ import {
 /** What the zone overview fetches. Kept small: see estimateCallWeight. */
 export const ZONE_REQUEST: Omit<ForecastRequest, 'points'> = {
   // Combined UKV 2 km (about 61 h) + UKMO Global (7 days), plus ECMWF as an independent
-  // second opinion. Confirmed with the browser check in tools/spike.
+  // second opinion. Confirmed with the browser check at /check.
   models: ['ukmo_seamless', 'ecmwf_ifs025'],
   surface: [
     'temperature2m',

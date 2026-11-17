@@ -2,7 +2,7 @@
  * Open-Meteo forecast requests and responses, converted to the engine's ModelForecast.
  *
  * Model ids and variable names follow Open-Meteo's documented API; the browser check
- * page (tools/spike) confirms them against the live service.
+ * page (/check, apps/web/static/check) confirms them against the live service.
  */
 import type { LevelSeries, ModelForecast, Series, SurfaceSeries } from '@atmos/engine';
 
