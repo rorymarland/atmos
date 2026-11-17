@@ -4,6 +4,7 @@
   import { onMount, untrack } from 'svelte';
   import { conditions } from '#lib/conditions.svelte.ts';
   import { settings, watchSettings } from '#lib/settings.svelte.ts';
+  import { alerts } from '#lib/alerts.svelte.ts';
 
   let { children } = $props();
 
@@ -11,6 +12,8 @@
 
   onMount(() => {
     conditions.init();
+    // The Alerts link only shows when the alerts container is running.
+    void alerts.probe();
   });
 
   // Fetch whenever the set of zones the filters need changes. Cached zones cost nothing.
@@ -29,11 +32,12 @@
     return () => clearInterval(id);
   });
 
-  const NAV = [
+  const NAV = $derived([
     { href: '/', label: 'Map' },
+    ...(alerts.status ? [{ href: '/alerts', label: 'Alerts' }] : []),
     { href: '/settings', label: 'Settings' },
     { href: '/about', label: 'About' },
-  ];
+  ]);
   const onMap = $derived(page.url.pathname === '/');
 </script>
 

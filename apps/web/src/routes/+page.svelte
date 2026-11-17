@@ -121,6 +121,22 @@
     }
   }
 
+  // A link from an alert email names the day (?date=2026-11-19): show that day, then drop
+  // the date from the address so it doesn't stick.
+  $effect(() => {
+    const date = page.url.searchParams.get('date');
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+    untrack(() => {
+      const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' });
+      for (let d = 0; d < 5; d++) {
+        if (fmt.format(londonMidnight(d) + 12 * 3_600_000) === date) settings.dayOffset = d;
+      }
+      const url = new URL(page.url.href);
+      url.searchParams.delete('date');
+      goto(url, { replace: true, reset: false });
+    });
+  });
+
   // A link or reload straight to a hill that isn't on the lists: find it in the search data.
   $effect(() => {
     const n = Number(page.url.searchParams.get('hill'));
@@ -824,7 +840,7 @@
   <div class="map" bind:this={container} role="region" aria-label="Map of hills coloured by verdict"></div>
 
   <div class="search-box">
-    <PlaceSearch onHill={onSearchHill} onPlace={onSearchPlace} />
+    <PlaceSearch onHill={onSearchHill} onPlace={onSearchPlace} keepQuery />
     {#if found}
       <div class="found small">
         <span>{found.label}</span>

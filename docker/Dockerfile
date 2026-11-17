@@ -10,6 +10,7 @@ RUN corepack enable
 # Dependencies first, so code changes don't reinstall them.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/
+COPY apps/alerts/package.json apps/alerts/
 COPY packages/engine/package.json packages/engine/
 COPY packages/data-client/package.json packages/data-client/
 RUN pnpm install --frozen-lockfile

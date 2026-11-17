@@ -9,6 +9,10 @@
 #
 # The hill data is rebuilt from the CSV each time the container starts, so a new CSV
 # only needs `docker compose restart`.
+#
+# atmos-alerts is optional: it emails people when the forecast matches their alerts. Fill
+# in the SMTP settings in .env first. Its alerts are kept in ./alerts. Remove the service
+# to run Atmos without alerts; the Alerts page then hides itself.
 
 services:
   atmos:
@@ -30,6 +34,26 @@ services:
     # a host port: remove `ports`, uncomment below, and point NPM at http://atmos:80.
     # networks:
     #   - proxy
+
+  atmos-alerts:
+    image: ghcr.io/rorymarland/atmos-alerts:latest
+    container_name: atmos-alerts
+    restart: unless-stopped
+    depends_on:
+      - atmos
+    environment:
+      TZ: ${TZ:-Europe/London}
+      # The address people use for Atmos, for links in the emails.
+      ATMOS_URL: ${ATMOS_URL:-http://localhost:8085}
+      SMTP_HOST: ${SMTP_HOST:-mail.smtp2go.com}
+      SMTP_PORT: ${SMTP_PORT:-2525}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      ALERTS_FROM: ${ALERTS_FROM:-}
+    volumes:
+      - ./alerts:/data
+    # No ports: Atmos's nginx passes /api/alerts to it over this compose network. If you
+    # move atmos onto the proxy network below, add that network here too.
 
 # networks:
 #   proxy:
