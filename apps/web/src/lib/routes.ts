@@ -1,32 +1,18 @@
 /**
- * Walking routes for hills, worked out in the browser: OpenStreetMap paths and car parks
- * (Overpass) plus Mapterhorn terrain, run through the engine's route search. Saved in
- * IndexedDB so each hill is only routed once a month.
+ * Walking routes for hills: worked out in a Web Worker (route.worker.ts, falling back to the
+ * page where workers aren't available) and saved in IndexedDB so each hill is only routed
+ * once a month.
  */
-import {
-  TILE_PX,
-  routeToSummit,
-  terrainSampler,
-  tilesAround,
-  type HillRoute,
-  type TerrainTile,
-} from '@atmos/engine';
-import { fetchOsmArea } from '@atmos/data-client';
+import type { HillRoute } from '@atmos/engine';
 import { createStore, get, set } from 'idb-keyval';
+import { loadTerrain, searchRoute, type RouteHill } from './route-search';
+import type { RouteReply, RouteRequest } from './route.worker';
 
 /** Bump when the route maths changes, so saved routes are worked out again. */
 const ROUTE_VERSION = 2;
 const KEEP_MS = 30 * 24 * 3_600_000;
 /** Failed lookups are retried sooner: OpenStreetMap may have gained a path. */
 const KEEP_NONE_MS = 7 * 24 * 3_600_000;
-
-/** First look within 8 km; a long walk-in (Ben Alder, say) needs 15. */
-const TRIES = [
-  // One query that covers most hills' usual starts; a second only when it finds none.
-  // Each Overpass query costs 30 to 45 s, so a small first try that often misses is slower.
-  { radiusM: 8000, zoom: 11 },
-  { radiusM: 15000, zoom: 10 },
-];
 
 let store: ReturnType<typeof createStore> | null = null;
 function idb() {
@@ -67,36 +53,6 @@ async function saveRoute(number: number, route: HillRoute | null) {
   }
 }
 
-/** Decodes one Terrarium tile to RGBA pixels, or null where there's no tile (the sea). */
-async function loadTile(z: number, x: number, y: number): Promise<TerrainTile | null> {
-  const res = await fetch(`https://tiles.mapterhorn.com/${z}/${x}/${y}.webp`);
-  if (!res.ok) return null;
-  // No colour management or premultiplying: the colours are data, not a picture.
-  const bitmap = await createImageBitmap(await res.blob(), {
-    colorSpaceConversion: 'none',
-    premultiplyAlpha: 'none',
-  });
-  if (bitmap.width !== TILE_PX || bitmap.height !== TILE_PX) {
-    throw new Error(`Unexpected terrain tile size ${bitmap.width}`);
-  }
-  const canvas =
-    typeof OffscreenCanvas !== 'undefined'
-      ? new OffscreenCanvas(TILE_PX, TILE_PX)
-      : Object.assign(document.createElement('canvas'), { width: TILE_PX, height: TILE_PX });
-  const ctx = canvas.getContext('2d', { willReadFrequently: true }) as
-    CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
-  if (!ctx) throw new Error('No canvas to decode terrain');
-  ctx.drawImage(bitmap, 0, 0);
-  bitmap.close();
-  return { z, x, y, rgba: ctx.getImageData(0, 0, TILE_PX, TILE_PX).data };
-}
-
-async function loadTerrain(lat: number, lon: number, radiusKm: number, zoom: number) {
-  const wanted = tilesAround(lat, lon, radiusKm, zoom);
-  const tiles = await Promise.all(wanted.map((t) => loadTile(t.z, t.x, t.y)));
-  return terrainSampler(tiles.filter((t): t is TerrainTile => t !== null));
-}
-
 /** Ground height at a point in metres, from the terrain tiles routes use; null if unavailable. */
 export async function heightAt(lat: number, lon: number): Promise<number | null> {
   for (const zoom of [12, 11]) {
@@ -110,32 +66,59 @@ export async function heightAt(lat: number, lon: number): Promise<number | null>
   return null;
 }
 
+let worker: Worker | null | undefined;
+let nextId = 0;
+const pending = new Map<
+  number,
+  { resolve: (r: HillRoute | null) => void; reject: (e: Error) => void; hill: RouteHill }
+>();
+
+/** The route worker, started on first use; null where workers aren't available or it failed. */
+function routeWorker(): Worker | null {
+  if (worker !== undefined) return worker;
+  try {
+    worker = new Worker(new URL('./route.worker.ts', import.meta.url), { type: 'module' });
+  } catch {
+    return (worker = null);
+  }
+  worker.onmessage = (e: MessageEvent<RouteReply>) => {
+    const job = pending.get(e.data.id);
+    if (!job) return;
+    pending.delete(e.data.id);
+    if ('error' in e.data) job.reject(new Error(e.data.error));
+    else job.resolve(e.data.route);
+  };
+  // The worker itself broke (its script didn't load, say): finish its jobs on the page.
+  worker.onerror = (e) => {
+    e.preventDefault();
+    console.warn('Route worker failed, routing on the page instead:', e.message);
+    worker?.terminate();
+    worker = null;
+    const jobs = [...pending.values()];
+    pending.clear();
+    for (const job of jobs) searchRoute(job.hill).then(job.resolve, job.reject);
+  };
+  return worker;
+}
+
+function search(hill: RouteHill): Promise<HillRoute | null> {
+  const w = routeWorker();
+  if (!w) return searchRoute(hill);
+  const id = ++nextId;
+  const plain = { number: hill.number, lat: hill.lat, lon: hill.lon, metres: hill.metres };
+  return new Promise((resolve, reject) => {
+    pending.set(id, { resolve, reject, hill: plain });
+    w.postMessage({ id, hill: plain } satisfies RouteRequest);
+  });
+}
+
 /**
  * The quickest route up a hill from a car park or road, or null when there isn't one
  * within 15 km (an island, or a hill with no paths and no road near). Throws when the
  * services can't be reached, so a failure isn't saved as "no route".
  */
-export async function findRoute(hill: {
-  number: number;
-  lat: number;
-  lon: number;
-  metres: number;
-}): Promise<HillRoute | null> {
-  for (const t of TRIES) {
-    const [osm, elevation] = await Promise.all([
-      fetchOsmArea(hill.lat, hill.lon, t.radiusM),
-      loadTerrain(hill.lat, hill.lon, t.radiusM / 1000 + 0.5, t.zoom),
-    ]);
-    const route = routeToSummit({
-      summit: { lat: hill.lat, lon: hill.lon, metres: hill.metres },
-      ...osm,
-      elevation,
-    });
-    if (route) {
-      await saveRoute(hill.number, route);
-      return route;
-    }
-  }
-  await saveRoute(hill.number, null);
-  return null;
+export async function findRoute(hill: RouteHill): Promise<HillRoute | null> {
+  const route = await search(hill);
+  await saveRoute(hill.number, route);
+  return route;
 }
