@@ -316,47 +316,63 @@ export class PointGrid<T extends { lat: number; lon: number }> {
   }
 }
 
-/** The car park nearest the shore, within MAX_PARKING_M, and how far it is from the water. */
-export function nearestParking(
-  w: Water,
-  grid: PointGrid<Parking>,
-): { parking: Parking; shore: [number, number]; distanceM: number } | null {
-  let best: { parking: Parking; shore: [number, number]; distanceM: number } | null = null;
-  const seen = new Set<Parking>();
+export interface Access {
+  parking: Parking;
+  /** The shore point it serves. */
+  shore: [number, number];
+  distanceM: number;
+}
+
+/** Car parks per water at most: one for a lochan, a few spread round a big loch. */
+export const MAX_ACCESS = 4;
+/** Car parks this close to one already kept serve the same stretch of shore. */
+const ACCESS_SPREAD_M = 2000;
+
+/**
+ * Up to MAX_ACCESS car parks within MAX_PARKING_M of the shore, nearest first, spread
+ * along it: for each shore point the nearest car park, then the closest few that serve
+ * different stretches of shore.
+ */
+export function accessPoints(w: Water, grid: PointGrid<Parking>): Access[] {
+  const perShore: Access[] = [];
   for (const s of w.shore) {
+    let best: Access | null = null;
     for (const p of grid.near(s[0], s[1], 1)) {
-      if (seen.has(p)) continue;
-      seen.add(p);
-      for (const s2 of w.shore) {
-        const d = distanceM([p.lat, p.lon], s2);
-        if (d <= MAX_PARKING_M && (!best || d < best.distanceM))
-          best = { parking: p, shore: s2, distanceM: d };
-      }
+      const d = distanceM([p.lat, p.lon], s);
+      if (d <= MAX_PARKING_M && (!best || d < best.distanceM))
+        best = { parking: p, shore: s, distanceM: d };
     }
+    if (best) perShore.push(best);
   }
-  return best;
+  perShore.sort((a, b) => a.distanceM - b.distanceM);
+  const kept: Access[] = [];
+  for (const a of perShore) {
+    if (kept.some((k) => k.parking === a.parking)) continue;
+    if (kept.some((k) => distanceM(k.shore, a.shore) < ACCESS_SPREAD_M)) continue;
+    kept.push(a);
+    if (kept.length >= MAX_ACCESS) break;
+  }
+  return kept;
 }
 
 /** Car parks the public can use: no private or customers-only ones. */
 export function isPublicParking(tags: Record<string, string>): boolean {
   if (tags.amenity !== 'parking') return false;
-  return !['private', 'no', 'customers', 'permit', 'delivery'].includes(tags.access ?? '');
+  if (['private', 'no', 'customers', 'permit', 'delivery'].includes(tags.access ?? ''))
+    return false;
+  // Some are only marked private in their name, e.g. "Club Parking (private)".
+  return !/\b(private|residents?|permit holders?|staff|members)\b/i.test(tags.name ?? '');
 }
 
 /**
  * The committed file, compact: one array per water.
- * [id, name, lat, lon, ha, spanKm, shoreFlat[], parkLat?, parkLon?, parkName?, parkShoreIndex?, parkDistM?]
+ * [id, name, lat, lon, ha, spanKm, shoreFlat[], access[]?] where each access is
+ * [parkLat, parkLon, parkName, shoreIndex, distanceM].
  */
-export type WaterRow = [
-  string,
-  string,
-  number,
-  number,
-  number,
-  number,
-  number[],
-  ...([number, number, string, number, number] | []),
-];
+export type AccessRow = [number, number, string, number, number];
+export type WaterRow =
+  | [string, string, number, number, number, number, number[]]
+  | [string, string, number, number, number, number, number[], AccessRow[]];
 
 export interface WaterFile {
   /** Where and when the OSM data came from. */
@@ -366,51 +382,46 @@ export interface WaterFile {
   waters: WaterRow[];
 }
 
-export function encodeWater(
-  w: Water,
-  park: { parking: Parking; shore: [number, number]; distanceM: number } | null,
-): WaterRow {
+export function encodeWater(w: Water, access: Access[]): WaterRow {
   const flat = w.shore.flat();
-  const base: WaterRow = [w.id, w.name, w.lat, w.lon, w.ha, w.spanKm, flat];
-  if (!park) return base;
-  const idx = w.shore.indexOf(park.shore);
+  if (access.length === 0) return [w.id, w.name, w.lat, w.lon, w.ha, w.spanKm, flat];
   return [
-    ...base.slice(0, 7),
-    Math.round(park.parking.lat * 1e5) / 1e5,
-    Math.round(park.parking.lon * 1e5) / 1e5,
-    park.parking.name,
-    idx,
-    Math.round(park.distanceM),
-  ] as WaterRow;
+    w.id,
+    w.name,
+    w.lat,
+    w.lon,
+    w.ha,
+    w.spanKm,
+    flat,
+    access.map((a) => [
+      Math.round(a.parking.lat * 1e5) / 1e5,
+      Math.round(a.parking.lon * 1e5) / 1e5,
+      a.parking.name,
+      w.shore.indexOf(a.shore),
+      Math.round(a.distanceM),
+    ]),
+  ];
 }
 
 /** Read back a committed row. */
 export function decodeWaterRow(row: WaterRow): {
   water: Water;
-  parking: { lat: number; lon: number; name: string; shoreIndex: number; distanceM: number } | null;
+  access: { lat: number; lon: number; name: string; shore: [number, number]; distanceM: number }[];
 } {
-  const [id, name, lat, lon, ha, span, flat, pLat, pLon, pName, pIdx, pDist] = row as [
-    string,
-    string,
-    number,
-    number,
-    number,
-    number,
-    number[],
-    number?,
-    number?,
-    string?,
-    number?,
-    number?,
-  ];
+  const [id, name, lat, lon, ha, span, flat, access] = row;
   const shore: [number, number][] = [];
   for (let i = 0; i + 1 < flat.length; i += 2) shore.push([flat[i]!, flat[i + 1]!]);
   return {
     water: { id, name, lat, lon, ha, spanKm: span, shore },
-    parking:
-      pLat !== undefined && pLon !== undefined
-        ? { lat: pLat, lon: pLon, name: pName ?? '', shoreIndex: pIdx ?? -1, distanceM: pDist ?? 0 }
-        : null,
+    access: (access ?? [])
+      .filter(([, , , idx]) => shore[idx])
+      .map(([pLat, pLon, pName, idx, d]) => ({
+        lat: pLat,
+        lon: pLon,
+        name: pName,
+        shore: shore[idx]!,
+        distanceM: d,
+      })),
   };
 }
 
@@ -420,31 +431,40 @@ export const HILL_WATER_KM = 3;
 /**
  * For each hill, the still water whose shore comes within HILL_WATER_KM of the summit,
  * preferring bigger and closer water: a sizeable loch at 2 km beats a 1 ha pool at 1 km.
- * Returns the index into `waters` and the distance to the shore, or null.
+ * Returns the index into `waters`, the distance to its shore and the nearest shore point.
  */
 export function linkHillsToWater(
   hills: { lat: number; lon: number }[],
   waters: Water[],
-): ({ index: number; distanceM: number } | null)[] {
-  const pts: { lat: number; lon: number; w: number }[] = [];
+): ({ index: number; distanceM: number; shore: [number, number] } | null)[] {
+  const pts: { lat: number; lon: number; w: number; shore: boolean }[] = [];
   waters.forEach((w, i) => {
-    for (const [lat, lon] of w.shore) pts.push({ lat, lon, w: i });
-    pts.push({ lat: w.lat, lon: w.lon, w: i });
+    for (const [lat, lon] of w.shore) pts.push({ lat, lon, w: i, shore: true });
+    pts.push({ lat: w.lat, lon: w.lon, w: i, shore: false });
   });
   const grid = new PointGrid(pts, 0.03);
   return hills.map((h) => {
-    const nearestBy = new Map<number, number>();
+    const nearestBy = new Map<number, { d: number; at: [number, number] }>();
     for (const p of grid.near(h.lat, h.lon, 2)) {
       const d = distanceM([h.lat, h.lon], [p.lat, p.lon]);
       if (d > HILL_WATER_KM * 1000) continue;
-      if (d < (nearestBy.get(p.w) ?? Infinity)) nearestBy.set(p.w, d);
+      const known = nearestBy.get(p.w);
+      // Distance counts any point; the shore point kept is the nearest true shore point.
+      if (!known || d < known.d) nearestBy.set(p.w, { d, at: known?.at ?? [p.lat, p.lon] });
+      if (p.shore) {
+        const k = nearestBy.get(p.w)!;
+        const atD = distanceM([h.lat, h.lon], k.at);
+        if (d <= atD) k.at = [p.lat, p.lon];
+      }
     }
-    let best: { index: number; distanceM: number; score: number } | null = null;
-    for (const [i, d] of nearestBy) {
+    let best: { index: number; distanceM: number; shore: [number, number]; score: number } | null =
+      null;
+    for (const [i, { d, at }] of nearestBy) {
       const w = waters[i]!;
       const score = (Math.log(1 + w.ha) * (w.name ? 1.3 : 1)) / (1 + d / 1000);
-      if (!best || score > best.score) best = { index: i, distanceM: Math.round(d), score };
+      if (!best || score > best.score)
+        best = { index: i, distanceM: Math.round(d), shore: at, score };
     }
-    return best ? { index: best.index, distanceM: best.distanceM } : null;
+    return best ? { index: best.index, distanceM: best.distanceM, shore: best.shore } : null;
   });
 }

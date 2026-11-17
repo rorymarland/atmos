@@ -11,10 +11,10 @@ import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import {
+  accessPoints,
   encodeWater,
   isPublicParking,
   MIN_HECTARES,
-  nearestParking,
   PointGrid,
   polygonsOf,
   toWater,
@@ -97,10 +97,12 @@ for await (const f of features(args.water)) {
 waters.sort((a, b) => b.ha - a.ha);
 
 let withParking = 0;
+let accessCount = 0;
 const rows = waters.map((w) => {
-  const park = nearestParking(w, grid);
-  if (park) withParking++;
-  return encodeWater(w, park);
+  const access = accessPoints(w, grid);
+  if (access.length) withParking++;
+  accessCount += access.length;
+  return encodeWater(w, access);
 });
 
 const file: WaterFile = {
@@ -115,6 +117,6 @@ writeFileSync(args.out!, json);
 const named = waters.filter((w) => w.name).length;
 console.log(
   `Read ${seen} water features; kept ${waters.length} of ${MIN_HECTARES} ha or more ` +
-    `(${named} named, ${withParking} with a car park within 1.5 km). ` +
+    `(${named} named, ${withParking} with a car park within 1.5 km, ${accessCount} car parks). ` +
     `${(json.length / 1e6).toFixed(1)} MB -> ${args.out}`,
 );

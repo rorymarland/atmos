@@ -6,6 +6,7 @@
  * one; trips (start point, timings) and scoring (ticked conditions, limits) sit on top.
  */
 import {
+  distanceKm,
   distanceMiles,
   estimateDrive,
   estimateSummitWalk,
@@ -70,14 +71,28 @@ const PATH_FACTOR = 1.25;
 /** With no car park within 1.5 km, a rough allowance from wherever you can stop. */
 const LOCHSIDE_ROUGH_MIN = 15;
 
-/** Drive to the loch's car park (or its shore) and walk to the water. */
+/** A car park serves the hill's bit of shore when its own shore point is this close. */
+const SAME_SHORE_KM = 2.5;
+
+/**
+ * Drive to a car park by the loch (or its shore) and walk to the water. From a hill, the
+ * car park serving the shore nearest the hill (`near`); for a loch on its own, the car
+ * park nearest the start.
+ */
 export function lochsideTrip(
   body: WaterBody,
   start: { lat: number; lon: number },
   pace: keyof typeof PACE_FACTOR,
+  near?: { lat: number; lon: number },
 ) {
-  const p = body.parking;
-  const drive = estimateDrive(start, p ?? body.shore);
+  const byDistance = (
+    to: { lat: number; lon: number },
+    key: (p: WaterBody['parkings'][number]) => { lat: number; lon: number },
+  ) => [...body.parkings].sort((a, b) => distanceKm(key(a), to) - distanceKm(key(b), to))[0];
+  let p = near ? byDistance(near, (x) => x.shore) : byDistance(start, (x) => x);
+  if (p && near && distanceKm(p.shore, near) > SAME_SHORE_KM) p = undefined;
+  const shore = p?.shore ?? near ?? body.shore;
+  const drive = estimateDrive(start, p ?? shore);
   const walkMinutes = p
     ? Math.max(
         2,
@@ -89,6 +104,7 @@ export function lochsideTrip(
     walkMinutes,
     walkSource: (p ? 'lochside' : 'lochside-estimate') as Trip['walkSource'],
     parking: p ? { lat: p.lat, lon: p.lon, name: p.name } : undefined,
+    shore,
   };
 }
 /** After a failed route lookup, wait this long before trying that hill again. */
@@ -114,6 +130,8 @@ export interface Trip {
   destination: 'summit' | 'lochside';
   /** The car park the drive ends at, when it's known. */
   parking?: { lat: number; lon: number; name: string };
+  /** For a lochside trip, the bit of shore it ends at. */
+  shore?: { lat: number; lon: number };
   /** e.g. "golden hour". */
   targetLabel: string;
   /** Why it doesn't fit the limits, or null. */
@@ -298,6 +316,8 @@ class Conditions {
    * Overpass servers. `first` jumps the queue (the hill you've just opened).
    */
   async requestRoute(hill: Hill, first = false) {
+    // Lochs opened as places have no summit to route to.
+    if (hill.kind === 'water') return;
     const known = this.routes.get(hill.number);
     if (known !== undefined && known !== 'failed') return;
     if (
@@ -620,7 +640,8 @@ class Conditions {
 
       const summit: ConditionResult[] = [];
       for (const [id, cfg] of this.profiles) {
-        if (cfg.scope !== 'summit') continue;
+        // A loch opened as a place has no summit.
+        if (cfg.scope !== 'summit' || hill.kind === 'water') continue;
         for (const period of cfg.periods) {
           const window = periodWindow(period, id, z.sun, z.nextSun, dayStart);
           const target = {
@@ -687,6 +708,10 @@ class Conditions {
     const routes = this.routes;
     return this.evaluated.map((e) => {
       const route = routes.get(e.hill.number);
+      const placeWater =
+        e.hill.kind === 'water' && e.hill.water
+          ? this.data?.waters?.[e.hill.water.index]
+          : undefined;
       const found = route && typeof route === 'object' ? route : null;
       // With a route, drive to where the walk starts; otherwise towards the summit.
       const drive = start ? estimateDrive(start, found ? found.start : e.hill) : null;
@@ -706,7 +731,11 @@ class Conditions {
         );
         // Opening a hill means going to its top, so trips include the walk up. Water
         // conditions are the exception: they're shot from the shore, so the trip ends there.
-        const loch = c.water ? lochsideTrip(c.water.body, start!, settings.pace) : null;
+        // A loch opened as a place: every condition is seen from its shore.
+        const lochBody = c.water?.body ?? placeWater;
+        const loch = lochBody
+          ? lochsideTrip(lochBody, start!, settings.pace, c.water ? e.hill.water?.shore : undefined)
+          : null;
         const legDrive = loch ? loch.drive : drive;
         const walkMinutes = loch ? loch.walkMinutes : summitWalk;
         const walkSource: Trip['walkSource'] = loch
@@ -735,6 +764,7 @@ class Conditions {
             walkMinutes,
             walkSource,
             destination: loch ? 'lochside' : 'summit',
+            ...(loch ? { shore: loch.shore } : {}),
             ...(parking ? { parking } : {}),
             targetLabel: target.label,
             problem: tripProblem(plan, legDrive.minutes, limits),

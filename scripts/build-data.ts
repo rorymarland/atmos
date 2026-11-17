@@ -141,11 +141,13 @@ function buildWaters(hills: Hill[]): { file: WatersFile; stats: string } | null 
   hills.forEach((h, i) => {
     const l = links[i];
     const idx = l ? newIndex.get(l.index) : undefined;
-    if (l && idx !== undefined) h.water = { index: idx, distanceM: l.distanceM };
+    if (l && idx !== undefined) {
+      h.water = { index: idx, distanceM: l.distanceM, shore: { lat: l.shore[0], lon: l.shore[1] } };
+    }
   });
   const waters: WaterBody[] = keep.map((i) => {
-    const { water: w, parking: p } = decoded[i]!;
-    const shorePt = p && p.shoreIndex >= 0 ? w.shore[p.shoreIndex] : undefined;
+    const { water: w, access } = decoded[i]!;
+    const shorePt = access[0]?.shore;
     return {
       id: w.id,
       name: w.name,
@@ -155,7 +157,13 @@ function buildWaters(hills: Hill[]): { file: WatersFile; stats: string } | null 
       spanKm: w.spanKm,
       zone: zoneOf[i]!,
       shore: shorePt ? { lat: shorePt[0], lon: shorePt[1] } : { lat: w.lat, lon: w.lon },
-      ...(p ? { parking: { lat: p.lat, lon: p.lon, name: p.name, distanceM: p.distanceM } } : {}),
+      parkings: access.map((a) => ({
+        lat: a.lat,
+        lon: a.lon,
+        name: a.name,
+        distanceM: a.distanceM,
+        shore: { lat: a.shore[0], lon: a.shore[1] },
+      })),
     };
   });
   const linked = hills.filter((h) => h.water).length;

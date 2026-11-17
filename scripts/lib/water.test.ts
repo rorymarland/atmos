@@ -6,7 +6,8 @@ import {
   isPublicParking,
   isStillWater,
   linkHillsToWater,
-  nearestParking,
+  accessPoints,
+  decodeWaterRow,
   PointGrid,
   shoreline,
   toWater,
@@ -95,19 +96,41 @@ describe('water', () => {
     expect(w.spanKm).toBeGreaterThan(0.6);
     const near = { lat: 55.999, lon: -4, name: 'Shore car park' };
     const far = { lat: 55.95, lon: -4, name: 'Too far' };
-    const park = nearestParking(w, new PointGrid([near, far]));
-    expect(park?.parking.name).toBe('Shore car park');
-    expect(park!.distanceM).toBeLessThan(200);
-    const row = encodeWater(w, park);
+    const access = accessPoints(w, new PointGrid([near, far]));
+    expect(access).toHaveLength(1);
+    expect(access[0]!.parking.name).toBe('Shore car park');
+    expect(access[0]!.distanceM).toBeLessThan(200);
+    const row = encodeWater(w, access);
     expect(row[0]).toBe('w2');
-    expect(row[9]).toBe('Shore car park');
-    expect(encodeWater(w, null)).toHaveLength(7);
+    expect(row[7]![0]![2]).toBe('Shore car park');
+    expect(encodeWater(w, [])).toHaveLength(7);
+    const back = decodeWaterRow(row);
+    expect(back.access[0]!.name).toBe('Shore car park');
+    expect(back.access[0]!.shore).toEqual(access[0]!.shore);
+  });
+
+  it('spreads car parks round a big loch', () => {
+    const loch = toWater({
+      id: 'w9',
+      tags: { natural: 'water' },
+      polygons: [square(56, -4, 6000)],
+    })!;
+    const parks = [
+      { lat: 55.9995, lon: -4.0, name: 'South-west' },
+      { lat: 55.9995, lon: -4.002, name: 'Next door' },
+      { lat: 56.054, lon: -3.904, name: 'North-east' },
+    ];
+    const access = accessPoints(loch, new PointGrid(parks));
+    expect(access.map((a) => a.parking.name).sort()).toEqual(['North-east', 'South-west']);
   });
 
   it('skips private car parks', () => {
     expect(isPublicParking({ amenity: 'parking' })).toBe(true);
     expect(isPublicParking({ amenity: 'parking', access: 'private' })).toBe(false);
     expect(isPublicParking({ amenity: 'parking', access: 'customers' })).toBe(false);
+    expect(isPublicParking({ amenity: 'parking', name: 'Club Parking (private)' })).toBe(false);
+    expect(isPublicParking({ amenity: 'parking', name: 'Residents only' })).toBe(false);
+    expect(isPublicParking({ amenity: 'parking', name: 'Loch Ard Forest car park' })).toBe(true);
   });
 
   it('links a hill to sizeable nearby water over a closer pool', () => {
@@ -134,6 +157,7 @@ describe('water', () => {
       [pool, loch, far],
     );
     expect(hit?.index).toBe(1);
+    expect(hit!.shore[0]).toBeGreaterThan(55.9);
     expect(hit!.distanceM).toBeGreaterThan(500);
     expect(hit!.distanceM).toBeLessThan(3000);
     expect(none).toBeNull();

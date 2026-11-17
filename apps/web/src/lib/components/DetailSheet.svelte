@@ -158,6 +158,7 @@
         : 'the roadside'
       : '',
   );
+  const isWater = $derived(hillResult?.hill.kind === 'water');
   const hillWater = $derived.by(() => {
     const link = hillResult?.hill.water;
     const body = link ? conditions.data?.waters?.[link.index] : undefined;
@@ -177,11 +178,11 @@
   );
   /** Where Google Maps directions go: the lochside car park, the route's start, or the hill. */
   const directionsTo = $derived.by((): { point: { lat: number; lon: number }; name: string } => {
-    const water = chosen?.water?.body;
-    if (lochside && water) {
-      return water.parking
-        ? { point: water.parking, name: water.parking.name || `the car park for ${waterName(water)}` }
-        : { point: water.shore, name: waterName(water) };
+    const water = chosen?.water?.body ?? hillWater?.body;
+    if (lochside && water && trip) {
+      return trip.parking
+        ? { point: trip.parking, name: trip.parking.name || `the car park for ${waterName(water)}` }
+        : { point: trip.shore ?? water.shore, name: waterName(water) };
     }
     if (routeFound) return { point: routeFound.start, name: routeStartLabel };
     return { point: { lat: hillResult?.hill.lat ?? 0, lon: hillResult?.hill.lon ?? 0 }, name: '' };
@@ -260,15 +261,25 @@
           {/if}
         </div>
         {#if hillResult}
-          <p class="muted small">
-            {Math.round(hillResult.hill.metres)} m{#if lists.length}, {lists.join(', ')}{/if}. {hillResult.zone.name}.
-          </p>
-          {#if hillWater}
+          {#if isWater && hillWater}
+            <p class="muted small">
+              Loch or lake, {hillWater.body.spanKm >= 1 ? `${hillWater.body.spanKm.toFixed(1)} km long` : `${Math.round(hillWater.body.ha)} ha`}. {hillResult.zone.name}.
+              {#if hillWater.body.parkings.length === 0}No public car park mapped within 1.5 km of the shore.{:else if hillWater.body.parkings.length === 1}One car park by the shore{hillWater.body.parkings[0]!.name ? `: ${hillWater.body.parkings[0]!.name}` : ''}.{:else}{hillWater.body.parkings.length} car parks by the shore; trips use the one nearest your start.{/if}
+            </p>
+            <p class="small muted">Everything here is judged from the shore, from the {hillResult.zone.name} valley forecast.</p>
+          {:else}
+            <p class="muted small">
+              {Math.round(hillResult.hill.metres)} m{#if lists.length}, {lists.join(', ')}{/if}. {hillResult.zone.name}.
+            </p>
+          {/if}
+          {#if isWater}
+            <!-- The loch itself: nothing more to say about nearby water. -->
+          {:else if hillWater}
             <p class="small muted">Still water: {waterName(hillWater.body)}, {formatKm(hillWater.distanceM)} from the summit. Reflections and frozen lochs are judged there.</p>
           {:else if conditions.data?.waters}
             <p class="small muted">No still water within 3 km, so reflections and frozen lochs don’t apply.</p>
           {/if}
-          {#if hillResult.searchOnly}
+          {#if hillResult.searchOnly && !isWater}
             <p class="small muted">Not on your hill lists (most of these are Tumps), so it only appears when you search for it. It isn’t in the results or the best bet.</p>
           {/if}
         {/if}
@@ -383,6 +394,7 @@
           </div>
         </section>
 
+        {#if !isWater}
         <section class="walk">
           <h3>The walk up</h3>
           {#if routeFound}
@@ -412,6 +424,7 @@
             <p class="small muted working"><Spinner label="Working out the route" /> Working out the route from OpenStreetMap paths. This usually takes under a minute.</p>
           {/if}
         </section>
+        {/if}
 
         <section class="plan">
           <h3>Your trip</h3>

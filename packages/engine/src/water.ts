@@ -7,6 +7,17 @@
  * smaller water, tighter for bigger, between x1.35 and x0.6.
  */
 import type { ScoringConfig } from './config.js';
+import type { Hill } from './data.js';
+
+export interface LochAccess {
+  /** The car park. */
+  lat: number;
+  lon: number;
+  name: string;
+  /** From the car park to the shore point it serves, metres in a straight line. */
+  distanceM: number;
+  shore: { lat: number; lon: number };
+}
 
 export interface WaterBody {
   id: string;
@@ -19,10 +30,10 @@ export interface WaterBody {
   spanKm: number;
   /** Index into zones.json. */
   zone: number;
-  /** The lochside point a trip ends at: by the nearest car park when there is one. */
+  /** A lochside point to head for when there's no car park: by the nearest one if any. */
   shore: { lat: number; lon: number };
-  /** The nearest public car park within 1.5 km of the shore. */
-  parking?: { lat: number; lon: number; name: string; distanceM: number };
+  /** Public car parks within 1.5 km of the shore, nearest first, spread round big lochs. */
+  parkings: LochAccess[];
 }
 
 /** How much to scale wind limits for water `spanKm` across. */
@@ -54,21 +65,12 @@ export function configForWater(
   return { ...config, profiles: { ...config.profiles, [profileId]: { ...profile, factors } } };
 }
 
-/**
- * [id, name, lat, lon, ha, spanKm, zone, shoreLat, shoreLon, parkLat?, parkLon?, parkName?, parkDistM?]
- */
-export type WaterBodyRow = [
-  string,
-  string,
-  number,
-  number,
-  number,
-  number,
-  number,
-  number,
-  number,
-  ...([number, number, string, number] | []),
-];
+/** [parkLat, parkLon, name, distanceM, shoreLat, shoreLon] */
+export type LochAccessRow = [number, number, string, number, number, number];
+/** [id, name, lat, lon, ha, spanKm, zone, shoreLat, shoreLon, car parks?] */
+export type WaterBodyRow =
+  | [string, string, number, number, number, number, number, number, number]
+  | [string, string, number, number, number, number, number, number, number, LochAccessRow[]];
 
 export interface WatersFile {
   source: string;
@@ -76,7 +78,7 @@ export interface WatersFile {
 }
 
 export function encodeWaterBody(w: WaterBody): WaterBodyRow {
-  const base: WaterBodyRow = [
+  const base = [
     w.id,
     w.name,
     w.lat,
@@ -86,34 +88,23 @@ export function encodeWaterBody(w: WaterBody): WaterBodyRow {
     w.zone,
     w.shore.lat,
     w.shore.lon,
-  ];
-  if (!w.parking) return base;
+  ] as const;
+  if (w.parkings.length === 0) return [...base];
   return [
     ...base,
-    w.parking.lat,
-    w.parking.lon,
-    w.parking.name,
-    w.parking.distanceM,
-  ] as WaterBodyRow;
+    w.parkings.map((p): LochAccessRow => [
+      p.lat,
+      p.lon,
+      p.name,
+      p.distanceM,
+      p.shore.lat,
+      p.shore.lon,
+    ]),
+  ];
 }
 
 export function decodeWaterBody(row: WaterBodyRow): WaterBody {
-  const [id, name, lat, lon, ha, spanKm, zone, shoreLat, shoreLon, pLat, pLon, pName, pDist] =
-    row as [
-      string,
-      string,
-      number,
-      number,
-      number,
-      number,
-      number,
-      number,
-      number,
-      number?,
-      number?,
-      string?,
-      number?,
-    ];
+  const [id, name, lat, lon, ha, spanKm, zone, shoreLat, shoreLon, parkings] = row;
   return {
     id,
     name,
@@ -123,10 +114,38 @@ export function decodeWaterBody(row: WaterBodyRow): WaterBody {
     spanKm,
     zone,
     shore: { lat: shoreLat, lon: shoreLon },
-    ...(pLat !== undefined && pLon !== undefined
-      ? { parking: { lat: pLat, lon: pLon, name: pName ?? '', distanceM: pDist ?? 0 } }
-      : {}),
+    parkings: (parkings ?? []).map(([pLat, pLon, pName, d, sLat, sLon]) => ({
+      lat: pLat,
+      lon: pLon,
+      name: pName,
+      distanceM: d,
+      shore: { lat: sLat, lon: sLon },
+    })),
   };
+}
+
+/**
+ * A loch as a place to open like a hill: its number is negative (-1 for the first water)
+ * so it can't clash with DoBIH numbers, and it has no summit to climb.
+ */
+export function waterAsPlace(body: WaterBody, index: number): Hill {
+  return {
+    number: -(index + 1),
+    name: waterName(body).replace(/^an /, 'An '),
+    lat: body.lat,
+    lon: body.lon,
+    metres: 0,
+    lists: 0,
+    zone: body.zone,
+    nations: [],
+    water: { index, distanceM: 0 },
+    kind: 'water',
+  };
+}
+
+/** The waters.json index of a place opened from waterAsPlace, or null for a hill. */
+export function waterIndexOf(number: number): number | null {
+  return number < 0 ? -number - 1 : null;
 }
 
 /** A friendly name for unnamed water. */

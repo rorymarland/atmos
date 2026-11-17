@@ -46,11 +46,18 @@ describe('water', () => {
       spanKm: 4.1,
       zone: 3,
       shore: { lat: 56.17, lon: -4.45 },
-      parking: { lat: 56.171, lon: -4.449, name: 'Loch Ard car park', distanceM: 120 },
+      parkings: [
+        {
+          lat: 56.171,
+          lon: -4.449,
+          name: 'Loch Ard car park',
+          distanceM: 120,
+          shore: { lat: 56.17, lon: -4.45 },
+        },
+      ],
     };
     expect(decodeWaterBody(encodeWaterBody(w))).toEqual(w);
-    const bare: WaterBody = { ...w };
-    delete bare.parking;
+    const bare: WaterBody = { ...w, parkings: [] };
     expect(decodeWaterBody(encodeWaterBody(bare))).toEqual(bare);
   });
 });
