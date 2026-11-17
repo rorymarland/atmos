@@ -55,6 +55,18 @@
           {item.label}
         </a>
       {/each}
+      <button
+        class="theme"
+        onclick={() => (settings.theme = settings.theme === 'dark' ? 'light' : 'dark')}
+        aria-label={settings.theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        title={settings.theme === 'dark' ? 'Light mode' : 'Dark mode'}
+      >
+        {#if settings.theme === 'dark'}
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor" /><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" /></g></svg>
+        {:else}
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="currentColor" /></svg>
+        {/if}
+      </button>
     </nav>
   </header>
 
@@ -75,6 +87,21 @@
 
 
 <style>
+  .theme {
+    display: inline-grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    margin-left: 4px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .theme:hover {
+    background: var(--paper);
+  }
   .shell {
     min-height: 100dvh;
     display: flex;

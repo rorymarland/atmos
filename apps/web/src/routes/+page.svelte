@@ -71,6 +71,29 @@
     };
   }
 
+  function basemapStyle(theme: 'light' | 'dark') {
+    return `https://tiles.openfreemap.org/styles/${theme === 'dark' ? 'dark' : 'liberty'}`;
+  }
+
+  /** Atmos's own colours that need to change with the basemap. */
+  function applyThemePaint(m: import('maplibre-gl').Map, theme: 'light' | 'dark') {
+    const dark = theme === 'dark';
+    const set = (
+      layer: string,
+      prop: Parameters<typeof m.setPaintProperty>[1],
+      value: Parameters<typeof m.setPaintProperty>[2],
+    ) => {
+      if (m.getLayer(layer)) m.setPaintProperty(layer, prop, value);
+    };
+    set('hillshade', 'hillshade-shadow-color', dark ? '#000000' : '#4c5b67');
+    set('hillshade', 'hillshade-highlight-color', dark ? '#5a6672' : '#ffffff');
+    set('targets', 'circle-stroke-color', ['case', ['==', ['get', 'custom'], 1], dark ? '#f2f5f7' : '#1d2830', dark ? '#1b2731' : '#ffffff']);
+    set('ray-labels', 'text-color', dark
+      ? ['match', ['get', 'kind'], 'sunrise', '#ffcf7a', 'sunset', '#ff9f80', 'sun', '#ffd98f', 'moonrise', '#c9d6e8', 'moonset', '#dde6f2', '#e8edf2']
+      : ['match', ['get', 'kind'], 'sunrise', '#8a5a00', 'sunset', '#8f3312', 'sun', '#7a5200', 'moonrise', '#3d4b5e', 'moonset', '#1f2a38', '#2c3846']);
+    set('ray-labels', 'text-halo-color', dark ? '#10161c' : '#ffffff');
+  }
+
   function setSource(id: string, data: Parameters<GeoJSONSource['setData']>[0]) {
     (map?.getSource(id) as GeoJSONSource | undefined)?.setData(data);
   }
@@ -356,7 +379,7 @@
       maplibre.setWorkerUrl(`${worker.default}?v=${encodeURIComponent(version)}`);
       const m = new maplibre.Map({
         container,
-        style: 'https://tiles.openfreemap.org/styles/liberty',
+        style: basemapStyle(settings.theme),
         // Roughly the UK; fitted properly once the panel padding is known (see 'load').
         center: [-3.4, 55.2],
         zoom: 4.6,
@@ -376,6 +399,11 @@
         m.setPadding(mapPadding());
         m.fitBounds(UK_BOUNDS, { padding: 24, animate: false });
         const firstSymbol = m.getStyle().layers.find((l) => l.type === 'symbol')?.id;
+        // Everything in the style so far is the basemap; what's added below is Atmos's own,
+        // carried across when the theme swaps the basemap.
+        baseSources = new Set(Object.keys(m.getStyle().sources));
+        baseLayers = new Set(m.getStyle().layers.map((l) => l.id));
+        styleTheme = settings.theme;
         m.addSource('terrain-dem', {
           type: 'raster-dem',
           tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
@@ -698,6 +726,7 @@
         });
         m.on('mouseenter', 'targets', () => (m.getCanvas().style.cursor = 'pointer'));
         m.on('mouseleave', 'targets', () => (m.getCanvas().style.cursor = picking ? 'crosshair' : ''));
+        applyThemePaint(m, settings.theme);
         loaded = true;
       });
       map = m;
@@ -712,6 +741,36 @@
   $effect(() => {
     const data = { type: 'FeatureCollection' as const, features };
     if (map && loaded) setSource('targets', data);
+  });
+
+  // Dark mode swaps the basemap for OpenFreeMap's Dark, keeping Atmos's own sources and
+  // layers (with their current data) in the same places among the basemap's layers.
+  let baseSources = new Set<string>();
+  let baseLayers = new Set<string>();
+  let styleTheme: 'light' | 'dark' = 'light';
+  $effect(() => {
+    const theme = settings.theme;
+    const m = map;
+    if (!m || !loaded || theme === styleTheme) return;
+    styleTheme = theme;
+    m.setStyle(basemapStyle(theme), {
+      transformStyle: (prev, next) => {
+        if (!prev) return next;
+        const ours = prev.layers.filter((l) => !baseLayers.has(l.id));
+        const firstPrevSymbol = prev.layers.findIndex((l) => l.type === 'symbol');
+        const under = ours.filter((l) => prev.layers.indexOf(l) < firstPrevSymbol);
+        const over = ours.filter((l) => prev.layers.indexOf(l) >= firstPrevSymbol);
+        const firstNextSymbol = next.layers.findIndex((l) => l.type === 'symbol');
+        const at = firstNextSymbol < 0 ? next.layers.length : firstNextSymbol;
+        const layers = [...next.layers.slice(0, at), ...under, ...next.layers.slice(at), ...over];
+        const sources = { ...next.sources };
+        for (const [id, src] of Object.entries(prev.sources)) if (!baseSources.has(id)) sources[id] = src;
+        baseSources = new Set(Object.keys(next.sources));
+        baseLayers = new Set(next.layers.map((l) => l.id));
+        return { ...next, sources, layers };
+      },
+    });
+    m.once('style.load', () => applyThemePaint(m, theme));
   });
 
   // Aurora layers, only while the aurora is ticked (with night).
