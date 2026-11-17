@@ -150,7 +150,7 @@
         <div><dt>{c.period === 'morning' ? 'Up' : 'Get ready'}</dt><dd>{clock(t.plan.wakeAt)}</dd></div>
         <div class="leave"><dt>Leave</dt><dd>{clock(t.plan.leaveAt)}</dd></div>
         <div><dt>Drive</dt><dd>{formatDuration(t.driveMinutes)}</dd></div>
-        <div><dt>{c.scope === 'summit' ? 'Walk up' : 'Walk'}</dt><dd>{formatDuration(t.walkMinutes)}</dd></div>
+        <div><dt>{t.walkSource === 'viewpoint' ? 'Walk' : 'Walk up'}</dt><dd>{formatDuration(t.walkMinutes)}</dd></div>
         <div><dt>In place</dt><dd>{clock(t.plan.arriveAt)}</dd></div>
       </dl>
       <p class="small muted">In place {settings.earlyMinutes} min before {t.targetLabel} ({clock(t.plan.target)}). Times are rough estimates.</p>
