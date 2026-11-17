@@ -31,12 +31,6 @@ const profile = z.strictObject({
   blurb: z.string().min(1),
   /** Scored at each summit's height, or once for the valley forecast point. */
   scope: z.enum(['summit', 'valley']),
-  /**
-   * Where you'd stand to photograph it, which sets the walk in the trip plan: the summit
-   * (the walk up) or the valley (a short stroll). Defaults to the scope: golden-hour sky
-   * is judged from the valley forecast but shot from the top.
-   */
-  standAt: z.enum(['summit', 'valley']).optional(),
   /** When in the day it happens; morning and evening conditions are scored for both. */
   periods: z.array(period).min(1),
   /** Counts towards the photo score. */
