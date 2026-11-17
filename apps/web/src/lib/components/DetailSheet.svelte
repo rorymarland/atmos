@@ -30,13 +30,14 @@
   const open = $derived(Boolean(hillParam));
   const keyOf = (c: ConditionTrip) => `${c.profileId}-${c.period}`;
 
-  /** Counted conditions first (best first), then the rest. */
+  /** Counted conditions first (best first), with the Nos folded away, then the rest. */
   const isRisk = (c: ConditionTrip) => conditions.data?.config.profiles[c.profileId]?.risk ?? false;
   const breakdown = $derived.by(() => {
-    if (!hillResult) return { counted: [] as ConditionTrip[], others: [] as ConditionTrip[] };
+    if (!hillResult) return { counted: [] as ConditionTrip[], nos: [] as ConditionTrip[], others: [] as ConditionTrip[] };
     const counted = new Set(hillResult.counted.map(keyOf));
     return {
-      counted: hillResult.counted,
+      counted: hillResult.counted.filter((c) => c.result.verdict !== 'no'),
+      nos: hillResult.counted.filter((c) => c.result.verdict === 'no'),
       others: hillResult.conditions.filter((c) => !counted.has(keyOf(c)) && !isRisk(c)),
     };
   });
@@ -247,9 +248,17 @@
         <p class="small muted">Pick one to see why it scores as it does and when to leave for it.</p>
         {#if breakdown.counted.length}
           <ul class="conds">{#each breakdown.counted as c (keyOf(c))}{@render conditionRow(c)}{/each}</ul>
+        {:else if breakdown.nos.length}
+          <p class="small muted">Nothing you’ve ticked is a Go or Maybe here.</p>
+        {/if}
+        {#if breakdown.nos.length}
+          <details class="others">
+            <summary class="small">No: {breakdown.nos.length} {breakdown.nos.length === 1 ? 'condition' : 'conditions'}</summary>
+            <ul class="conds">{#each breakdown.nos as c (keyOf(c))}{@render conditionRow(c)}{/each}</ul>
+          </details>
         {/if}
         {#if breakdown.others.length}
-          <details class="others" open={breakdown.counted.length === 0}>
+          <details class="others" open={breakdown.counted.length === 0 && breakdown.nos.length === 0}>
             <summary class="small">Not counted: {breakdown.others.length} (unticked, another time of day, or out of reach)</summary>
             <ul class="conds">{#each breakdown.others as c (keyOf(c))}{@render conditionRow(c)}{/each}</ul>
           </details>
