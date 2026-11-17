@@ -167,10 +167,14 @@
   const formatKm = (m: number) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`);
   /** Water conditions end at the lochside, not the summit. */
   const lochside = $derived(trip?.destination === 'lochside');
+  /** The loch a lochside trip goes to: the condition's, or the loch opened as a place. */
+  const tripWater = $derived(chosen?.water?.body ?? (isWater ? hillWater?.body : undefined));
   const parkLabel = $derived(
     lochside
       ? trip?.parking
-        ? `Park at ${trip.parking.name || 'the car park'}`
+        ? trip.parking.name
+          ? `Park at ${trip.parking.name}`
+          : `Park by ${tripWater ? waterName(tripWater) : 'the loch'}`
         : 'Stop near the shore'
       : routeFound
         ? `Park at ${routeStartLabel}`
@@ -336,7 +340,7 @@
           {#if chosen.water && conditions.data?.config.profiles[chosen.profileId]?.water?.fetchScaled.length}
             {@const f = fetchFactor(chosen.water.body.spanKm)}
             <p class="small muted">
-              {waterName(chosen.water.body).replace(/^an? /, 'The ').replace(/^./, (c) => c.toUpperCase())} is {chosen.water.body.spanKm < 1 ? `${Math.round(chosen.water.body.spanKm * 1000)} m` : `${chosen.water.body.spanKm.toFixed(1)} km`} across.
+              {waterName(chosen.water.body).replace(/^an? /, 'The ').replace(/^./, (c) => c.toUpperCase())} is {chosen.water.body.spanKm < 1 ? `${Math.round(chosen.water.body.spanKm * 1000)} m across` : `${chosen.water.body.spanKm.toFixed(1)} km long`}.
               {#if f > 1.02}Wind has little room to ruffle water that small, so it allows a bit more breeze than a big loch.{:else if f < 0.98}Wind ruffles a long loch more, so it needs calmer air than a small lochan.{/if}
             </p>
           {/if}
@@ -433,7 +437,7 @@
               <li><span class="t">{clock(trip.plan.wakeAt)}</span> {chosen.period === 'morning' ? 'Get up' : 'Get ready'}</li>
               <li class="leave"><span class="t">{clock(trip.plan.leaveAt)}</span> Leave {leaveName}</li>
               <li><span class="t">{clock(trip.plan.parkAt)}</span> {parkLabel}, after about {formatDuration(trip.driveMinutes)} and {Math.round(trip.roadMiles)} miles</li>
-              <li><span class="t">{clock(trip.plan.arriveAt)}</span> {lochside && chosen.water ? `At ${waterName(chosen.water.body)}` : 'In place'}{settings.earlyMinutes ? `, ${settings.earlyMinutes} min early` : ''}, after a {formatDuration(trip.walkMinutes)} {lochside ? 'walk to the shore' : 'walk up'}</li>
+              <li><span class="t">{clock(trip.plan.arriveAt)}</span> {lochside && tripWater ? `At ${waterName(tripWater)}` : 'In place'}{settings.earlyMinutes ? `, ${settings.earlyMinutes} min early` : ''}, after a {formatDuration(trip.walkMinutes)} {lochside ? 'walk to the shore' : 'walk up'}</li>
               <li><span class="t">{clock(trip.plan.target)}</span> {trip.targetLabel.charAt(0).toUpperCase() + trip.targetLabel.slice(1)}</li>
             </ol>
             {#if trip.walkSource === 'estimate' && hillResult.route === 'loading'}

@@ -39,4 +39,4 @@ attributions:
     name: OpenStreetMap contributors
     url: https://www.openstreetmap.org/copyright
     licence: ODbL
-    use: Basemap data (served by OpenFreeMap) and walking routes (paths and car parks, through the Overpass API)
+    use: Basemap data (served by OpenFreeMap), walking routes (paths and car parks, through the Overpass API), and lochs, lakes and lochside car parks (from the Geofabrik UK extract)

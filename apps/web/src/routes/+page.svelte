@@ -890,7 +890,7 @@
   {#if panelOpen}
     <aside class="panel" aria-label="Where to go">
       <header class="panel-head">
-        <h1>{hillOpen ? 'Hill' : 'Where to go'}</h1>
+        <h1>{hillOpen ? (Number(page.url.searchParams.get('hill')) < 0 ? 'Loch' : 'Hill') : 'Where to go'}</h1>
         <div class="head-buttons">
           <button
             class="hide"

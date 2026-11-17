@@ -35,6 +35,11 @@
   open hill, then the top three results, one at a time, saved in IndexedDB for 30 days. Keep
   Overpass use to that (its fair-use policy); never route every hill from the browser. Bump
   `ROUTE_VERSION` in `apps/web/src/lib/routes.ts` when the route maths changes.
+- Still water (`data/water/uk-water.json`) is built from the Geofabrik UK extract by the "Water
+  data" workflow (`.github/workflows/water.yml`, `scripts/build-water.ts`), never in the browser
+  or at container start. Rerun it from the Actions tab to refresh; it opens a pull request.
+  `build-data` links each hill to still water within 3 km and writes `waters.json`. Profiles
+  with `water:` in `profiles.yaml` are scored per loch, and their trips end at the lochside.
 - Every change keeps `pnpm check` green (lint, format, typecheck, tests).
 
 ## SvelteKit 3 notes (apps/web)
