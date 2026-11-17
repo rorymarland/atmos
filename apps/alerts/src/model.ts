@@ -14,6 +14,8 @@ export const placeRef = z.discriminatedUnion('kind', [
     name: z.string().min(1),
   }),
   z.strictObject({ kind: z.literal('water'), id: z.string().min(1), name: z.string().min(1) }),
+  /** A custom place, by its id in places.json. */
+  z.strictObject({ kind: z.literal('custom'), id: z.string().min(1), name: z.string().min(1) }),
 ]);
 export type PlaceRef = z.infer<typeof placeRef>;
 
@@ -67,5 +69,5 @@ export interface Alert extends AlertInput {
 }
 
 export function placeKey(p: PlaceRef): string {
-  return p.kind === 'hill' ? `h${p.number}` : `w${p.id}`;
+  return p.kind === 'hill' ? `h${p.number}` : p.kind === 'water' ? `w${p.id}` : `c${p.id}`;
 }

@@ -6,7 +6,15 @@
  * their chosen time, once a day, with a summary of everything that matches.
  */
 import { composeEmail, type AlertNews, type Email } from './email';
-import { FORECAST_DAYS, londonDate, loadSiteData, scorePlaces, type SiteData } from './check';
+import type { CustomPlace } from '@atmos/engine';
+import {
+  FORECAST_DAYS,
+  londonDate,
+  loadSiteData,
+  scorePlaces,
+  withCustomPlaces,
+  type SiteData,
+} from './check';
 import { placeKey, type Alert, type PlaceRef } from './model';
 import { decide, findMatches } from './rules';
 import type { Store } from './store';
@@ -18,6 +26,8 @@ export interface RunnerOptions {
   /** The Atmos address people use, for links in emails. */
   siteUrl: string;
   send: (email: Email) => Promise<void>;
+  /** Custom places, scored like hills. */
+  places: () => CustomPlace[];
   log?: (msg: string) => void;
 }
 
@@ -63,7 +73,8 @@ export class Runner {
     if (!this.#data || Date.now() - this.#data.loadedAt > DATA_MAX_AGE_MS) {
       this.#data = await loadSiteData(this.opts.dataUrl);
     }
-    return this.#data;
+    // Places change while running: add them afresh each time.
+    return withCustomPlaces(this.#data, this.opts.places());
   }
 
   /** The hourly check of "as soon as" alerts, plus any daily ones due. */

@@ -15,6 +15,8 @@ import {
   type WaterBody,
   type WatersFile,
   type Zone,
+  type CustomPlace,
+  withPlaces,
   type ZonesFile,
 } from '@atmos/engine';
 import {
@@ -37,7 +39,22 @@ export interface SiteData {
   config: ScoringConfig;
   waters: WaterBody[] | null;
   waterIndex: Map<string, number>;
+  /** Custom place ids to their hill numbers (see withCustomPlaces). */
+  placeNumbers: Map<string, number>;
   loadedAt: number;
+}
+
+/** The site data with custom places added as hills, each with its own forecast zone. */
+export function withCustomPlaces(data: SiteData, places: CustomPlace[]): SiteData {
+  const merged = withPlaces({ hills: [], zones: data.zones, waters: data.waters }, places);
+  const hills = new Map(data.hills);
+  for (const h of merged.placeHills) hills.set(h.number, h);
+  return {
+    ...data,
+    zones: merged.zones,
+    hills,
+    placeNumbers: new Map(places.map((p) => [p.id, p.number])),
+  };
 }
 
 async function getJson<T>(base: string, name: string, fetchImpl: typeof fetch): Promise<T> {
@@ -68,6 +85,7 @@ export async function loadSiteData(
     config: parseScoringConfig(profiles),
     waters,
     waterIndex: new Map((waters ?? []).map((w, i) => [w.id, i])),
+    placeNumbers: new Map(),
     loadedAt: Date.now(),
   };
 }
@@ -75,6 +93,10 @@ export async function loadSiteData(
 /** The hill (or loch as a place) a saved reference points at, if it's still in the data. */
 export function resolvePlace(ref: PlaceRef, data: SiteData): Hill | null {
   if (ref.kind === 'hill') return data.hills.get(ref.number) ?? null;
+  if (ref.kind === 'custom') {
+    const n = data.placeNumbers.get(ref.id);
+    return n === undefined ? null : (data.hills.get(n) ?? null);
+  }
   const i = data.waterIndex.get(ref.id);
   const body = i === undefined ? undefined : data.waters?.[i];
   return body && i !== undefined ? waterAsPlace(body, i) : null;

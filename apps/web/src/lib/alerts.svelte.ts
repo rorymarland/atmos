@@ -7,7 +7,9 @@ import type { Period } from './sun';
 import type { StaticData } from './static-data';
 
 export type PlaceRef =
-  { kind: 'hill'; number: number; name: string } | { kind: 'water'; id: string; name: string };
+  | { kind: 'hill'; number: number; name: string }
+  | { kind: 'water'; id: string; name: string }
+  | { kind: 'custom'; id: string; name: string };
 
 export type Delivery = { mode: 'asap' } | { mode: 'daily'; at: string };
 
@@ -100,6 +102,8 @@ export function rememberEmail(email: string) {
 
 /** A hill, or a loch opened as a place, as the alerts service refers to it. */
 export function placeRefOf(hill: Hill, data: StaticData | null): PlaceRef | null {
+  if (hill.kind === 'custom' && hill.place)
+    return { kind: 'custom', id: hill.place.id, name: hill.name };
   if (hill.kind === 'water') {
     const body = hill.water ? data?.waters?.[hill.water.index] : undefined;
     return body ? { kind: 'water', id: body.id, name: hill.name } : null;

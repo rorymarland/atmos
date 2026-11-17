@@ -28,6 +28,8 @@ import {
   type Verdict,
   type WaterBody,
   type Zone,
+  CUSTOM_LIST,
+  withPlaces,
 } from '@atmos/engine';
 import {
   fetchEnsemble,
@@ -44,6 +46,7 @@ import {
   type KpBin,
 } from '@atmos/data-client';
 import { forecastCache, newestFetch } from './cache';
+import { places } from './places.svelte';
 import {
   evaluatePlaces,
   horizonLookup,
@@ -121,7 +124,11 @@ export interface Trip {
    */
   walkSource: 'route' | 'estimate' | 'lochside' | 'lochside-estimate';
   /** Where the trip ends: the summit, or the lochside for water conditions. */
-  destination: 'summit' | 'lochside';
+  /**
+   * Where the trip ends: the summit, the lochside for water conditions, or the spot
+   * itself for a custom viewpoint or lochside place.
+   */
+  destination: 'summit' | 'lochside' | 'spot';
   /** The car park the drive ends at, when it's known. */
   parking?: { lat: number; lon: number; name: string };
   /** For a lochside trip, the bit of shore it ends at. */
@@ -196,7 +203,23 @@ function localTime(dayStart: number, hhmm: string): number {
 }
 
 class Conditions {
-  data = $state.raw<StaticData | null>(null);
+  /** The generated data, as loaded. */
+  #base = $state.raw<StaticData | null>(null);
+  /**
+   * The data the app uses: the generated hills plus custom places, each place with its own
+   * forecast zone appended after the generated ones and the "My places" list.
+   */
+  data = $derived.by((): StaticData | null => {
+    const base = this.#base;
+    if (!base) return null;
+    if (places.list.length === 0) return base;
+    const merged = withPlaces(base, places.list);
+    return {
+      ...merged,
+      hillsByNumber: new Map(merged.hills.map((h) => [h.number, h])),
+      lists: [...base.lists, CUSTOM_LIST],
+    };
+  });
   forecasts = $state.raw<Map<string, ModelForecast[]>>(new Map());
   kp = $state.raw<KpBin[]>([]);
   fetchedAt = $state<number | null>(null);
@@ -348,9 +371,10 @@ class Conditions {
   #refreshAgain = false;
 
   async init() {
-    if (this.data) return;
+    if (this.#base) return;
     try {
-      this.data = await loadStaticData();
+      this.#base = await loadStaticData();
+      void places.load();
     } catch (e) {
       this.error = (e as Error).message;
     }
@@ -391,7 +415,8 @@ class Conditions {
     return data.hills.filter(
       (h) =>
         h.zone >= 0 &&
-        h.metres >= settings.minHeight &&
+        // Custom places were added on purpose: no minimum height for them.
+        (h.kind === 'custom' || h.metres >= settings.minHeight) &&
         inCountry(h) &&
         lists.some((l) => hillIsOnList(h, l)),
     );
@@ -557,7 +582,9 @@ class Conditions {
         // Opening a hill means going to its top, so trips include the walk up. Water
         // conditions are the exception: they're shot from the shore, so the trip ends there.
         // A loch opened as a place: every condition is seen from its shore.
-        const lochBody = c.water?.body ?? placeWater;
+        // A lochside place is the shore already: its trips end at the spot.
+        const lochBody =
+          e.hill.place?.kind === 'lochside' ? undefined : (c.water?.body ?? placeWater);
         const loch = lochBody
           ? lochsideTrip(lochBody, start!, settings.pace, c.water ? e.hill.water?.shore : undefined)
           : null;
@@ -588,7 +615,11 @@ class Conditions {
             roadMiles: legDrive.roadMiles,
             walkMinutes,
             walkSource,
-            destination: loch ? 'lochside' : 'summit',
+            destination: loch
+              ? 'lochside'
+              : e.hill.place && e.hill.place.kind !== 'high'
+                ? 'spot'
+                : 'summit',
             ...(loch ? { shore: loch.shore } : {}),
             ...(parking ? { parking } : {}),
             targetLabel: target.label,

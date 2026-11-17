@@ -22,3 +22,5 @@ export * from './astro.js';
 export * from './route.js';
 export * from './terrain.js';
 export * from './water.js';
+export * from './places.js';
+export * from './osgrid.js';

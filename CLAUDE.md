@@ -6,8 +6,11 @@
   fetched by the browser from free public APIs that allow CORS; everything else is generated at
   build time into small static files.
 - The one exception is **alerts** (`apps/alerts`), a separate, optional container: a small
-  Node API at `/api/alerts` (proxied by the site's nginx) plus an hourly scheduler that emails
-  people over SMTP. The site must keep working without it (the Alerts UI hides when
+  Node API at `/api/alerts` and `/api/places` (nginx proxies `/api/`) plus an hourly
+  scheduler that emails people. It also keeps shared **custom places**; without it the web app
+  keeps places in localStorage. Custom places (`packages/engine/src/places.ts`) are merged in
+  with `withPlaces` by both the web app and the service: numbers from 1,000,001 (2,000,001 for
+  browser-only), each with its own forecast zone appended after the generated zones. The site must keep working without it (the Alerts UI hides when
   `/api/alerts/status` fails). It scores with `apps/web/src/lib/evaluate-places.ts`, the same
   code as the website: change scoring there, not in a copy. No accounts: Atmos is LAN/VPN only
   and each alert just names an email address.
