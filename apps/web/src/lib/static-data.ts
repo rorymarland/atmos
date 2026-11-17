@@ -2,6 +2,7 @@
 import { version } from '$app/env';
 import {
   decodeHill,
+  decodeWaterBody,
   parseScoringConfig,
   type AttributionsFile,
   type Hill,
@@ -9,6 +10,8 @@ import {
   type HillsFile,
   type ScoringConfig,
   type Zone,
+  type WaterBody,
+  type WatersFile,
   type ZonesFile,
 } from '@atmos/engine';
 
@@ -21,6 +24,21 @@ export interface StaticData {
   config: ScoringConfig;
   attributions: AttributionsFile['attributions'];
   hillsSource: string;
+  /**
+   * Still water (lochs you can search for, and the water near each hill), or null when the
+   * server has no water data: then water conditions are scored everywhere, as before.
+   */
+  waters: WaterBody[] | null;
+}
+
+/** waters.json is optional: older containers don't make it. */
+async function getWaters(): Promise<WaterBody[] | null> {
+  try {
+    const file = await getJson<WatersFile>('/data/waters.json');
+    return file.waters.map(decodeWaterBody);
+  } catch {
+    return null;
+  }
 }
 
 async function getJson<T>(path: string): Promise<T> {
@@ -48,11 +66,12 @@ let loading: Promise<StaticData> | null = null;
 
 export function loadStaticData(): Promise<StaticData> {
   loading ??= (async () => {
-    const [hillsFile, zonesFile, profiles, attributions] = await Promise.all([
+    const [hillsFile, zonesFile, profiles, attributions, waters] = await Promise.all([
       getJson<HillsFile>('/data/hills.json'),
       getJson<ZonesFile>('/data/zones.json'),
       getJson<unknown>('/data/profiles.json'),
       getJson<AttributionsFile>('/data/attributions.json'),
+      getWaters(),
     ]);
     const hills = hillsFile.hills.map(decodeHill);
     return {
@@ -64,6 +83,7 @@ export function loadStaticData(): Promise<StaticData> {
       config: parseConfigOrExplain(profiles),
       attributions: attributions.attributions,
       hillsSource: hillsFile.source,
+      waters,
     };
   })();
   return loading;

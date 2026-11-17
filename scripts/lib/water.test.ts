@@ -5,6 +5,7 @@ import {
   interiorPoint,
   isPublicParking,
   isStillWater,
+  linkHillsToWater,
   nearestParking,
   PointGrid,
   shoreline,
@@ -107,5 +108,34 @@ describe('water', () => {
     expect(isPublicParking({ amenity: 'parking' })).toBe(true);
     expect(isPublicParking({ amenity: 'parking', access: 'private' })).toBe(false);
     expect(isPublicParking({ amenity: 'parking', access: 'customers' })).toBe(false);
+  });
+
+  it('links a hill to sizeable nearby water over a closer pool', () => {
+    const loch = toWater({
+      id: 'w1',
+      tags: { natural: 'water', name: 'Loch Big' },
+      polygons: [square(56.01, -4, 1500)],
+    })!;
+    const pool = toWater({
+      id: 'w2',
+      tags: { natural: 'water' },
+      polygons: [square(56.0, -4.012, 110)],
+    })!;
+    const far = toWater({
+      id: 'w3',
+      tags: { natural: 'water', name: 'Far' },
+      polygons: [square(56.2, -4, 1500)],
+    })!;
+    const [hit, none] = linkHillsToWater(
+      [
+        { lat: 56.0, lon: -4.01 },
+        { lat: 56.5, lon: -4 },
+      ],
+      [pool, loch, far],
+    );
+    expect(hit?.index).toBe(1);
+    expect(hit!.distanceM).toBeGreaterThan(500);
+    expect(hit!.distanceM).toBeLessThan(3000);
+    expect(none).toBeNull();
   });
 });

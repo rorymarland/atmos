@@ -21,3 +21,4 @@ export * from './travel.js';
 export * from './astro.js';
 export * from './route.js';
 export * from './terrain.js';
+export * from './water.js';

@@ -2,8 +2,8 @@ name: Water data
 
 # Rebuilds data/water/uk-water.json (the UK's still water from OpenStreetMap) from the
 # Geofabrik UK extract. Run by hand from the Actions tab, or monthly; either way it opens a
-# pull request with the new file. On a pull request that changes the build itself it only
-# builds and uploads the file, so the change can be checked first.
+# pull request with the new file. On a pull request that changes the build itself, it
+# commits the rebuilt file to that pull request's branch so it can be checked there.
 
 on:
   workflow_dispatch:
@@ -25,6 +25,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          # On a pull request, the branch itself (not the merge commit), so it can push back.
+          ref: ${{ github.head_ref || github.ref }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -59,12 +62,22 @@ jobs:
           name: uk-water
           path: data/water/uk-water.json
 
+      - name: Commit the file to this pull request
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          if [ -z "$(git status --porcelain -- data/water)" ]; then echo "No change"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/water/uk-water.json
+          git commit -m "Rebuild water data from OpenStreetMap"
+          git push
+
       - name: Open a pull request with the new file
         if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if git diff --quiet -- data/water; then echo "No change"; exit 0; fi
+          if [ -z "$(git status --porcelain -- data/water)" ]; then echo "No change"; exit 0; fi
           BRANCH=water-data-$(date -u +%Y%m%d)
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

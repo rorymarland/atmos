@@ -87,6 +87,8 @@ profiles:
     blurb: 'Calm, dry air for mirror reflections on lochs and lakes.'
     scope: valley
     periods: [morning, evening]
+    # Only near still water; a long loch needs calmer air than a lochan.
+    water: { fetchScaled: [wind, gusts] }
     aggregate: best-hour
     factors:
       wind: { weight: 3, good: 5, bad: 12 }
@@ -248,6 +250,7 @@ profiles:
     blurb: 'Ice on lochans and lake edges after a cold spell, often with frost and still air.'
     scope: valley
     periods: [morning, day]
+    water: { fetchScaled: [] }
     aggregate: best-hour
     factors:
       coldSpell: { weight: 3, good: -4, bad: 1 }

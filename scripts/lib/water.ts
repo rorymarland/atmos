@@ -383,3 +383,68 @@ export function encodeWater(
     Math.round(park.distanceM),
   ] as WaterRow;
 }
+
+/** Read back a committed row. */
+export function decodeWaterRow(row: WaterRow): {
+  water: Water;
+  parking: { lat: number; lon: number; name: string; shoreIndex: number; distanceM: number } | null;
+} {
+  const [id, name, lat, lon, ha, span, flat, pLat, pLon, pName, pIdx, pDist] = row as [
+    string,
+    string,
+    number,
+    number,
+    number,
+    number,
+    number[],
+    number?,
+    number?,
+    string?,
+    number?,
+    number?,
+  ];
+  const shore: [number, number][] = [];
+  for (let i = 0; i + 1 < flat.length; i += 2) shore.push([flat[i]!, flat[i + 1]!]);
+  return {
+    water: { id, name, lat, lon, ha, spanKm: span, shore },
+    parking:
+      pLat !== undefined && pLon !== undefined
+        ? { lat: pLat, lon: pLon, name: pName ?? '', shoreIndex: pIdx ?? -1, distanceM: pDist ?? 0 }
+        : null,
+  };
+}
+
+/** How far a loch's shore can be from a summit and still count as that hill's water. */
+export const HILL_WATER_KM = 3;
+
+/**
+ * For each hill, the still water whose shore comes within HILL_WATER_KM of the summit,
+ * preferring bigger and closer water: a sizeable loch at 2 km beats a 1 ha pool at 1 km.
+ * Returns the index into `waters` and the distance to the shore, or null.
+ */
+export function linkHillsToWater(
+  hills: { lat: number; lon: number }[],
+  waters: Water[],
+): ({ index: number; distanceM: number } | null)[] {
+  const pts: { lat: number; lon: number; w: number }[] = [];
+  waters.forEach((w, i) => {
+    for (const [lat, lon] of w.shore) pts.push({ lat, lon, w: i });
+    pts.push({ lat: w.lat, lon: w.lon, w: i });
+  });
+  const grid = new PointGrid(pts, 0.03);
+  return hills.map((h) => {
+    const nearestBy = new Map<number, number>();
+    for (const p of grid.near(h.lat, h.lon, 2)) {
+      const d = distanceM([h.lat, h.lon], [p.lat, p.lon]);
+      if (d > HILL_WATER_KM * 1000) continue;
+      if (d < (nearestBy.get(p.w) ?? Infinity)) nearestBy.set(p.w, d);
+    }
+    let best: { index: number; distanceM: number; score: number } | null = null;
+    for (const [i, d] of nearestBy) {
+      const w = waters[i]!;
+      const score = (Math.log(1 + w.ha) * (w.name ? 1.3 : 1)) / (1 + d / 1000);
+      if (!best || score > best.score) best = { index: i, distanceM: Math.round(d), score };
+    }
+    return best ? { index: best.index, distanceM: best.distanceM } : null;
+  });
+}

@@ -10,8 +10,10 @@
     explain,
     formatDuration,
     googleMapsDirectionsUrl,
+    fetchFactor,
     hillIsOnList,
     PACE_FACTOR,
+    waterName,
   } from '@atmos/engine';
   import { ensembleShare, type EnsembleVariable } from '@atmos/data-client';
   import { page } from '$app/state';
@@ -156,6 +158,34 @@
         : 'the roadside'
       : '',
   );
+  const hillWater = $derived.by(() => {
+    const link = hillResult?.hill.water;
+    const body = link ? conditions.data?.waters?.[link.index] : undefined;
+    return link && body ? { body, distanceM: link.distanceM } : null;
+  });
+  const formatKm = (m: number) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`);
+  /** Water conditions end at the lochside, not the summit. */
+  const lochside = $derived(trip?.destination === 'lochside');
+  const parkLabel = $derived(
+    lochside
+      ? trip?.parking
+        ? `Park at ${trip.parking.name || 'the car park'}`
+        : 'Stop near the shore'
+      : routeFound
+        ? `Park at ${routeStartLabel}`
+        : 'Park',
+  );
+  /** Where Google Maps directions go: the lochside car park, the route's start, or the hill. */
+  const directionsTo = $derived.by((): { point: { lat: number; lon: number }; name: string } => {
+    const water = chosen?.water?.body;
+    if (lochside && water) {
+      return water.parking
+        ? { point: water.parking, name: water.parking.name || `the car park for ${waterName(water)}` }
+        : { point: water.shore, name: waterName(water) };
+    }
+    if (routeFound) return { point: routeFound.start, name: routeStartLabel };
+    return { point: { lat: hillResult?.hill.lat ?? 0, lon: hillResult?.hill.lon ?? 0 }, name: '' };
+  });
   const dayStart = $derived(londonMidnight(settings.dayOffset, conditions.now));
   const clock = (ms: number) => formatClock(ms, dayStart);
   const pct = (score: number | null) => (score === null ? '–' : String(Math.round(score * 100)));
@@ -200,7 +230,7 @@
     <button class="cond" class:selected aria-pressed={selected} onclick={() => (chosenKey = k)}>
       <span class="cond-name">
         <strong>{conditions.label(c.profileId)}</strong>
-        <span class="small muted">{PERIOD_LABELS[c.period]}{#if keyTime(c)}, best {keyTime(c)}{/if}{#if c.scope === 'valley'}, valley forecast{/if}</span>
+        <span class="small muted">{PERIOD_LABELS[c.period]}{#if keyTime(c)}, best {keyTime(c)}{/if}{#if c.water}, at {waterName(c.water.body)}{:else if c.scope === 'valley'}, valley forecast{/if}</span>
       </span>
       <span class="bar" aria-hidden="true"><i class={c.result.verdict} style="width: {Math.round((c.result.score ?? 0) * 100)}%"></i></span>
       <span class="cond-score">{pct(c.result.score)}</span>
@@ -233,6 +263,11 @@
           <p class="muted small">
             {Math.round(hillResult.hill.metres)} m{#if lists.length}, {lists.join(', ')}{/if}. {hillResult.zone.name}.
           </p>
+          {#if hillWater}
+            <p class="small muted">Still water: {waterName(hillWater.body)}, {formatKm(hillWater.distanceM)} from the summit. Reflections and frozen lochs are judged there.</p>
+          {:else if conditions.data?.waters}
+            <p class="small muted">No still water within 3 km, so reflections and frozen lochs don’t apply.</p>
+          {/if}
           {#if hillResult.searchOnly}
             <p class="small muted">Not on your hill lists (most of these are Tumps), so it only appears when you search for it. It isn’t in the results or the best bet.</p>
           {/if}
@@ -283,8 +318,17 @@
           <p class="small muted">
             {conditions.data?.config.profiles[chosen.profileId]?.blurb}
             {chosen.window.label}: {formatTime(chosen.window.start)} to {formatTime(chosen.window.end)}.
-            {#if chosen.scope === 'valley'}Judged from the {hillResult.zone.name} valley forecast, so it’s shared by nearby hills.{:else}Judged at the summit’s height.{/if}
+            {#if chosen.water}
+              Judged for {waterName(chosen.water.body)}, {formatKm(chosen.water.distanceM)} from the summit, from the {hillResult.zone.name} valley forecast.
+            {:else if chosen.scope === 'valley'}Judged from the {hillResult.zone.name} valley forecast, so it’s shared by nearby hills.{:else}Judged at the summit’s height.{/if}
           </p>
+          {#if chosen.water && conditions.data?.config.profiles[chosen.profileId]?.water?.fetchScaled.length}
+            {@const f = fetchFactor(chosen.water.body.spanKm)}
+            <p class="small muted">
+              {waterName(chosen.water.body).replace(/^an? /, 'The ').replace(/^./, (c) => c.toUpperCase())} is {chosen.water.body.spanKm < 1 ? `${Math.round(chosen.water.body.spanKm * 1000)} m` : `${chosen.water.body.spanKm.toFixed(1)} km`} across.
+              {#if f > 1.02}Wind has little room to ruffle water that small, so it allows a bit more breeze than a big loch.{:else if f < 0.98}Wind ruffles a long loch more, so it needs calmer air than a small lochan.{/if}
+            </p>
+          {/if}
           <ul class="reasons">
             {#each reasons as r, i (i)}
               <li class={r.status}><span class="status">{STATUS_WORD[r.status]}</span><span>{r.text}</span></li>
@@ -375,8 +419,8 @@
             <ol class="timeline">
               <li><span class="t">{clock(trip.plan.wakeAt)}</span> {chosen.period === 'morning' ? 'Get up' : 'Get ready'}</li>
               <li class="leave"><span class="t">{clock(trip.plan.leaveAt)}</span> Leave {leaveName}</li>
-              <li><span class="t">{clock(trip.plan.parkAt)}</span> {routeFound ? `Park at ${routeStartLabel}` : 'Park'}, after about {formatDuration(trip.driveMinutes)} and {Math.round(trip.roadMiles)} miles</li>
-              <li><span class="t">{clock(trip.plan.arriveAt)}</span> In place{settings.earlyMinutes ? `, ${settings.earlyMinutes} min early` : ''}, after a {formatDuration(trip.walkMinutes)} walk up</li>
+              <li><span class="t">{clock(trip.plan.parkAt)}</span> {parkLabel}, after about {formatDuration(trip.driveMinutes)} and {Math.round(trip.roadMiles)} miles</li>
+              <li><span class="t">{clock(trip.plan.arriveAt)}</span> {lochside && chosen.water ? `At ${waterName(chosen.water.body)}` : 'In place'}{settings.earlyMinutes ? `, ${settings.earlyMinutes} min early` : ''}, after a {formatDuration(trip.walkMinutes)} {lochside ? 'walk to the shore' : 'walk up'}</li>
               <li><span class="t">{clock(trip.plan.target)}</span> {trip.targetLabel.charAt(0).toUpperCase() + trip.targetLabel.slice(1)}</li>
             </ol>
             {#if trip.walkSource === 'estimate' && hillResult.route === 'loading'}
@@ -392,7 +436,11 @@
               the real route below. The walk is
               {trip.walkSource === 'route'
                 ? 'the walk up from the route above'
-                : 'a rough estimate of the walk up by Naismith’s rule from the valley floor'}.
+                : trip.walkSource === 'lochside'
+                  ? 'from the car park to the shore at an easy pace'
+                  : trip.walkSource === 'lochside-estimate'
+                    ? 'a rough allowance: there’s no public car park mapped within 1.5 km of the shore'
+                    : 'a rough estimate of the walk up by Naismith’s rule from the valley floor'}.
             </p>
           {:else}
             <p class="small muted">Set a start point or <a href="/settings#home">your home</a> to see when to leave.</p>
@@ -424,8 +472,8 @@
       </section>
 
       <section class="links">
-        <a class="button" href={googleMapsDirectionsUrl(routeFound ? routeFound.start : { lat: hillResult.hill.lat, lon: hillResult.hill.lon }, settings.start ?? undefined)} target="_blank" rel="noopener">
-          {routeFound ? `Directions to ${routeStartLabel} in Google Maps` : 'Directions in Google Maps'}
+        <a class="button" href={googleMapsDirectionsUrl(directionsTo.point, settings.start ?? undefined)} target="_blank" rel="noopener">
+          {directionsTo.name ? `Directions to ${directionsTo.name} in Google Maps` : 'Directions in Google Maps'}
         </a>
         {#if hillResult.miles != null}
           <span class="small muted">{Math.round(hillResult.miles)} miles in a straight line</span>
