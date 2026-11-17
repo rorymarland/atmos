@@ -17,6 +17,7 @@ import { z } from 'zod';
 import { alertInput } from './model';
 import { Runner } from './runner';
 import { Store } from './store';
+import { PlaceStore, placeInput } from './places';
 
 const env = process.env;
 const PORT = Number(env.PORT ?? 8080);
@@ -42,11 +43,13 @@ const transport =
 
 const log = (msg: string) => console.log(`${new Date().toISOString()} ${msg}`);
 const store = new Store(STORE);
+const placeStore = new PlaceStore(join(env.ALERTS_DATA_DIR ?? '/data', 'places.json'));
 const runner = new Runner({
   store,
   dataUrl: DATA_URL,
   siteUrl: SITE_URL,
   log,
+  places: () => placeStore.list(),
   send: async (email) => {
     if (!env.ALERTS_FROM) throw new Error('Email isn’t set up: set ALERTS_FROM in .env');
     if (apiKey) return sendViaSmtp2go(email);
@@ -124,6 +127,34 @@ const view = (a: ReturnType<Store['list']>[number]) => ({ ...a, notified: undefi
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://x');
   const path = url.pathname.replace(/\/+$/, '');
+  const pm = path.match(/^\/api\/places(?:\/([0-9a-f-]{36}))?$/);
+  if (pm) {
+    const id = pm[1];
+    try {
+      if (!id && req.method === 'GET') return send(res, 200, { places: placeStore.list() });
+      if (!id && req.method === 'POST')
+        return send(res, 201, placeStore.create(placeInput.parse(await readJson(req))));
+      if (id && req.method === 'PUT') {
+        const p = placeStore.update(id, placeInput.parse(await readJson(req)));
+        return p ? send(res, 200, p) : send(res, 404, { error: 'No such place' });
+      }
+      if (id && req.method === 'DELETE') {
+        return placeStore.remove(id)
+          ? send(res, 204, {})
+          : send(res, 404, { error: 'No such place' });
+      }
+      return send(res, 405, { error: 'Not allowed' });
+    } catch (e) {
+      if (e instanceof z.ZodError) {
+        return send(res, 400, {
+          error: 'That place isn’t complete',
+          issues: e.issues.map((i) => i.message),
+        });
+      }
+      if (e instanceof SyntaxError) return send(res, 400, { error: 'Not valid JSON' });
+      return send(res, 500, { error: (e as Error).message });
+    }
+  }
   const m = path.match(/^\/api\/alerts(?:\/([0-9a-f-]{36}))?(?:\/(test))?$/);
   try {
     if (path === '/api/alerts/status' && req.method === 'GET') {
@@ -176,7 +207,7 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   log(
-    `Atmos alerts on :${PORT}; data from ${DATA_URL}; links to ${SITE_URL}; ${store.list().length} alerts`,
+    `Atmos alerts on :${PORT}; data from ${DATA_URL}; links to ${SITE_URL}; ${store.list().length} alerts, ${placeStore.list().length} places`,
   );
   log(
     emailReady

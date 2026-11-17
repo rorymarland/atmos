@@ -34,6 +34,7 @@
 
   const NAV = $derived([
     { href: '/', label: 'Map' },
+    { href: '/places', label: 'Places' },
     ...(alerts.status ? [{ href: '/alerts', label: 'Alerts' }] : []),
     { href: '/settings', label: 'Settings' },
     { href: '/about', label: 'About' },

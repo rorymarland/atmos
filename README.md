@@ -46,6 +46,10 @@
 - **Finds anywhere.** Search hills, lochs, UK places and postcodes. Every other UK hill in the
   database (mostly Tumps, such as Ben A'an) can be searched and scored without cluttering the map.
   Star a hill or loch to keep it in your favourites, at the top of the search box.
+- **Your own places.** Save a crag, viewpoint or bit of lochside from the map, or by OS grid
+  reference or latitude and longitude, and Atmos scores it for every condition like a hill, with
+  its own forecast. Places compete in the results and have their own **My places** list; with
+  the server container they're shared by everyone using your Atmos.
 - **Knows where the water is.** Reflections and frozen lochs are only scored where there's still
   water within 3 km, from about 20,000 UK lochs, lakes and reservoirs in OpenStreetMap. A long loch
   needs calmer air than a lochan, and those trips end at the lochside by the nearest car park.
@@ -133,9 +137,11 @@ to work: browsers only share location with secure sites. "Pick on map" works eit
 To build the image from a checkout instead:
 `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
-### Alerts (optional)
+### Alerts and shared places (optional)
 
-The `atmos-alerts` service in `docker-compose.yml` emails people when the forecast matches their
+The `atmos-alerts` container also keeps custom places (`./alerts/places.json`) so everyone
+using your Atmos sees the same ones on every device; without it, places are kept in each
+browser. The `atmos-alerts` service in `docker-compose.yml` emails people when the forecast matches their
 alerts: "snow and clear air on Ben A'an in the next two days", "still air at Loch Ard tomorrow
 morning". Anyone using Atmos can set alerts on the **Alerts** page or with **Alert me** on a hill
 or loch; each alert goes only to the email address it names. There are no accounts, so keep

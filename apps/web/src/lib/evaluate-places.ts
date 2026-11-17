@@ -129,7 +129,7 @@ export function evaluatePlaces(input: EvaluateInput): EvaluatedPlace[] {
     number,
     { sun: SunTimes; nextSun: SunTimes; valley: ConditionResult[]; valleyM: number }
   >();
-  const waterCache = new Map<number, ConditionResult[]>();
+  const waterCache = new Map<string, ConditionResult[]>();
 
   for (const hill of hills) {
     const zone = data.zones[hill.zone];
@@ -168,8 +168,9 @@ export function evaluatePlaces(input: EvaluateInput): EvaluatedPlace[] {
 
     const summit: ConditionResult[] = [];
     for (const [id, cfg] of profiles) {
-      // A loch opened as a place has no summit.
-      if (cfg.scope !== 'summit' || hill.kind === 'water') continue;
+      // A loch opened as a place, or a lochside spot, has no summit.
+      if (cfg.scope !== 'summit' || hill.kind === 'water' || hill.place?.kind === 'lochside')
+        continue;
       for (const period of cfg.periods) {
         const window = periodWindow(period, id, z.sun, z.nextSun, dayStart);
         const target = {
@@ -187,10 +188,26 @@ export function evaluatePlaces(input: EvaluateInput): EvaluatedPlace[] {
     // Water conditions at the hill's loch, from the zone's valley forecast with wind limits
     // scaled for the loch's size. Shared by every hill using the same water.
     let lochside: ConditionResult[] = [];
-    const link = hill.water;
-    const body = link && data.waters ? data.waters[link.index] : undefined;
+    let link = hill.water;
+    let body = link && data.waters ? data.waters[link.index] : undefined;
+    // A lochside place with no mapped loch near it: judge it as a loch about 1 km long.
+    if (!body && hill.place?.kind === 'lochside' && data.waters) {
+      body = {
+        id: `place:${hill.place.id}`,
+        name: hill.name,
+        lat: hill.lat,
+        lon: hill.lon,
+        ha: 50,
+        spanKm: 1,
+        zone: hill.zone,
+        shore: { lat: hill.lat, lon: hill.lon },
+        parkings: [],
+      };
+      link = { index: -1, distanceM: 0 };
+    }
     if (body && link) {
-      let cached = waterCache.get(link.index);
+      const cacheKey = body.id;
+      let cached = waterCache.get(cacheKey);
       if (!cached) {
         cached = [];
         for (const [id, cfg] of profiles) {
@@ -209,9 +226,10 @@ export function evaluatePlaces(input: EvaluateInput): EvaluatedPlace[] {
             cached.push({ profileId: id, period, result, window, scope: 'valley' });
           }
         }
-        waterCache.set(link.index, cached);
+        waterCache.set(cacheKey, cached);
       }
-      lochside = cached.map((c) => ({ ...c, water: { body, distanceM: link.distanceM } }));
+      const w = { body, distanceM: link.distanceM };
+      lochside = cached.map((c) => ({ ...c, water: w }));
     }
 
     out.push({

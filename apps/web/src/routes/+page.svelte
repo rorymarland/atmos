@@ -16,11 +16,13 @@
   import { londonMidnight } from '#lib/time.ts';
   import { filtersChanged, resetFilters, type StartPoint } from '#lib/settings.svelte.ts';
   import { loadSearchHills } from '#lib/static-data.ts';
-  import { waterAsPlace, waterIndexOf } from '@atmos/engine';
+  import { isCustomNumber, waterAsPlace, waterIndexOf } from '@atmos/engine';
   import type { Hill } from '@atmos/engine';
   import ResultsList, { type Pick } from '#lib/components/ResultsList.svelte';
   import VerdictMark from '#lib/components/VerdictMark.svelte';
   import Quiz from '#lib/components/Quiz.svelte';
+  import PlaceEditor from '#lib/components/PlaceEditor.svelte';
+  import { places } from '#lib/places.svelte.ts';
 
   const PANEL_KEY = 'atmos.panelOpen';
   const VERDICT_COLOURS = { go: '#2f7a50', maybe: '#b98318', no: '#a3412b', nodata: '#8a979f' };
@@ -57,6 +59,7 @@
         // Better hills draw on top; those needing an earlier start sit back.
         rank: RANK[h.verdict] * 100 + Math.round((h.score ?? 0) * 99) - (h.needsEarlier ? 150 : 0),
         out: h.needsEarlier ? 1 : 0,
+        custom: h.hill.kind === 'custom' ? 1 : 0,
       },
     })),
   );
@@ -110,6 +113,7 @@
   }
 
   let quizOpen = $state(false);
+  let placeOpen = $state(false);
   /** The quiz filled in the search: show its results, not an open hill. */
   function quizDone() {
     pin = null;
@@ -466,8 +470,8 @@
             // Zoom must be the top-level input; the zone/hill choice goes inside each stop.
             'circle-radius': [
               'interpolate', ['linear'], ['zoom'],
-              5, ['case', ['==', ['get', 'kind'], 'zone'], 8, 3.5],
-              9, ['case', ['==', ['get', 'kind'], 'zone'], 12, 7],
+              5, ['case', ['==', ['get', 'kind'], 'zone'], 8, ['==', ['get', 'custom'], 1], 5, 3.5],
+              9, ['case', ['==', ['get', 'kind'], 'zone'], 12, ['==', ['get', 'custom'], 1], 9, 7],
             ],
             'circle-color': [
               'match', ['get', 'verdict'],
@@ -476,8 +480,9 @@
               'no', VERDICT_COLOURS.no,
               VERDICT_COLOURS.nodata,
             ],
-            'circle-stroke-color': '#ffffff',
-            'circle-stroke-width': 1,
+            // Custom places: bigger, with a dark ring, so your own spots stand out.
+            'circle-stroke-color': ['case', ['==', ['get', 'custom'], 1], '#1d2830', '#ffffff'],
+            'circle-stroke-width': ['case', ['==', ['get', 'custom'], 1], 2.5, 1],
             // Out of reach (too early) and NO both fade back.
             'circle-opacity': ['case', ['==', ['get', 'out'], 1], 0.4, ['==', ['get', 'verdict'], 'no'], 0.55, 0.95],
           },
@@ -893,8 +898,10 @@
       {:else if conditions.auroraShown && conditions.kp.length}
         <span class="muted">No Kp forecast this far ahead</span>
       {/if}
+      {#if places.list.length}<span aria-hidden="true"><i class="place-dot"></i>Your place</span>{/if}
       {#if settings.start}<span aria-hidden="true"><i class="start-dot"></i>Start</span>{/if}
       {#if skyOpen}<span class="muted">Click the map or drag the pin to move the sun and moon lines</span>{/if}
+      {#if pin}<button class="link" onclick={() => (placeOpen = true)}>Save this spot</button>{/if}
       <button class="link" onclick={() => (skyOpen = !skyOpen)} aria-pressed={skyOpen}>
         {skyOpen ? 'Hide sun and moon' : 'Sun and moon'}
       </button>
@@ -902,11 +909,20 @@
   </div>
 
   <Quiz bind:open={quizOpen} onDone={quizDone} />
+  <PlaceEditor
+    bind:open={placeOpen}
+    preset={pin}
+    onSaved={(p) => {
+      if (!p) return;
+      pin = null;
+      select({ lat: p.lat, lon: p.lon, href: `?hill=${p.number}`, zoom: 12 });
+    }}
+  />
 
   {#if panelOpen}
     <aside class="panel" aria-label="Where to go">
       <header class="panel-head">
-        <h1>{hillOpen ? (Number(page.url.searchParams.get('hill')) < 0 ? 'Loch' : 'Hill') : 'Where to go'}</h1>
+        <h1>{hillOpen ? (Number(page.url.searchParams.get('hill')) < 0 ? 'Loch' : isCustomNumber(Number(page.url.searchParams.get('hill'))) ? 'Place' : 'Hill') : 'Where to go'}</h1>
         <div class="head-buttons">
           <button
             class="hide"
@@ -1196,6 +1212,10 @@
   .legend .start-dot {
     background: #1b2731;
     box-shadow: 0 0 0 2px #fff inset;
+  }
+  .legend .place-dot {
+    background: var(--go);
+    box-shadow: 0 0 0 2px #1d2830 inset;
   }
   .pick-banner,
   .map-error {

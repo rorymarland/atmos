@@ -97,6 +97,19 @@ async function loadTerrain(lat: number, lon: number, radiusKm: number, zoom: num
   return terrainSampler(tiles.filter((t): t is TerrainTile => t !== null));
 }
 
+/** Ground height at a point in metres, from the terrain tiles routes use; null if unavailable. */
+export async function heightAt(lat: number, lon: number): Promise<number | null> {
+  for (const zoom of [12, 11]) {
+    try {
+      const h = (await loadTerrain(lat, lon, 0.2, zoom))(lat, lon);
+      if (h !== null) return Math.round(h);
+    } catch {
+      // Try the coarser tiles.
+    }
+  }
+  return null;
+}
+
 /**
  * The quickest route up a hill from a car park or road, or null when there isn't one
  * within 15 km (an island, or a hill with no paths and no road near). Throws when the

@@ -6,6 +6,8 @@
    */
   import Star from '#lib/components/Star.svelte';
   import AlertEditor from '#lib/components/AlertEditor.svelte';
+  import PlaceEditor from '#lib/components/PlaceEditor.svelte';
+  import { places } from '#lib/places.svelte.ts';
   import { alerts, placeRefOf, type AlertInput } from '#lib/alerts.svelte.ts';
   import { favourites } from '#lib/favourites.svelte.ts';
   import {
@@ -13,6 +15,7 @@
     formatDuration,
     googleMapsDirectionsUrl,
     fetchFactor,
+    PLACE_KINDS,
     hillIsOnList,
     PACE_FACTOR,
     waterName,
@@ -161,6 +164,20 @@
       : '',
   );
   const isWater = $derived(hillResult?.hill.kind === 'water');
+  /** While its forecast loads, the name of the place being opened, if we know it. */
+  const waitingName = $derived.by(() => {
+    const n = Number(page.url.searchParams.get('hill'));
+    return conditions.data?.hillsByNumber.get(n)?.name ?? (conditions.extra?.number === n ? conditions.extra.name : null);
+  });
+  let placeOpen = $state(false);
+  const editingPlace = $derived(
+    hillResult?.hill.place ? (places.list.find((p) => p.id === hillResult!.hill.place!.id) ?? null) : null,
+  );
+  /** A custom place: its own forecast, and for a viewpoint or lochside, a walk in. */
+  const custom = $derived(hillResult?.hill.place ?? null);
+  const walkWord = $derived(custom && custom.kind !== 'high' ? 'walk in' : 'walk up');
+  /** Where the forecast comes from, for "Judged from …". */
+  const forecastFrom = $derived(custom ? 'its own forecast' : `the ${hillResult?.zone.name ?? ''} valley forecast`);
 
   // "Alert me": a new alert for this place, starting from the condition being looked at.
   let alertOpen = $state(false);
@@ -251,7 +268,7 @@
     <button class="cond" class:selected aria-pressed={selected} onclick={() => (chosenKey = k)}>
       <span class="cond-name">
         <strong>{conditions.label(c.profileId)}</strong>
-        <span class="small muted">{PERIOD_LABELS[c.period]}{#if keyTime(c)}, best {keyTime(c)}{/if}{#if c.water}, at {waterName(c.water.body)}{:else if c.scope === 'valley'}, valley forecast{/if}</span>
+        <span class="small muted">{PERIOD_LABELS[c.period]}{#if keyTime(c)}, best {keyTime(c)}{/if}{#if c.water && c.water.distanceM > 0}, at {waterName(c.water.body)}{:else if c.scope === 'valley' && !hillResult?.hill.place}, valley forecast{/if}</span>
       </span>
       <span class="bar" aria-hidden="true"><i class={c.result.verdict} style="width: {Math.round((c.result.score ?? 0) * 100)}%"></i></span>
       <span class="cond-score">{pct(c.result.score)}</span>
@@ -270,7 +287,7 @@
     <header>
       <div>
         <div class="title-row">
-          <h2 id="sheet-title" tabindex="-1">{hillResult?.hill.name ?? 'Hill'}</h2>
+          <h2 id="sheet-title" tabindex="-1">{hillResult?.hill.name ?? waitingName ?? 'Hill'}</h2>
           {#if hillResult}
             <Star
               on={favourites.has(hillResult.hill.number)}
@@ -290,6 +307,13 @@
               {#if hillWater.body.parkings.length === 0}No public car park mapped within 1.5 km of the shore.{:else if hillWater.body.parkings.length === 1}One car park by the shore{hillWater.body.parkings[0]!.name ? `: ${hillWater.body.parkings[0]!.name}` : ''}.{:else}{hillWater.body.parkings.length} car parks by the shore; trips use the one nearest your start.{/if}
             </p>
             <p class="small muted">Everything here is judged from the shore, from the {hillResult.zone.name} valley forecast.</p>
+          {:else if custom}
+            <p class="muted small">
+              {PLACE_KINDS[custom.kind].label}, {Math.round(hillResult.hill.metres)} m. One of your places, with its own forecast.
+            </p>
+            <p class="place-actions">
+              <button class="link small" onclick={() => (placeOpen = true)}>Change or delete this place</button>
+            </p>
           {:else}
             <p class="muted small">
               {Math.round(hillResult.hill.metres)} m{#if lists.length}, {lists.join(', ')}{/if}. {hillResult.zone.name}.
@@ -298,11 +322,11 @@
           {#if isWater}
             <!-- The loch itself: nothing more to say about nearby water. -->
           {:else if hillWater}
-            <p class="small muted">Still water: {waterName(hillWater.body)}, {formatKm(hillWater.distanceM)} from the summit. Reflections and frozen lochs are judged there.</p>
+            <p class="small muted">Still water: {waterName(hillWater.body)}{hillWater.distanceM < 50 ? ', right here' : `, ${formatKm(hillWater.distanceM)} from ${custom ? 'here' : 'the summit'}`}. Reflections and frozen lochs are judged there.</p>
           {:else if conditions.data?.waters}
             <p class="small muted">No still water within 3 km, so reflections and frozen lochs don’t apply.</p>
           {/if}
-          {#if hillResult.searchOnly && !isWater}
+          {#if hillResult.searchOnly && !isWater && !custom}
             <p class="small muted">Not on your hill lists (most of these are Tumps), so it only appears when you search for it. It isn’t in the results or the best bet.</p>
           {/if}
         {/if}
@@ -311,7 +335,7 @@
 
     {#if !hillResult}
       <p class="muted">
-        {#if conditions.loading}Fetching the forecast for this hill…{:else}No forecast for this hill with the current day and filters.{/if}
+        {#if conditions.loading}<Spinner /> Fetching the forecast…{:else}No forecast for this place with the current day and filters.{/if}
       </p>
     {:else}
       <section class="verdict">
@@ -353,7 +377,8 @@
             {conditions.data?.config.profiles[chosen.profileId]?.blurb}
             {chosen.window.label}: {formatTime(chosen.window.start)} to {formatTime(chosen.window.end)}.
             {#if chosen.water}
-              Judged for {waterName(chosen.water.body)}, {formatKm(chosen.water.distanceM)} from the summit, from the {hillResult.zone.name} valley forecast.
+              Judged for {waterName(chosen.water.body)}{chosen.water.distanceM ? `, ${formatKm(chosen.water.distanceM)} from ${custom ? 'here' : 'the summit'}` : ''}, from {forecastFrom}.
+            {:else if custom}Judged from its own forecast{chosen.scope === 'summit' ? ', at its height' : ''}.
             {:else if chosen.scope === 'valley'}Judged from the {hillResult.zone.name} valley forecast, so it’s shared by nearby hills.{:else}Judged at the summit’s height.{/if}
           </p>
           {#if chosen.water && conditions.data?.config.profiles[chosen.profileId]?.water?.fetchScaled.length}
@@ -419,7 +444,7 @@
 
         {#if !isWater}
         <section class="walk">
-          <h3>The walk up</h3>
+          <h3>The {walkWord}</h3>
           {#if routeFound}
             <p>
               From <strong>{routeStartLabel}</strong>: {routeFound.distanceKm.toFixed(1)} km and
@@ -456,7 +481,7 @@
               <li><span class="t">{clock(trip.plan.wakeAt)}</span> {chosen.period === 'morning' ? 'Get up' : 'Get ready'}</li>
               <li class="leave"><span class="t">{clock(trip.plan.leaveAt)}</span> Leave {leaveName}</li>
               <li><span class="t">{clock(trip.plan.parkAt)}</span> {parkLabel}, after about {formatDuration(trip.driveMinutes)} and {Math.round(trip.roadMiles)} miles</li>
-              <li><span class="t">{clock(trip.plan.arriveAt)}</span> {lochside && tripWater ? `At ${waterName(tripWater)}` : 'In place'}{settings.earlyMinutes ? `, ${settings.earlyMinutes} min early` : ''}, after a {formatDuration(trip.walkMinutes)} {lochside ? 'walk to the shore' : 'walk up'}</li>
+              <li><span class="t">{clock(trip.plan.arriveAt)}</span> {lochside && tripWater ? `At ${waterName(tripWater)}` : 'In place'}{settings.earlyMinutes ? `, ${settings.earlyMinutes} min early` : ''}, after a {formatDuration(trip.walkMinutes)} {lochside ? 'walk to the shore' : walkWord}</li>
               <li><span class="t">{clock(trip.plan.target)}</span> {trip.targetLabel.charAt(0).toUpperCase() + trip.targetLabel.slice(1)}</li>
             </ol>
             {#if trip.walkSource === 'estimate' && hillResult.route === 'loading'}
@@ -525,8 +550,21 @@
 {/if}
 
 <AlertEditor bind:open={alertOpen} preset={alertPreset} />
+<PlaceEditor bind:open={placeOpen} editing={editingPlace} onDeleted={() => goto('/', { replace: true })} />
 
 <style>
+  .place-actions {
+    margin: 2px 0 0;
+  }
+  .place-actions .link {
+    border: 0;
+    background: none;
+    padding: 0;
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+    cursor: pointer;
+  }
   .alert-me {
     margin-top: 4px;
     border: 1px solid var(--line);

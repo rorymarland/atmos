@@ -10,7 +10,7 @@
   import { conditions } from '#lib/conditions.svelte.ts';
   import { suggestPlaces } from '#lib/geocode.ts';
   import { loadSearchHills } from '#lib/static-data.ts';
-  import { waterAsPlace, type Hill } from '@atmos/engine';
+  import { PLACE_KINDS, waterAsPlace, type Hill } from '@atmos/engine';
   import type { StartPoint } from '#lib/settings.svelte.ts';
 
   let {
@@ -74,7 +74,9 @@
           kind: 'hill',
           key: `h${h.number}`,
           label: h.name,
-          detail: `${Math.round(h.metres)} m, ${other ? 'not on your lists, ' : ''}${data.zones[h.zone]?.name ?? ''}`,
+          detail: h.place
+            ? `Your place: ${PLACE_KINDS[h.place.kind].label.toLowerCase()}, ${Math.round(h.metres)} m`
+            : `${Math.round(h.metres)} m, ${other ? 'not on your lists, ' : ''}${data.zones[h.zone]?.name ?? ''}`,
           number: h.number,
           lat: h.lat,
           lon: h.lon,
@@ -127,20 +129,28 @@
   /** Favourites, in the order they were starred. */
   const favs = $derived.by((): Suggestion[] => {
     const data = conditions.data;
-    return favourites.list.map(({ hill: h, other }) => ({
+    return favourites.list.flatMap(({ hill: saved, other: wasOther }) => {
+      // A custom place's forecast zone can move as places are added: use today's version.
+      const h = saved.kind === 'custom' ? data?.hillsByNumber.get(saved.number) : saved;
+      if (!h) return [];
+      const other = saved.kind === 'custom' || wasOther;
+      return [{
       kind: 'hill' as const,
       key: `f${h.number}`,
       label: h.name,
       detail:
         h.kind === 'water'
           ? `Loch or lake, ${data?.zones[h.zone]?.name ?? ''}`
+          : h.place
+            ? `Your place: ${PLACE_KINDS[h.place.kind].label.toLowerCase()}, ${Math.round(h.metres)} m`
           : `${Math.round(h.metres)} m, ${data?.zones[h.zone]?.name ?? ''}`,
       number: h.number,
       lat: h.lat,
       lon: h.lon,
       hill: h,
       ...(other ? { other: h } : {}),
-    }));
+    }];
+    });
   });
   const suggestions = $derived<Suggestion[]>(
     typing

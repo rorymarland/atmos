@@ -28,8 +28,13 @@ export interface Hill {
    * nearest bit of its shore: where water conditions are shot from.
    */
   water?: { index: number; distanceM: number; shore?: { lat: number; lon: number } };
-  /** A loch opened as a place: scored from the shore, with no summit (see waterAsPlace). */
-  kind?: 'water';
+  /**
+   * Not a DoBIH hill: a loch opened as a place (scored from the shore, see waterAsPlace), or
+   * a custom place someone added (see places.ts).
+   */
+  kind?: 'water' | 'custom';
+  /** For a custom place: its id and type. */
+  place?: { id: string; kind: 'high' | 'viewpoint' | 'lochside' };
 }
 
 /**

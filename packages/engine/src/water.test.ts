@@ -61,3 +61,27 @@ describe('water', () => {
     expect(decodeWaterBody(encodeWaterBody(bare))).toEqual(bare);
   });
 });
+
+describe('custom places and water', async () => {
+  const { nearestWaterTo } = await import('./places.js');
+  const loch = (name: string, lat: number, lon: number, spanKm: number): WaterBody => ({
+    id: name,
+    name,
+    lat,
+    lon,
+    ha: spanKm * 50,
+    spanKm,
+    zone: 0,
+    shore: { lat, lon },
+    parkings: [],
+  });
+  it('picks the small loch you are standing by over a long one 13 km away', () => {
+    const lomond = loch('Loch Lomond', 56.09, -4.62, 36);
+    const ard = loch('Loch Ard', 56.177, -4.45, 4);
+    const hit = nearestWaterTo({ lat: 56.1807, lon: -4.4626 }, [lomond, ard], 1);
+    expect(hit?.index).toBe(1);
+  });
+  it('finds nothing when no water is near', () => {
+    expect(nearestWaterTo({ lat: 55, lon: -3 }, [loch('Far', 57, -5, 2)], 3)).toBeNull();
+  });
+});

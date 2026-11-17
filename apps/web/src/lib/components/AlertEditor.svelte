@@ -92,7 +92,7 @@
   const groups = $derived(
     CONDITION_GROUPS.map((g) => ({ ...g, ids: g.ids.filter((id) => profiles[id]) })).filter((g) => g.ids.length),
   );
-  const keyOf = (p: PlaceRef) => (p.kind === 'hill' ? `h${p.number}` : `w${p.id}`);
+  const keyOf = (p: PlaceRef) => (p.kind === 'hill' ? `h${p.number}` : p.kind === 'water' ? `w${p.id}` : `c${p.id}`);
 
   function addPlace(p: PlaceRef | null) {
     if (!p || form.places.some((x) => keyOf(x) === keyOf(p))) return;
