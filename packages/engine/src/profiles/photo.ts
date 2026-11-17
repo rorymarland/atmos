@@ -4,6 +4,7 @@
  * aurora. Thresholds and weights live in config/profiles.yaml.
  */
 import { kpNeeded } from '../astro.js';
+import { freezingLevelAt } from '../vertical.js';
 import type { HourContext } from '../context.js';
 import { cloudBase, dewPointAt2m, horizonClear, mean, round } from './shared.js';
 import type { FactorDefinition, ProfileDefinition } from './types.js';
@@ -129,7 +130,7 @@ export const snow: ProfileDefinition = {
         let hours = 0;
         for (let o = -36; o <= 0; o++) {
           const p = ctx.surface('precipitation', o);
-          const fl = ctx.surface('freezingLevelHeight', o);
+          const fl = freezingLevelAt(ctx.forecast, ctx.i + o);
           if (p === null || fl === null) continue;
           hours++;
           if (fl - SNOW_BELOW_FREEZING_LEVEL_M <= ctx.target.altitudeM) total += p;
@@ -142,7 +143,7 @@ export const snow: ProfileDefinition = {
       label: 'Freezing level below the summit',
       unit: 'metres',
       read: (ctx) => {
-        const fl = ctx.surface('freezingLevelHeight');
+        const fl = freezingLevelAt(ctx.forecast, ctx.i);
         return fl === null
           ? { value: null }
           : { value: ctx.target.altitudeM - fl, detail: `freezing level about ${round(fl, 50)} m` };
@@ -303,7 +304,7 @@ const freshSnow: FactorDefinition = {
     let hours = 0;
     for (let o = -48; o <= 0; o++) {
       const p = ctx.surface('precipitation', o);
-      const fl = ctx.surface('freezingLevelHeight', o);
+      const fl = freezingLevelAt(ctx.forecast, ctx.i + o);
       if (p === null || fl === null) continue;
       hours++;
       if (fl - SNOW_BELOW_FREEZING_LEVEL_M <= ctx.target.altitudeM) total += p;
@@ -320,7 +321,7 @@ export const alpenglow: ProfileDefinition = {
       label: 'Freezing level below the summit',
       unit: 'metres',
       read: (ctx) => {
-        const fl = ctx.surface('freezingLevelHeight');
+        const fl = freezingLevelAt(ctx.forecast, ctx.i);
         return fl === null ? { value: null } : { value: ctx.target.altitudeM - fl };
       },
     },

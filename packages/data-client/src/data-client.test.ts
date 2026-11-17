@@ -303,3 +303,25 @@ describe('Overpass', () => {
     expect(calls).toEqual(OVERPASS_ENDPOINTS);
   });
 });
+
+describe('Overpass time limit', () => {
+  it('gives up on a slow server and asks the mirror', async () => {
+    const { fetchOsmArea, OVERPASS_ENDPOINTS } = await import('./overpass.js');
+    const calls: string[] = [];
+    const f = (url: string, init: RequestInit) => {
+      calls.push(url);
+      if (url === OVERPASS_ENDPOINTS[0]) {
+        // Never answers until aborted.
+        return new Promise<Response>((_, reject) =>
+          init.signal!.addEventListener('abort', () => reject(new Error('aborted'))),
+        );
+      }
+      return Promise.resolve(new Response(JSON.stringify({ elements: [] }), { status: 200 }));
+    };
+    const started = Date.now();
+    const area = await fetchOsmArea(56, -5, 5000, f as unknown as typeof fetch, 50);
+    expect(area.ways).toEqual([]);
+    expect(calls).toEqual(OVERPASS_ENDPOINTS);
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+});

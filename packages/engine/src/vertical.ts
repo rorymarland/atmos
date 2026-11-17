@@ -96,3 +96,51 @@ export function sampleAt(profile: VerticalProfile, altitudeM: number): ProfileSa
     windKmh: interpolate(profile.wind, altitudeM),
   };
 }
+
+/** Standard lapse rate, °C per metre, for extending beyond the highest level. */
+const LAPSE_C_PER_M = 0.0065;
+
+/**
+ * The freezing level (metres AMSL) worked out from the temperature profile, for models
+ * and hours without a published one (ECMWF, and the Met Office beyond the UKV's two and
+ * a half days). The highest place where the air goes from above to below 0 °C on the way
+ * up, so a cold valley under warm air doesn't count. Beyond the highest level, and below
+ * the ground, it's extended at the standard lapse rate.
+ */
+export function derivedFreezingLevel(forecast: ModelForecast, i: number): number | null {
+  const t = profileAt(forecast, i).temperature;
+  if (t.length === 0) return null;
+  let k = -1;
+  for (let j = t.length - 1; j >= 0; j--) {
+    if (t[j]!.value > 0) {
+      k = j;
+      break;
+    }
+  }
+  if (k === -1) {
+    // Freezing all the way up: the level is below the lowest point we have.
+    const low = t[0]!;
+    return low.heightM + low.value / LAPSE_C_PER_M;
+  }
+  const a = t[k]!;
+  const b = t[k + 1];
+  if (!b) return a.heightM + a.value / LAPSE_C_PER_M;
+  return a.heightM + ((b.heightM - a.heightM) * a.value) / (a.value - b.value);
+}
+
+const freezingCache = new WeakMap<ModelForecast, (number | null | undefined)[]>();
+
+/**
+ * The freezing level at hour `i`: the model's own where it has one, else worked out.
+ * Snow looks back 48 hours for every hill, so each hour is worked out once per forecast.
+ */
+export function freezingLevelAt(forecast: ModelForecast, i: number): number | null {
+  if (i < 0 || i >= forecast.time.length) return null;
+  const own = forecast.surface.freezingLevelHeight?.[i];
+  if (own !== null && own !== undefined) return own;
+  let cache = freezingCache.get(forecast);
+  if (!cache) freezingCache.set(forecast, (cache = []));
+  let v = cache[i];
+  if (v === undefined) cache[i] = v = derivedFreezingLevel(forecast, i);
+  return v;
+}

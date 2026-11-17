@@ -69,22 +69,34 @@ export function parseOverpass(json: unknown): OsmArea {
   return { nodes, ways, parkings };
 }
 
+/**
+ * How long to wait for one server. The main one sometimes queues requests for most of a
+ * minute when it's busy (47 s for a tiny query in one check), so give up and try the
+ * mirror rather than leaving a route hanging.
+ */
+export const OVERPASS_TIMEOUT_MS = 30_000;
+
 export async function fetchOsmArea(
   lat: number,
   lon: number,
   radiusM: number,
   fetchImpl: typeof fetch = fetch,
+  timeoutMs = OVERPASS_TIMEOUT_MS,
 ): Promise<OsmArea> {
   const body = new URLSearchParams({ data: overpassQuery(lat, lon, radiusM) });
   let last: unknown;
-  // The main server first, then a mirror if it's busy or down.
+  // The main server first, then a mirror if it's busy, slow or down.
   for (const url of OVERPASS_ENDPOINTS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetchImpl(url, { method: 'POST', body });
+      const res = await fetchImpl(url, { method: 'POST', body, signal: controller.signal });
       if (res.ok) return parseOverpass(await res.json());
       last = new Error(`Overpass ${res.status}`);
     } catch (e) {
       last = e;
+    } finally {
+      clearTimeout(timer);
     }
   }
   throw last instanceof Error ? last : new Error('Overpass unavailable');
