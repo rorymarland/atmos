@@ -28,7 +28,11 @@ import {
   type ForecastCache,
   type KpBin,
 } from '@atmos/data-client';
-import { evaluatePlaces, horizonLookup, horizonSites } from '../../web/src/lib/evaluate-places';
+import {
+  createEvaluateMemo,
+  evaluatePlaces,
+  horizonSites,
+} from '../../web/src/lib/evaluate-places';
 import { londonMidnight } from '../../web/src/lib/time';
 import type { PlaceRef } from './model';
 import type { DayConditions } from './rules';
@@ -173,7 +177,15 @@ export async function scorePlaces(
     .catch(() => undefined);
   const kp: KpBin[] = await fetchKpForecast().catch(() => []);
 
+  // One merged array per zone, so evaluatePlaces shares each zone's work across its places.
+  const models = new Map<string, ModelForecast[]>();
+  const modelsFor = (id: string) => {
+    let m = models.get(id);
+    if (!m) models.set(id, (m = [...(forecasts.get(id) ?? []), ...(harmonie.get(id) ?? [])]));
+    return m;
+  };
   const days: DayConditions[] = [];
+  const memo = createEvaluateMemo();
   const byNumber = new Map(resolved.map((r) => [r.hill.number, r.ref]));
   for (let d = 0; d < FORECAST_DAYS; d++) {
     const evaluated = evaluatePlaces({
@@ -181,9 +193,10 @@ export async function scorePlaces(
       data: { zones: data.zones, config: data.config, waters: data.waters },
       dayOffset: d,
       now,
-      modelsFor: (id) => [...(forecasts.get(id) ?? []), ...(harmonie.get(id) ?? [])],
-      horizonFor: (id) => horizonLookup(horizons.get(id)),
+      modelsFor,
+      horizonsFor: (id) => horizons.get(id),
       kp,
+      memo,
     });
     const date = londonDate(d, now);
     for (const e of evaluated) {

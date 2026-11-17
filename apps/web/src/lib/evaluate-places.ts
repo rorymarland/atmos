@@ -41,15 +41,58 @@ export interface EvaluatedPlace {
 
 export type HorizonLookup = (time: number) => { low: number | null; mid: number | null } | null;
 
+export type HorizonSource = { am?: ModelForecast; pm?: ModelForecast } | undefined;
+
 export interface EvaluateInput {
   hills: Hill[];
   data: { zones: Zone[]; config: ScoringConfig; waters: WaterBody[] | null };
   dayOffset: number;
   now: number;
-  /** Every model's forecast for a zone. */
+  /**
+   * Every model's forecast for a zone. Return the same array while the zone's forecasts are
+   * unchanged: the memo uses its identity to know when to re-score.
+   */
   modelsFor: (zoneId: string) => ModelForecast[];
-  horizonFor: (zoneId: string) => HorizonLookup;
+  /** The zone's sunrise and sunset horizon forecasts (same object while unchanged). */
+  horizonsFor: (zoneId: string) => HorizonSource;
   kp: KpBin[];
+  /**
+   * Results kept between calls. Scoring every hill is the costly part of the app, and most
+   * calls (a filter ticked, a list changed) change which hills are shown, not their scores.
+   */
+  memo?: EvaluateMemo;
+}
+
+interface MemoEntry<T> {
+  deps: unknown[];
+  value: T;
+}
+
+/** What evaluatePlaces remembers; make one per caller with createEvaluateMemo. */
+export interface EvaluateMemo {
+  /** Everything every result depends on; when any of it changes, the memo starts afresh. */
+  global: unknown[];
+  zones: Map<
+    string,
+    MemoEntry<{ sun: SunTimes; nextSun: SunTimes; valley: ConditionResult[]; valleyM: number }>
+  >;
+  waters: Map<string, MemoEntry<ConditionResult[]>>;
+  hills: Map<number, MemoEntry<EvaluatedPlace>>;
+}
+
+export function createEvaluateMemo(): EvaluateMemo {
+  return { global: [], zones: new Map(), waters: new Map(), hills: new Map() };
+}
+
+const sameDeps = (a: unknown[], b: unknown[]) =>
+  a.length === b.length && a.every((x, i) => x === b[i]);
+
+function remember<K, T>(map: Map<K, MemoEntry<T>>, key: K, deps: unknown[], make: () => T): T {
+  const hit = map.get(key);
+  if (hit && sameDeps(hit.deps, deps)) return hit.value;
+  const value = make();
+  map.set(key, { deps, value });
+  return value;
 }
 
 const londonHourFormat = new Intl.DateTimeFormat('en-GB', {
@@ -120,27 +163,33 @@ export function horizonLookup(
 
 /** Every condition and period for each hill with a forecast, on day `dayOffset`. */
 export function evaluatePlaces(input: EvaluateInput): EvaluatedPlace[] {
-  const { hills, data, dayOffset, now, modelsFor, horizonFor, kp } = input;
+  const { hills, data, dayOffset, now, modelsFor, horizonsFor, kp } = input;
+  const memo = input.memo ?? createEvaluateMemo();
+  // Day boundaries and the "beyond the reliable horizon" test move by the hour, not the second.
+  const hour = Math.floor(now / 3_600_000);
+  const global = [dayOffset, hour, kp, data.config, data.waters];
+  if (!sameDeps(memo.global, global)) {
+    memo.global = global;
+    memo.zones.clear();
+    memo.waters.clear();
+    memo.hills.clear();
+  }
   const profiles = Object.entries(data.config.profiles);
   const dayStart = londonMidnight(dayOffset, now);
   const opts = { now, extras: { kp: (t: number) => kpAt(kp, t) } };
   const out: EvaluatedPlace[] = [];
-  const zoneCache = new Map<
-    number,
-    { sun: SunTimes; nextSun: SunTimes; valley: ConditionResult[]; valleyM: number }
-  >();
-  const waterCache = new Map<string, ConditionResult[]>();
 
   for (const hill of hills) {
     const zone = data.zones[hill.zone];
     if (!zone) continue;
     const forecasts = modelsFor(zone.id);
     if (forecasts.length === 0) continue;
-    const zoneOpts = { ...opts, extras: { ...opts.extras, horizon: horizonFor(zone.id) } };
+    const horizon = horizonsFor(zone.id);
+    const zoneDeps = [forecasts, horizon, zone];
+    const zoneOpts = { ...opts, extras: { ...opts.extras, horizon: horizonLookup(horizon) } };
     const p = zone.forecastPoint;
 
-    let z = zoneCache.get(hill.zone);
-    if (!z) {
+    const z = remember(memo.zones, zone.id, zoneDeps, () => {
       const sun = sunTimes(p.lat, p.lon, dayOffset, now);
       const nextSun = sunTimes(p.lat, p.lon, dayOffset + 1, now);
       const valleyM = forecasts[0]!.groundElevationM;
@@ -162,32 +211,9 @@ export function evaluatePlaces(input: EvaluateInput): EvaluatedPlace[] {
           valley.push({ profileId: id, period, result, window, scope: 'valley' });
         }
       }
-      z = { sun, nextSun, valley, valleyM };
-      zoneCache.set(hill.zone, z);
-    }
+      return { sun, nextSun, valley, valleyM };
+    });
 
-    const summit: ConditionResult[] = [];
-    for (const [id, cfg] of profiles) {
-      // A loch opened as a place, or a lochside spot, has no summit.
-      if (cfg.scope !== 'summit' || hill.kind === 'water' || hill.place?.kind === 'lochside')
-        continue;
-      for (const period of cfg.periods) {
-        const window = periodWindow(period, id, z.sun, z.nextSun, dayStart);
-        const target = {
-          id: String(hill.number),
-          name: hill.name,
-          altitudeM: hill.metres,
-          lat: hill.lat,
-          lon: hill.lon,
-        };
-        const result = evaluateTarget(forecasts, window, target, id, data.config, zoneOpts);
-        summit.push({ profileId: id, period, result, window, scope: 'summit' });
-      }
-    }
-
-    // Water conditions at the hill's loch, from the zone's valley forecast with wind limits
-    // scaled for the loch's size. Shared by every hill using the same water.
-    let lochside: ConditionResult[] = [];
     let link = hill.water;
     let body = link && data.waters ? data.waters[link.index] : undefined;
     // A lochside place with no mapped loch near it: judge it as a loch about 1 km long.
@@ -205,40 +231,69 @@ export function evaluatePlaces(input: EvaluateInput): EvaluatedPlace[] {
       };
       link = { index: -1, distanceM: 0 };
     }
-    if (body && link) {
-      const cacheKey = body.id;
-      let cached = waterCache.get(cacheKey);
-      if (!cached) {
-        cached = [];
+
+    const place = remember(
+      memo.hills,
+      hill.number,
+      [...zoneDeps, hill, body?.id ?? null, z],
+      () => {
+        const summit: ConditionResult[] = [];
         for (const [id, cfg] of profiles) {
-          if (!cfg.water) continue;
-          const config = configForWater(data.config, id, body.spanKm);
+          // A loch opened as a place, or a lochside spot, has no summit.
+          if (cfg.scope !== 'summit' || hill.kind === 'water' || hill.place?.kind === 'lochside')
+            continue;
           for (const period of cfg.periods) {
             const window = periodWindow(period, id, z.sun, z.nextSun, dayStart);
             const target = {
-              id: `water:${body.id}`,
-              name: waterName(body),
-              altitudeM: z.valleyM,
-              lat: body.lat,
-              lon: body.lon,
+              id: String(hill.number),
+              name: hill.name,
+              altitudeM: hill.metres,
+              lat: hill.lat,
+              lon: hill.lon,
             };
-            const result = evaluateTarget(forecasts, window, target, id, config, zoneOpts);
-            cached.push({ profileId: id, period, result, window, scope: 'valley' });
+            const result = evaluateTarget(forecasts, window, target, id, data.config, zoneOpts);
+            summit.push({ profileId: id, period, result, window, scope: 'summit' });
           }
         }
-        waterCache.set(cacheKey, cached);
-      }
-      const w = { body, distanceM: link.distanceM };
-      lochside = cached.map((c) => ({ ...c, water: w }));
-    }
 
-    out.push({
-      hill,
-      zone,
-      sun: z.sun,
-      valleyM: z.valleyM,
-      conditions: [...summit, ...z.valley, ...lochside],
-    });
+        // Water conditions at the hill's loch, from the zone's forecast with wind limits
+        // scaled for the loch's size. Shared by every hill using the same water.
+        let lochside: ConditionResult[] = [];
+        if (body && link) {
+          const b = body;
+          const cached = remember(memo.waters, `${b.id}|${zone.id}`, [...zoneDeps, b], () => {
+            const results: ConditionResult[] = [];
+            for (const [id, cfg] of profiles) {
+              if (!cfg.water) continue;
+              const config = configForWater(data.config, id, b.spanKm);
+              for (const period of cfg.periods) {
+                const window = periodWindow(period, id, z.sun, z.nextSun, dayStart);
+                const target = {
+                  id: `water:${b.id}`,
+                  name: waterName(b),
+                  altitudeM: z.valleyM,
+                  lat: b.lat,
+                  lon: b.lon,
+                };
+                const result = evaluateTarget(forecasts, window, target, id, config, zoneOpts);
+                results.push({ profileId: id, period, result, window, scope: 'valley' });
+              }
+            }
+            return results;
+          });
+          const w = { body: b, distanceM: link.distanceM };
+          lochside = cached.map((c) => ({ ...c, water: w }));
+        }
+        return {
+          hill,
+          zone,
+          sun: z.sun,
+          valleyM: z.valleyM,
+          conditions: [...summit, ...z.valley, ...lochside],
+        };
+      },
+    );
+    out.push(place);
   }
   return out;
 }
