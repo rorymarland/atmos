@@ -41,10 +41,14 @@
   and each night has a view line from the Kp forecast showing how far south it should reach.
 - **Checks itself.** Three models (Met Office, ECMWF and, for the first two and a half days,
   KNMI's HARMONIE): a Go needs most of them to agree. Sunrise and sunset conditions check the
-  cloud 60 km towards the sun, and each hill's panel shows how many of ECMWF's 51 ensemble runs
-  back the forecast.
-- **Finds anywhere.** Search hills, UK places and postcodes. Every other UK hill in the database
-  (mostly Tumps, such as Ben A'an) can be searched and scored without cluttering the map.
+  cloud 60 km towards the sun, and each hill's panel shows how many runs of the ECMWF (51) and
+  Met Office (18) ensembles back the forecast.
+- **Finds anywhere.** Search hills, lochs, UK places and postcodes. Every other UK hill in the
+  database (mostly Tumps, such as Ben A'an) can be searched and scored without cluttering the map.
+  Star a hill or loch to keep it in your favourites, at the top of the search box.
+- **Knows where the water is.** Reflections and frozen lochs are only scored where there's still
+  water within 3 km, from about 20,000 UK lochs, lakes and reservoirs in OpenStreetMap. A long loch
+  needs calmer air than a lochan, and those trips end at the lochside by the nearest car park.
 
 | Condition group | Conditions                                                             |
 | --------------- | ---------------------------------------------------------------------- |
