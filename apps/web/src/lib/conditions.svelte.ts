@@ -55,6 +55,7 @@ import {
   type ConditionResult,
   type EvaluatedPlace,
 } from './evaluate-places';
+import { FEED_IDS, sharedFeed, sharedIndex, type FeedData, type FeedId } from './shared-forecasts';
 import { findRoute, savedRoute } from './routes';
 import { settings } from './settings.svelte';
 import { loadStaticData, type StaticData } from './static-data';
@@ -439,6 +440,19 @@ class Conditions {
     return data.zones.filter((_, i) => ids.has(i));
   });
 
+  /**
+   * When each feed in the shared copy was fetched, while the alerts service is sharing
+   * forecasts; null when this browser fetches from Open-Meteo itself.
+   */
+  shared = $state.raw<Partial<Record<FeedId, number>> | null>(null);
+  #feedVersions = new Map<FeedId, string>();
+  #feeds = new Map<FeedId, FeedData>();
+  #kpAt = 0;
+
+  /**
+   * Gets forecasts for the zones in view: the shared copy first, then Open-Meteo directly
+   * for anything it doesn't hold (no alerts service, or a place only this browser knows).
+   */
   async refresh(force = false) {
     const zones = this.neededZones;
     if (zones.length === 0) return;
@@ -450,23 +464,20 @@ class Conditions {
     this.loading = true;
     this.error = null;
     // The Kp forecast is only for the aurora: a failure there mustn't stop the rest.
-    const kp = fetchKpForecast()
-      .then((bins) => (this.kp = bins))
-      .catch((e) => console.warn('Kp forecast:', e));
+    const kp =
+      force || Date.now() - this.#kpAt > 30 * 60_000
+        ? fetchKpForecast()
+            .then((bins) => {
+              this.kp = bins;
+              this.#kpAt = Date.now();
+            })
+            .catch((e) => console.warn('Kp forecast:', e))
+        : Promise.resolve();
     try {
-      const results = await fetchZoneForecasts(zones, {
-        cache: forecastCache,
-        maxAgeMs: force ? 0 : 60 * 60 * 1000,
-        onProgress: (done, total) => (this.progress = total > 0 ? { done, total } : null),
-      });
-      const next = new Map(this.forecasts);
-      for (const r of results)
-        if (this.#isNew('main', r.zoneId, r.fetchedAt)) next.set(r.zoneId, r.forecasts);
-      this.forecasts = next;
-      this.fetchedAt = newestFetch(results);
+      const held = await this.#refreshShared();
+      const direct = held ? zones.filter((z) => !held.has(z.id)) : zones;
+      if (direct.length) await this.#refreshDirect(direct, force);
       this.now = Date.now();
-      // The extras refine what's already on screen; failures there only cost the extra.
-      void this.#refreshExtras(zones, force);
     } catch (e) {
       this.error =
         e instanceof ForecastError
@@ -481,6 +492,77 @@ class Conditions {
         void this.refresh();
       }
     }
+  }
+
+  /** Checks for newer shared forecasts: cheap, so it runs every few minutes. */
+  poll() {
+    if (this.shared && !this.loading) void this.refresh();
+  }
+
+  /** Loads any shared feeds that have changed; returns the zones held, or null if none. */
+  async #refreshShared(): Promise<Set<string> | null> {
+    const index = await sharedIndex();
+    if (!index) {
+      this.shared = null;
+      return null;
+    }
+    let changed = false;
+    for (const id of FEED_IDS) {
+      const info = index[id];
+      if (!info || this.#feedVersions.get(id) === info.version) continue;
+      try {
+        const data = await sharedFeed(id);
+        this.#feeds.set(id, data);
+        this.#feedVersions.set(id, data.version);
+        changed = true;
+      } catch (e) {
+        console.warn('Shared forecasts:', e);
+      }
+    }
+    const met = this.#feeds.get('met')?.zones;
+    if (!met) {
+      this.shared = null;
+      return null;
+    }
+    if (changed) {
+      const ecmwf = this.#feeds.get('ecmwf')?.zones ?? {};
+      const harm = this.#feeds.get('harmonie')?.zones ?? {};
+      const hz = this.#feeds.get('horizon')?.zones ?? {};
+      const main = new Map(this.forecasts);
+      const harmonie = new Map(this.harmonie);
+      const horizons = new Map(this.horizons);
+      for (const [id, models] of Object.entries(met)) {
+        main.set(id, [...models, ...(ecmwf[id] ?? [])]);
+        if (harm[id]) harmonie.set(id, harm[id]);
+        const am = hz[`${id}|am`]?.[0];
+        const pm = hz[`${id}|pm`]?.[0];
+        if (am || pm) horizons.set(id, { am, pm });
+      }
+      this.forecasts = main;
+      this.harmonie = harmonie;
+      this.horizons = horizons;
+    }
+    const times: Partial<Record<FeedId, number>> = {};
+    for (const [id, f] of this.#feeds) times[id] = f.fetchedAt;
+    this.shared = times;
+    this.fetchedAt = times.met ?? null;
+    return new Set(Object.keys(met));
+  }
+
+  /** Straight from Open-Meteo, kept in IndexedDB for an hour. */
+  async #refreshDirect(zones: Zone[], force: boolean) {
+    const results = await fetchZoneForecasts(zones, {
+      cache: forecastCache,
+      maxAgeMs: force ? 0 : 60 * 60 * 1000,
+      onProgress: (done, total) => (this.progress = total > 0 ? { done, total } : null),
+    });
+    const next = new Map(this.forecasts);
+    for (const r of results)
+      if (this.#isNew('main', r.zoneId, r.fetchedAt)) next.set(r.zoneId, r.forecasts);
+    this.forecasts = next;
+    if (!this.shared) this.fetchedAt = newestFetch(results);
+    // The extras refine what's already on screen; failures there only cost the extra.
+    void this.#refreshExtras(zones, force);
   }
 
   /**

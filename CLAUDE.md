@@ -6,8 +6,13 @@
   fetched by the browser from free public APIs that allow CORS; everything else is generated at
   build time into small static files.
 - The one exception is **alerts** (`apps/alerts`), a separate, optional container: a small
-  Node API at `/api/alerts` and `/api/places` (nginx proxies `/api/`) plus an hourly
-  scheduler that emails people. It also keeps shared **custom places**; without it the web app
+  Node API at `/api/alerts`, `/api/places` and `/api/forecasts` (nginx proxies `/api/`) plus an
+  hourly scheduler that emails people. It also fetches every zone's forecasts and shares them
+  (`apps/alerts/src/forecasts.ts`): each feed is refetched only after its minimum gap and once a
+  one-call probe shows a new run, inside a daily budget, because Open-Meteo's free limit is
+  about 10,000 calls a day per IP. The browser uses that copy first
+  (`apps/web/src/lib/shared-forecasts.ts`) and fetches from Open-Meteo itself only without it,
+  or for zones it doesn't hold. It also keeps shared **custom places**; without it the web app
   keeps places in localStorage. Custom places (`packages/engine/src/places.ts`) are merged in
   with `withPlaces` by both the web app and the service: numbers from 1,000,001 (2,000,001 for
   browser-only), each with its own forecast zone appended after the generated zones. The site must keep working without it (the Alerts UI hides when
@@ -37,7 +42,7 @@
 - Scoring thresholds and weights live in `config/profiles.yaml`, not in code. Each condition
   there also declares `scope` (summit or valley), `periods` and whether it counts towards the
   photo score; the web app scores every hill for every condition and period.
-- Open-Meteo allows 600 call-equivalents a minute. `packages/data-client/src/zones.ts` keeps a
+- Open-Meteo allows 600 call-equivalents a minute and about 10,000 a day per IP. `packages/data-client/src/zones.ts` keeps a
   shared budget: the main forecast loads first, then HARMONIE and the horizon points (which may
   wait for the next minute). Check `estimateCallWeight` before adding variables or models.
 - Walking routes (`packages/engine/src/route.ts`) are worked out in the browser on demand: the
