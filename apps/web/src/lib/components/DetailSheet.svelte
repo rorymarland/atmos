@@ -27,6 +27,7 @@
   import { settings } from '#lib/settings.svelte.ts';
   import { modelLabel } from '#lib/static-data.ts';
   import { PERIOD_LABELS } from '#lib/sun.ts';
+  import { SUMMIT_STOP_MINUTES } from '#lib/walk.ts';
   import { formatClock, formatTime, londonMidnight } from '#lib/time.ts';
   import AirColumn from './AirColumn.svelte';
   import Spinner from './Spinner.svelte';
@@ -153,6 +154,28 @@
       : [],
   );
   const trip = $derived(chosen?.trip ?? null);
+  /** Walking: the planned walk, its times and any head-torch warning. */
+  const walk = $derived(chosen?.walk ?? null);
+  /** The walk's times with sunset and dark among them, in order. */
+  const walkSteps = $derived.by(() => {
+    if (!walk) return [];
+    const up = Math.round((walk.summitAt - walk.start) / 60_000);
+    const down = Math.round((walk.end - walk.summitAt) / 60_000) - SUMMIT_STOP_MINUTES;
+    return [
+      {
+        t: walk.start,
+        text: `Set off walking${settings.walkStart === 'best' ? ', for the best of the weather' : ''}`,
+        leave: true,
+      },
+      { t: walk.summitAt, text: `On the summit, after about ${formatDuration(up)}` },
+      {
+        t: walk.end,
+        text: `Back at the car, after ${SUMMIT_STOP_MINUTES} min at the top and about ${formatDuration(down)} down`,
+      },
+      { t: walk.sunset, text: 'Sunset', light: true },
+      { t: walk.dusk, text: 'Dark', light: true },
+    ].sort((a, b) => a.t - b.t);
+  });
   const routeFound = $derived(
     hillResult?.route && typeof hillResult.route === 'object' ? hillResult.route : null,
   );
@@ -476,7 +499,48 @@
 
         <section class="plan">
           <h3>Your trip</h3>
-          {#if trip}
+          {#if walk}
+            <ol class="timeline">
+              {#if trip}
+                <li><span class="t">{clock(trip.plan.wakeAt)}</span> {walk.period === 'morning' ? 'Get up' : 'Get ready'}</li>
+                <li class="leave"><span class="t">{clock(trip.plan.leaveAt)}</span> Leave {leaveName}</li>
+                <li><span class="t">{clock(trip.plan.parkAt)}</span> {parkLabel}, after about {formatDuration(trip.driveMinutes)} and {Math.round(trip.roadMiles)} miles</li>
+              {/if}
+              {#each walkSteps as step (step.text)}
+                <li class:leave={step.leave} class:muted={step.light}><span class="t">{clock(step.t)}</span> {step.text}</li>
+              {/each}
+            </ol>
+            {#if walk.tooLong && settings.downBy !== 'any' && settings.walkStart === 'best'}
+              <p class="small warn torch">
+                This walk is longer than the daylight allows: even setting off at {clock(walk.start)} you’d
+                be back {walk.torch === 'dark' ? 'after dark' : 'after sunset'}. Take a head torch, or pick a
+                shorter walk.
+              </p>
+            {:else if walk.tooLong && settings.downBy !== 'any'}
+              <p class="small warn torch">
+                Setting off at {clock(walk.start)}, you’d be back {walk.torch === 'dark' ? `after dark (${clock(walk.dusk)})` : `after sunset (${clock(walk.sunset)})`}.
+                Take a head torch, or set off earlier.
+              </p>
+            {:else if walk.torch === 'dark'}
+              <p class="small warn torch">You’d finish after dark ({clock(walk.dusk)}): take a head torch, and be sure of the way down.</p>
+            {:else if walk.torch === 'sunset'}
+              <p class="small warn torch">You’d be coming down after sunset ({clock(walk.sunset)}): take a head torch.</p>
+            {/if}
+            {#if trip?.walkSource === 'estimate' && hillResult.route === 'loading'}
+              <p class="small muted working"><Spinner label="Updating the walk time" /> Using a rough walk time until the route is worked out.</p>
+            {/if}
+            {#if trip?.problem === 'too-early'}
+              <p class="small warn">That means getting up before {settings.earliestUp}.</p>
+            {:else if trip?.problem === 'too-late'}
+              <p class="small warn">You’d already need to have left.</p>
+            {/if}
+            <p class="small muted">
+              The verdict above is for the hours of this walk. {routeFound
+                ? 'The time up is from the route above'
+                : 'The time up is a rough estimate by Naismith’s rule from the valley floor'};
+              coming down allows the same distance at walking pace. {#if trip}The drive is a rough estimate: check the real route below.{:else}<a href="/settings#home">Set a start point</a> to see when to leave.{/if}
+            </p>
+          {:else if trip}
             <ol class="timeline">
               <li><span class="t">{clock(trip.plan.wakeAt)}</span> {chosen.period === 'morning' ? 'Get up' : 'Get ready'}</li>
               <li class="leave"><span class="t">{clock(trip.plan.leaveAt)}</span> Leave {leaveName}</li>

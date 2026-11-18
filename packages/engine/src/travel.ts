@@ -47,6 +47,14 @@ export function naismithMinutes(
 }
 
 /**
+ * Coming down: Naismith's flat speed with nothing added for the descent. Steep ground is
+ * slower and easy paths quicker; on most hill paths it evens out.
+ */
+export function descentMinutes(distanceKm: number, pace: Pace = 'steady'): number {
+  return Math.round((distanceKm / 5) * 60 * PACE_FACTOR[pace]);
+}
+
+/**
  * Walk-in to a summit when the route is unknown: ascent from the valley, and a
  * horizontal distance assuming an average 12% gradient (at least 1.5 km).
  */

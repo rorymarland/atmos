@@ -9,6 +9,7 @@ import {
   distanceKm,
   distanceMiles,
   estimateDrive,
+  descentMinutes,
   estimateSummitWalk,
   hillIsOnList,
   planTrip,
@@ -61,6 +62,7 @@ import { settings } from './settings.svelte';
 import { loadStaticData, type StaticData } from './static-data';
 import { periodFitsMoment, targetTime, type SunTimes } from './sun';
 import { londonMidnight } from './time';
+import { chooseWalk, WALK_PERIODS, type WalkPlan } from './walk';
 
 const MINUTE = 60_000;
 
@@ -149,6 +151,8 @@ interface Evaluated extends EvaluatedPlace {
 
 export interface ConditionTrip extends ConditionResult {
   trip: Trip | null;
+  /** Walking: the walk planned, with its times and any head-torch warning. */
+  walk?: WalkPlan;
 }
 
 /** A hill's walking route: found, none within reach, still working, or unreachable. */
@@ -660,6 +664,63 @@ class Conditions {
     }).map((e) => ({ ...e, searchOnly: addExtra && e.hill === extra }));
   });
 
+  /** The walk chosen for each hill, kept while nothing it depends on changes. */
+  #walkPlans = new WeakMap<object, { key: string; plan: WalkPlan | null }>();
+
+  /**
+   * Walking, planned: the three typical walks (morning, day, evening) become the one walk
+   * for "Your trip", timed for the best weather in the ticked parts of the day (or at the
+   * set time) and judged over just its hours. Other conditions pass through.
+   */
+  #planWalks(
+    e: Evaluated,
+    w: { upMinutes: number; downMinutes: number; notBefore: number; dayStart: number },
+  ): (ConditionResult & { walk?: WalkPlan })[] {
+    const walks = e.conditions.filter((c) => c.profileId === 'walking');
+    const span = walks[0]?.span;
+    if (!span) return e.conditions;
+    const periods = WALK_PERIODS.filter((p) => settings.periods.includes(p));
+    // Starts move in half hours, so "now" only matters to the nearest one.
+    const notBefore = Math.ceil(w.notBefore / 1_800_000) * 1_800_000;
+    const key = [
+      w.upMinutes,
+      w.downMinutes,
+      notBefore,
+      periods.join(),
+      settings.walkStart,
+      settings.downBy,
+    ].join('|');
+    let hit = this.#walkPlans.get(span);
+    if (!hit || hit.key !== key) {
+      const plan = chooseWalk({
+        span,
+        periods,
+        sun: e.sun,
+        dayStart: w.dayStart,
+        upMinutes: w.upMinutes,
+        downMinutes: w.downMinutes,
+        start: settings.walkStart,
+        downBy: settings.downBy,
+        notBefore,
+        config: this.data!.config,
+        options: { now: this.now },
+      });
+      hit = { key, plan };
+      this.#walkPlans.set(span, hit);
+    }
+    const plan = hit.plan;
+    if (!plan) return e.conditions;
+    const base = walks.find((c) => c.period === plan.period) ?? walks[0]!;
+    const walk: ConditionResult & { walk: WalkPlan } = {
+      ...base,
+      period: plan.period,
+      result: plan.result,
+      window: plan.window,
+      walk: plan,
+    };
+    return [walk, ...e.conditions.filter((c) => c.profileId !== 'walking')];
+  }
+
   /** Layer 2: a trip plan for each condition. */
   planned = $derived.by(() => {
     const start = settings.start;
@@ -679,10 +740,23 @@ class Conditions {
       const found = route && typeof route === 'object' ? route : null;
       // With a route, drive to where the walk starts; otherwise towards the summit.
       const drive = start ? estimateDrive(start, found ? found.start : e.hill) : null;
+      const estimate = estimateSummitWalk(e.hill.metres, e.valleyM, settings.pace);
       const summitWalk = found
         ? Math.round(found.minutes * PACE_FACTOR[settings.pace])
-        : estimateSummitWalk(e.hill.metres, e.valleyM, settings.pace).minutes;
-      const conditions: ConditionTrip[] = e.conditions.map((c) => {
+        : estimate.minutes;
+      const walkKm = found ? found.distanceKm : estimate.distanceKm;
+      const conditions: ConditionTrip[] = this.#planWalks(e, {
+        upMinutes: summitWalk,
+        downMinutes: descentMinutes(walkKm, settings.pace),
+        // The soonest you could be at the car, if there's a getting-up limit.
+        notBefore: Math.max(
+          this.now,
+          limits.earliestWake !== null && drive
+            ? limits.earliestWake + (settings.readyMinutes + drive.minutes) * 60_000
+            : -Infinity,
+        ),
+        dayStart,
+      }).map((c) => {
         if (!drive) return { ...c, trip: null };
         const ref = c.result.byModel.find((m) => m.model === c.result.referenceModel);
         const target = targetTime(
@@ -714,13 +788,22 @@ class Conditions {
           : found?.start.kind === 'parking'
             ? { lat: found.start.lat, lon: found.start.lon, name: found.start.name ?? '' }
             : undefined;
-        const plan = planTrip({
-          target: target.at,
-          driveMinutes: legDrive.minutes,
-          walkMinutes,
-          earlyMinutes: settings.earlyMinutes,
-          readyMinutes: settings.readyMinutes,
-        });
+        // A walk is planned from setting off at the car; everything else from being in place.
+        const plan = c.walk
+          ? planTrip({
+              target: c.walk.start,
+              driveMinutes: legDrive.minutes,
+              walkMinutes: 0,
+              earlyMinutes: 0,
+              readyMinutes: settings.readyMinutes,
+            })
+          : planTrip({
+              target: target.at,
+              driveMinutes: legDrive.minutes,
+              walkMinutes,
+              earlyMinutes: settings.earlyMinutes,
+              readyMinutes: settings.readyMinutes,
+            });
         return {
           ...c,
           trip: {
@@ -736,7 +819,7 @@ class Conditions {
                 : 'summit',
             ...(loch ? { shore: loch.shore } : {}),
             ...(parking ? { parking } : {}),
-            targetLabel: target.label,
+            targetLabel: c.walk ? 'setting off' : target.label,
             problem: tripProblem(plan, legDrive.minutes, limits),
           },
         };
@@ -788,7 +871,7 @@ class Conditions {
         (c) =>
           ticked.has(c.profileId) &&
           periods.has(c.period) &&
-          periodFitsMoment(c.period, settings.moment),
+          (c.profileId === 'walking' || periodFitsMoment(c.period, settings.moment)),
       );
       if (candidates.some((c) => c.window.end < this.now)) windowPassed = true;
       const counted = candidates.filter(

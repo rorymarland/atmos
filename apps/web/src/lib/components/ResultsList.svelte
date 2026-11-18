@@ -144,7 +144,22 @@
     <p class="small">
       Best for <strong>{conditions.label(c.profileId).toLowerCase()}</strong>, {PERIOD_LABELS[c.period].toLowerCase()}{#if alsoGood.length}; also {alsoGood.join(', ')}{/if}.
     </p>
-    {#if c.trip}
+    {#if c.walk}
+      {@const w = c.walk}
+      <dl class="trip">
+        {#if c.trip}
+          <div><dt>{w.period === 'morning' ? 'Up' : 'Get ready'}</dt><dd>{clock(c.trip.plan.wakeAt)}</dd></div>
+          <div class="leave"><dt>Leave</dt><dd>{clock(c.trip.plan.leaveAt)}</dd></div>
+        {/if}
+        <div class="leave"><dt>Set off walking</dt><dd>{clock(w.start)}</dd></div>
+        <div><dt>Summit</dt><dd>{clock(w.summitAt)}</dd></div>
+        <div><dt>Back</dt><dd>{clock(w.end)}</dd></div>
+      </dl>
+      {#if w.torch}
+        <p class="small warn">Back after {w.torch === 'dark' ? 'dark' : 'sunset'} ({clock(w.torch === 'dark' ? w.dusk : w.sunset)}): take a head torch.</p>
+      {/if}
+      <p class="small muted">{settings.walkStart === 'best' ? 'Timed for the best of the weather. ' : ''}Times are rough estimates.</p>
+    {:else if c.trip}
       {@const t = c.trip}
       <dl class="trip">
         <div><dt>{c.period === 'morning' ? 'Up' : 'Get ready'}</dt><dd>{clock(t.plan.wakeAt)}</dd></div>
@@ -368,6 +383,11 @@
     align-items: center;
     gap: 10px;
     margin-top: 2px;
+  }
+  .warn {
+    color: var(--no);
+    font-weight: 600;
+    margin: 6px 0 0;
   }
   .trip {
     display: flex;

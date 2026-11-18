@@ -6,6 +6,7 @@
   import { MOMENT_LABELS, PERIOD_LABELS, type Moment, type Period } from '#lib/sun.ts';
   import { dayLabel } from '#lib/time.ts';
   import { CONDITION_GROUPS } from '#lib/groups.ts';
+  import { DOWN_BY_LABELS, type DownBy } from '#lib/walk.ts';
 
   let {
     picking = false,
@@ -26,6 +27,15 @@
   const upTimes = ['03:00', '03:30', '04:00', '04:30', '05:00', '05:30', '06:00', '06:30', '07:00', '08:00', '09:00'];
   const driveMiles = [10, 20, 30, 50, 75, 100, 150, 200, 300];
   const lightPeriods = $derived(settings.periods.filter((p) => p === 'morning' || p === 'evening'));
+  // "Be there for" is about light for photos: a walk has its own timing.
+  const walking = $derived(ticked.has('walking'));
+  const photoTicked = $derived([...ticked].some((id) => id !== 'walking'));
+  const showMoment = $derived(lightPeriods.length > 0 && photoTicked);
+  const walkStarts = Array.from({ length: 21 }, (_, i) => {
+    const m = 5 * 60 + i * 30;
+    return `${String(Math.floor(m / 60)).padStart(2, '0')}:${m % 60 ? '30' : '00'}`;
+  });
+  const downBys: DownBy[] = ['sunset', 'dark', 'any'];
 
   const atHome = $derived(
     Boolean(settings.home && settings.start && settings.home.lat === settings.start.lat && settings.home.lon === settings.start.lon),
@@ -45,7 +55,11 @@
     // "Today night" reads oddly: say "Tonight".
     const dayWhen = settings.dayOffset === 0 && when === ' night' ? 'Tonight' : `${day}${when}`;
     const parts = [`${dayWhen}${where}, ${what}`];
-    if (lightPeriods.length) parts.push(`there for ${MOMENT_LABELS[settings.moment].toLowerCase()}`);
+    if (showMoment) parts.push(`there for ${MOMENT_LABELS[settings.moment].toLowerCase()}`);
+    if (walking) {
+      parts.push(settings.walkStart === 'best' ? 'walking in the best weather' : `setting off walking at ${settings.walkStart}`);
+      if (settings.downBy !== 'any') parts.push(`down ${DOWN_BY_LABELS[settings.downBy].toLowerCase()}`);
+    }
     if (settings.start && settings.earliestUp) parts.push(`up no earlier than ${settings.earliestUp}`);
     if (settings.start && settings.maxDriveMiles) parts.push(`within ${settings.maxDriveMiles} miles’ drive`);
     if (settings.start) parts.push(`from ${atHome ? 'home' : settings.start.label}`);
@@ -220,7 +234,30 @@
     </div>
     {#if locateError}<p class="small error">{locateError}</p>{/if}
 
-    {#if lightPeriods.length}
+    {#if walking}
+      <label class="row">
+        <span class="label">Start walking</span>
+        <select bind:value={settings.walkStart} title="When to set off from the car on a hill walk">
+          <option value="best">When the weather's best</option>
+          {#each walkStarts as t (t)}<option value={t}>At {t}</option>{/each}
+        </select>
+      </label>
+      <div class="row">
+        <span class="label">Down by</span>
+        <div class="chips" role="group" aria-label="Back at the car">
+          {#each downBys as d (d)}
+            <button class="chip" aria-pressed={settings.downBy === d} onclick={() => (settings.downBy = d)}>
+              {DOWN_BY_LABELS[d]}
+            </button>
+          {/each}
+        </div>
+      </div>
+      {#if settings.downBy !== 'sunset'}
+        <p class="small muted note">Walks may finish after sunset: you'll be told when to take a head torch.</p>
+      {/if}
+    {/if}
+
+    {#if showMoment}
       <div class="row">
         <span class="label">Be there for</span>
         <div class="chips" role="group" aria-label="At dawn and dusk, be there for">
@@ -249,12 +286,14 @@
       </select>
     </label>
 
+    {#if photoTicked}
       <label class="row">
         <span class="label">Be in place early by</span>
         <select bind:value={settings.earlyMinutes}>
           {#each [0, 10, 15, 20, 30, 45, 60] as m (m)}<option value={m}>{m} min</option>{/each}
         </select>
       </label>
+    {/if}
   </div>
   </details>
 
@@ -398,6 +437,9 @@
   }
   .error {
     color: var(--no);
+  }
+  .note {
+    margin: -4px 0 0;
   }
   .filters summary {
     cursor: pointer;

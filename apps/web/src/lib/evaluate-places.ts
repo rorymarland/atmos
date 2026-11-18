@@ -6,6 +6,7 @@
 import {
   configForWater,
   evaluateTarget,
+  rescoreTarget,
   waterName,
   type Hill,
   type ModelForecast,
@@ -17,6 +18,7 @@ import {
 } from '@atmos/engine';
 import { kpAt, type ForecastSite, type KpBin } from '@atmos/data-client';
 import { periodWindow, skyPositions, sunTimes, type LightWindow, type SunTimes } from './sun';
+import { defaultWalkWindow, walkSpan } from './walk';
 import { londonMidnight } from './time';
 
 /** One condition in one part of the day, for one hill. */
@@ -27,6 +29,11 @@ export interface ConditionResult {
   window: LightWindow;
   /** Scored at the summit, or shared with the rest of the zone from the valley forecast. */
   scope: 'summit' | 'valley';
+  /**
+   * Walking only: every hour from before first light to after dark, so "Your trip" can
+   * judge the hours of the walk you'd actually do (see walk.ts).
+   */
+  span?: TargetResult;
   /** For conditions that need still water: the loch it was scored for. */
   water?: { body: WaterBody; distanceM: number };
 }
@@ -242,15 +249,32 @@ export function evaluatePlaces(input: EvaluateInput): EvaluatedPlace[] {
           // A loch opened as a place, or a lochside spot, has no summit.
           if (cfg.scope !== 'summit' || hill.kind === 'water' || hill.place?.kind === 'lochside')
             continue;
+          const target = {
+            id: String(hill.number),
+            name: hill.name,
+            altitudeM: hill.metres,
+            lat: hill.lat,
+            lon: hill.lon,
+          };
+          if (id === 'walking') {
+            // Scored once across the day; each part of the day gets a typical walk.
+            const span = evaluateTarget(
+              forecasts,
+              walkSpan(z.sun, dayStart),
+              target,
+              id,
+              data.config,
+              zoneOpts,
+            );
+            for (const period of cfg.periods) {
+              const window = defaultWalkWindow(period, z.sun, dayStart);
+              const result = rescoreTarget(span, window, data.config, zoneOpts);
+              summit.push({ profileId: id, period, result, window, scope: 'summit', span });
+            }
+            continue;
+          }
           for (const period of cfg.periods) {
             const window = periodWindow(period, id, z.sun, z.nextSun, dayStart);
-            const target = {
-              id: String(hill.number),
-              name: hill.name,
-              altitudeM: hill.metres,
-              lat: hill.lat,
-              lon: hill.lon,
-            };
             const result = evaluateTarget(forecasts, window, target, id, data.config, zoneOpts);
             summit.push({ profileId: id, period, result, window, scope: 'summit' });
           }

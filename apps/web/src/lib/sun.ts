@@ -110,13 +110,8 @@ export function periodWindow(
         label: 'An hour before sunset to dusk',
       };
     case 'day':
-      return profileId === 'walking'
-        ? {
-            start: floorToHour(Math.max(sunrise, dayStart + 9 * HOUR)),
-            end: Math.min(sunset, dayStart + 16 * HOUR),
-            label: 'Daylight, 09:00 to 16:00',
-          }
-        : { start: floorToHour(sunrise), end: sunset, label: 'Sunrise to sunset' };
+      // Walking has its own windows (walk.ts).
+      return { start: floorToHour(sunrise), end: sunset, label: 'Sunrise to sunset' };
     case 'night': {
       const nextDawn = nextSun.civilDawn ?? dayStart + 30 * HOUR;
       return { start: floorToHour(dusk), end: nextDawn, label: 'Dusk to dawn' };
@@ -147,7 +142,7 @@ export function periodFitsMoment(period: Period, moment: Moment): boolean {
 /**
  * The instant to be in place. Morning: blue hour begins at civil dawn, golden hour at
  * -4°. Evening: golden hour begins at +6°, blue hour at -4°. Daytime and night
- * conditions aim for their best hour; walks for the start of the walking window.
+ * conditions aim for their best hour; walks for the start of the walk.
  */
 export function targetTime(
   profileId: string,
