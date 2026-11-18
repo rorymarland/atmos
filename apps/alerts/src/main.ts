@@ -50,6 +50,7 @@ const placeStore = new PlaceStore(join(env.ALERTS_DATA_DIR ?? '/data', 'places.j
 const feeder: Feeder = new Feeder({
   dir: join(env.ALERTS_DATA_DIR ?? '/data', 'forecasts'),
   zones: async (): Promise<Zone[]> => (await runner.data()).zones,
+  tickMs: 5 * 60_000,
   log,
 });
 const runner: Runner = new Runner({

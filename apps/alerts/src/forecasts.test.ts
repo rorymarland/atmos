@@ -24,6 +24,7 @@ function fakeOpenMeteo(clock: { t: number }) {
   const full: string[] = [];
   const probes: string[] = [];
   let status = 200;
+  let reason = '';
   const fetch = (async (input: string | URL) => {
     const q = new URL(String(input)).searchParams;
     const model = q.get('models')!;
@@ -32,7 +33,7 @@ function fakeOpenMeteo(clock: { t: number }) {
     const hours = (Number(q.get('forecast_days')) + Number(q.get('past_days'))) * 24;
     (lats.length > 1 || hourly.length > 3 ? full : probes).push(model);
     clock.t += 20_000;
-    if (status !== 200) return new Response('{"error":true}', { status });
+    if (status !== 200) return new Response(JSON.stringify({ error: true, reason }), { status });
     const run = runs[model] ?? 1;
     const time = Array.from({ length: hours }, (_, h) => T0 / 1000 + h * 3600);
     const body = lats.map(() => ({
@@ -48,7 +49,10 @@ function fakeOpenMeteo(clock: { t: number }) {
     full,
     probes,
     newRun: (model: string) => (runs[model] = (runs[model] ?? 1) + 1),
-    fail: (s: number) => (status = s),
+    fail: (s: number, why = '') => {
+      status = s;
+      reason = why;
+    },
   };
 }
 
@@ -155,19 +159,61 @@ describe('Feeder', () => {
     expect(again.spentToday()).toBeGreaterThan(0);
   });
 
-  it('backs off for half an hour when Open-Meteo says no', async () => {
+  it('backs off briefly after the minute limit, and says so', async () => {
     const { feeder, om, clock } = setup();
-    om.fail(429);
+    om.fail(429, 'Minutely API request limit exceeded. Please try again in one minute.');
     await feeder.tick();
-    expect(feeder.lastError).toBeTruthy();
+    const idx = feeder.index();
+    expect(idx.pausedUntil).toBeGreaterThan(clock.t);
+    expect(idx.limitedAt).not.toBeNull();
+    expect(idx.events[0]!.text).toMatch(/the minute's limit/);
+    expect(idx.feeds.met).toBeUndefined();
     const tries = om.full.length + om.probes.length;
     om.fail(200);
-    clock.t += 10 * 60_000;
+    clock.t += 5 * 60_000;
     await feeder.tick();
     expect(om.full.length + om.probes.length).toBe(tries);
-    clock.t += 25 * 60_000;
+    clock.t += 6 * 60_000;
     await feeder.tick();
     expect(feeder.zone('z0')).not.toBeNull();
+  });
+
+  it("waits an hour after the day's limit, and tells the check page", async () => {
+    const { feeder, om, clock } = setup();
+    await feeder.tick();
+    clock.t += 7 * HOUR;
+    om.fail(429, 'Daily API request limit exceeded. Please try again tomorrow.');
+    await feeder.tick();
+    const idx = feeder.index();
+    expect(idx.pausedUntil! - clock.t).toBeGreaterThan(55 * 60_000);
+    expect(idx.nextCheckAt).toBe(idx.pausedUntil);
+    expect(idx.events[0]).toMatchObject({ level: 'error', feed: 'met' });
+    expect(idx.events[0]!.text).toMatch(/the day's limit/);
+    expect(idx.feeds.met).toMatchObject({ lastCheck: 'failed' });
+    expect(idx.feeds.met!.lastError).toMatch(/Daily API request limit/);
+  });
+
+  it('says when each feed was pulled and when it is next due', async () => {
+    const { feeder, clock } = setup();
+    await feeder.tick();
+    const idx = feeder.index();
+    const met = idx.feeds.met!;
+    expect(met.lastCheck).toBe('fetched');
+    expect(met.notBefore - met.fetchedAt).toBe(2 * HOUR);
+    expect(met.latestBy - met.fetchedAt).toBe(6 * HOUR);
+    expect(idx.nextCheckAt).toBe(idx.lastCheckAt! + 5 * 60_000);
+    expect(idx.events.filter((e) => e.text.startsWith('Fetched'))).toHaveLength(4);
+    expect(idx.spentToday).toBeGreaterThan(0);
+    // Two hours on with no new run: checked, same run.
+    clock.t += 2 * HOUR;
+    await feeder.tick();
+    expect(feeder.index().feeds.met!.lastCheck).toBe('same-run');
+  });
+
+  it('keeps its events across a restart', async () => {
+    const { feeder, make } = setup();
+    await feeder.tick();
+    expect(make().index().events.length).toBe(feeder.index().events.length);
   });
 
   it('stays inside the daily budget', { timeout: 60_000 }, async () => {
