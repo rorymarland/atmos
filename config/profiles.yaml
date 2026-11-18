@@ -32,7 +32,8 @@ profiles:
     short: Walking
     blurb: 'Safe, pleasant conditions on the summit: wind, rain, cloud base and wind chill.'
     scope: summit
-    periods: [day]
+    # Morning: setting off around first light. Evening: back down around sunset.
+    periods: [morning, day, evening]
     photo: false
     aggregate: mean
     worstHourPenalty: 0.5

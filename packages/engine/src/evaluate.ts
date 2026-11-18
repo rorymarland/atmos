@@ -215,6 +215,51 @@ export function evaluateTarget(
   const byModel = forecasts.map((f) =>
     evaluateWindow(f, window, target, profileId, config, options.extras),
   );
+  return combineModels(byModel, window, target, profileId, config, options);
+}
+
+/**
+ * The same target judged over a narrower window, from hours already scored: the hours in
+ * `result` must cover `window`. Used to pick the best stretch for a walk without scoring
+ * every hour again for each possible start.
+ */
+export function rescoreTarget(
+  result: TargetResult,
+  window: TimeWindow,
+  config: ScoringConfig,
+  options: EvaluateOptions,
+): TargetResult {
+  const { profileConfig } = profileParts(result.profileId, config);
+  const byModel = result.byModel.map((m): WindowResult => {
+    const hours = m.hours.filter((h) => h.time >= window.start && h.time <= window.end);
+    const withData = hours.filter((h) => h.score !== null);
+    if (withData.length === 0) {
+      return { model: m.model, score: null, verdict: 'nodata', keyHour: null, hours };
+    }
+    const { score, keyHour } = aggregate(withData, profileConfig);
+    return {
+      model: m.model,
+      score,
+      verdict: verdictFor(score, keyHour.gated, config),
+      keyHour,
+      hours,
+    };
+  });
+  return combineModels(byModel, window, result.target, result.profileId, config, options);
+}
+
+/**
+ * The headline across models: the mean of their window scores, with their spread setting
+ * the confidence.
+ */
+function combineModels(
+  byModel: WindowResult[],
+  window: TimeWindow,
+  target: Target,
+  profileId: string,
+  config: ScoringConfig,
+  options: EvaluateOptions,
+): TargetResult {
   const scored = byModel.filter((r) => r.score !== null);
 
   if (scored.length === 0) {

@@ -35,6 +35,12 @@
 - **Plans the trip.** Set a home, say what to be there for (blue hour, golden hour, sunrise or
   sunset), the earliest you'll get up and how far you'll drive. Each hill gets a rough get-up and
   leave time, with a Google Maps link for the real route.
+- **Plans hill walks.** With Walking ticked, "Your trip" asks when to start walking (when the
+  weather's best, or a set time) and when to be back down (before sunset, before dark, or any
+  time). Atmos tries each start time and judges walking over just the hours you'd be on the hill,
+  up and down, so the verdict is for the walk you'd do. Morning walks set off from first light,
+  evening walks finish around sunset, and any walk that would end after sunset or dark says to
+  take a head torch.
 - **Shows the sun and moon.** A draggable pin draws sunrise, sunset, moonrise and moonset bearings;
   the timeline adds the sun and moon now, and you scrub it through the day.
 - **Maps the aurora.** With Aurora ticked, tonight's NOAA OVATION nowcast is shaded over the UK,

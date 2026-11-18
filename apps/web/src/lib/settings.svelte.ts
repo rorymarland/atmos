@@ -4,6 +4,7 @@
  */
 import type { Nation, Pace } from '@atmos/engine';
 import type { Moment, Period } from './sun';
+import type { DownBy, WalkStart } from './walk';
 
 export interface StartPoint {
   lat: number;
@@ -50,6 +51,10 @@ export interface Settings {
   earlyMinutes: number;
   /** Walking pace for walk-in estimates. */
   pace: Pace;
+  /** For hill walks: set off when the weather's best, or at a set time ("09:30"). */
+  walkStart: WalkStart;
+  /** For hill walks: be back at the car before sunset, before dark, or whenever. */
+  downBy: DownBy;
 }
 
 const KEY = 'atmos.settings';
@@ -82,6 +87,8 @@ export const DEFAULT_SETTINGS: Settings = {
   readyMinutes: 30,
   earlyMinutes: 15,
   pace: 'steady',
+  walkStart: 'best',
+  downBy: 'sunset',
 };
 
 function load(): Settings {
@@ -132,6 +139,8 @@ export function resetFilters(): void {
     moment: d.moment,
     earliestUp: d.earliestUp,
     maxDriveMiles: d.maxDriveMiles,
+    walkStart: d.walkStart,
+    downBy: d.downBy,
   });
 }
 
@@ -148,7 +157,9 @@ export function filtersChanged(): boolean {
     settings.minHeight !== d.minHeight ||
     settings.moment !== d.moment ||
     settings.earliestUp !== d.earliestUp ||
-    settings.maxDriveMiles !== d.maxDriveMiles
+    settings.maxDriveMiles !== d.maxDriveMiles ||
+    settings.walkStart !== d.walkStart ||
+    settings.downBy !== d.downBy
   );
 }
 
