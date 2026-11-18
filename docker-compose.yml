@@ -16,6 +16,7 @@
 
 services:
   atmos:
+    # :latest follows main; use a version (:1.0.0, or :1 for any 1.x) to stay on a release.
     image: ghcr.io/rorymarland/atmos:latest
     container_name: atmos
     restart: unless-stopped
