@@ -133,6 +133,10 @@ docker compose up -d                          # first run
 docker compose pull && docker compose up -d   # update to the latest version
 ```
 
+`:latest` follows the main branch. To stay on a release instead, set both images in
+`docker-compose.yml` to a version: `:1.0.0` for exactly that release, or `:1` for the newest 1.x.
+Releases are listed on the [GitHub releases page](https://github.com/rorymarland/atmos/releases).
+
 The folder is mounted read-only; each time the container starts it builds the hill data from the
 CSV (about two seconds) and writes the display defaults from `.env`. A new DoBIH release only
 needs the new CSV in place of the old one and `docker compose restart`.
