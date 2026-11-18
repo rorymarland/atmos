@@ -7,8 +7,10 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['apps/web/static/**/*.js'],
+    files: ['apps/web/static/**/*.js', 'apps/web/src/lib/check-page.js'],
     languageOptions: { globals: { ...globals.browser } },
+    // The check page is deliberately untyped (see its header).
+    rules: { '@typescript-eslint/ban-ts-comment': 'off' },
   },
   {
     languageOptions: { globals: { ...globals.node } },

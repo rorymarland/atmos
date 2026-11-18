@@ -1017,6 +1017,11 @@
             Forecasts from {formatTime(conditions.fetchedAt)} ({ageLabel(conditions.fetchedAt, conditions.now)}).
             <button class="link" onclick={() => conditions.refresh(true)}>Refresh</button>
           {/if}
+          <a class="check-link" href="/check" title="Data check" aria-label="Data check">
+            <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+              <path d="M1 8h3l2-5 4 10 2-5h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </a>
         </div>
 
         {#if ranking.windowPassed && settings.dayOffset === 0}
@@ -1331,5 +1336,19 @@
     .search-box {
       right: 12px;
     }
+  }
+  /* A deliberately quiet way to the data check page. */
+  .check-link {
+    display: inline-flex;
+    vertical-align: middle;
+    margin-left: 4px;
+    padding: 2px;
+    color: var(--ink-soft);
+    opacity: 0.3;
+    transition: opacity 0.15s;
+  }
+  .check-link:hover,
+  .check-link:focus-visible {
+    opacity: 1;
   }
 </style>
