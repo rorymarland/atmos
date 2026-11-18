@@ -17,6 +17,8 @@ import {
   fetchZoneForecasts,
   ForecastError,
   HARMONIE_REQUEST,
+  isDailyLimit,
+  limitReason,
   HORIZON_REQUEST,
   parseForecastResponse,
   ZONE_REQUEST,
@@ -108,9 +110,32 @@ interface Spend {
   weight: number;
 }
 
+/** Open-Meteo's free allowance per IP address per day. */
+export const DAILY_LIMIT = 10_000;
+
+/** The outcome of the last look at a feed. */
+export type CheckOutcome = 'fetched' | 'same-run' | 'over-budget' | 'failed';
+
+export interface FeedStatus {
+  lastCheckAt: number | null;
+  lastCheck: CheckOutcome | null;
+  lastError: string | null;
+}
+
+export interface FeedEvent {
+  at: number;
+  level: 'info' | 'warn' | 'error';
+  feed?: FeedId;
+  text: string;
+}
+
+const MAX_EVENTS = 50;
+
 export interface FeederOptions {
   dir: string;
   zones: () => Promise<Zone[]>;
+  /** How often `tick` is called, for saying when the next look is. */
+  tickMs?: number;
   fetch?: typeof fetch;
   now?: () => number;
   log?: (msg: string) => void;
@@ -135,6 +160,10 @@ export class Feeder {
   #spend: Spend[] = [];
   #pausedUntil = 0;
   #running = false;
+  #status = new Map<FeedId, FeedStatus>();
+  #events: FeedEvent[] = [];
+  #lastTickAt: number | null = null;
+  #limitedAt: number | null = null;
   readonly #fetch: typeof fetch;
   readonly #now: () => number;
   readonly #log: (msg: string) => void;
@@ -148,23 +177,71 @@ export class Feeder {
     this.#load();
   }
 
-  /** What each feed holds, for the browser to see what's changed. */
+  /**
+   * What each feed holds (the browser uses the versions to see what's changed), when each
+   * is next due, today's spending and recent events (for the check page).
+   */
   index() {
-    const feeds: Partial<Record<FeedId, { version: string; fetchedAt: number; zones: number }>> =
-      {};
+    const now = this.#now();
+    const feeds: Partial<
+      Record<
+        FeedId,
+        {
+          version: string;
+          fetchedAt: number;
+          zones: number;
+          /** No new fetch before this. */
+          notBefore: number;
+          /** Fetched by this even without a new run. */
+          latestBy: number;
+        } & FeedStatus
+      >
+    > = {};
     for (const [id, f] of this.#feeds) {
+      const spec = FEEDS[id];
       feeds[id] = {
         version: f.version,
         fetchedAt: f.fetchedAt,
         zones: Object.keys(f.zones).length,
+        notBefore: f.fetchedAt + spec.minGapMs,
+        latestBy: f.fetchedAt + spec.maxGapMs,
+        ...this.#statusOf(id),
       };
     }
+    const tickMs = this.opts.tickMs ?? 5 * 60_000;
+    const paused = this.#pausedUntil > now ? this.#pausedUntil : null;
     return {
+      now,
       feeds,
       spentToday: Math.round(this.spentToday()),
-      pausedUntil: this.#pausedUntil > this.#now() ? this.#pausedUntil : null,
+      dailyLimit: DAILY_LIMIT,
+      budgets: Object.fromEntries(FEED_IDS.map((id) => [id, FEEDS[id].dailyCap])),
+      lastCheckAt: this.#lastTickAt,
+      nextCheckAt: paused ?? (this.#lastTickAt ?? now) + tickMs,
+      pausedUntil: paused,
+      limitedAt: this.#limitedAt,
       lastError: this.lastError,
+      events: [...this.#events].reverse(),
     };
+  }
+
+  #statusOf(id: FeedId): FeedStatus {
+    let s = this.#status.get(id);
+    if (!s) this.#status.set(id, (s = { lastCheckAt: null, lastCheck: null, lastError: null }));
+    return s;
+  }
+
+  #note(id: FeedId, outcome: CheckOutcome, error: string | null = null) {
+    const s = this.#statusOf(id);
+    s.lastCheckAt = this.#now();
+    s.lastCheck = outcome;
+    s.lastError = error;
+  }
+
+  #event(level: FeedEvent['level'], text: string, feed?: FeedId) {
+    this.#events.push({ at: this.#now(), level, text, ...(feed ? { feed } : {}) });
+    if (this.#events.length > MAX_EVENTS) this.#events.splice(0, this.#events.length - MAX_EVENTS);
+    this.#log(`Forecasts: ${feed ? `${feed}: ` : ''}${text}`);
   }
 
   feed(id: FeedId): FeedData | undefined {
@@ -205,11 +282,14 @@ export class Feeder {
     const now = this.#now();
     if (now < this.#pausedUntil) return;
     this.#running = true;
+    this.#lastTickAt = now;
+    let current: FeedId | undefined;
     try {
       const zones = await this.opts.zones();
       if (zones.length === 0) return;
       const probes = new Map<string, string | null>();
       for (const id of FEED_IDS) {
+        current = id;
         const spec = FEEDS[id];
         const last = this.#feeds.get(id);
         const sites = spec.sites(zones, this.#now());
@@ -226,6 +306,7 @@ export class Feeder {
         const reading = probes.get(spec.probeModel) ?? null;
         // Same reading as the data we hold: no new run yet.
         if (due === 'probe' && reading !== null && reading === last?.probe) {
+          this.#note(id, 'same-run');
           const missing = sites.filter((s) => !(s.id in last.zones));
           if (missing.length) await this.#fetchFeed(id, spec, missing, last.probe, last);
           continue;
@@ -235,19 +316,36 @@ export class Feeder {
           points: sites.map((s) => s.forecastPoint),
         });
         if (this.spentToday() + weight > spec.dailyCap) {
-          this.#log(`Forecasts: skipping ${id}, ${Math.round(this.spentToday())} spent today`);
+          this.#note(id, 'over-budget');
+          this.#event(
+            'warn',
+            `Skipped: ${Math.round(this.spentToday())} of today's allowance used, and this would cost ${Math.round(weight)}`,
+            id,
+          );
           continue;
         }
         await this.#fetchFeed(id, spec, sites, reading);
+        this.#note(id, 'fetched');
       }
+      current = undefined;
       this.lastError = null;
     } catch (e) {
-      this.lastError = (e as Error).message;
+      const message = (e as Error).message;
+      this.lastError = message;
+      if (current) this.#note(current, 'failed', message);
       if (e instanceof ForecastError && e.status === 429) {
-        // Over a limit: the minute's clears quickly, the day's doesn't. Back off either way.
-        this.#pausedUntil = this.#now() + 30 * 60_000;
+        // Over a limit: the minute's clears quickly, the day's doesn't.
+        const daily = isDailyLimit(message);
+        this.#limitedAt = this.#now();
+        this.#pausedUntil = this.#now() + (daily ? 60 : 10) * 60_000;
+        this.#event(
+          'error',
+          `Open-Meteo refused: ${daily ? "the day's" : "the minute's"} limit reached. Trying again at ${hhmm(this.#pausedUntil)}`,
+          current,
+        );
+      } else {
+        this.#event('error', message, current);
       }
-      this.#log(`Forecasts: ${this.lastError}`);
     } finally {
       this.#running = false;
       this.#saveState();
@@ -258,7 +356,10 @@ export class Feeder {
     const req = probeRequest(model, zone.forecastPoint);
     this.#spent(estimateCallWeight(req));
     const res = await this.#fetch(buildForecastUrl(req));
-    if (res.status === 429) throw new ForecastError('Open-Meteo limit reached', 429);
+    if (res.status === 429) {
+      const said = limitReason(await res.text().catch(() => ''));
+      throw new ForecastError(`Open-Meteo rate limit reached${said ? ` (${said})` : ''}`, 429);
+    }
     if (!res.ok) return null;
     const [forecasts] = parseForecastResponse(await res.json(), req);
     const f = forecasts?.[0];
@@ -292,8 +393,10 @@ export class Feeder {
     const file = join(this.opts.dir, `${id}.json.gz`);
     writeFileSync(`${file}.tmp`, gz);
     renameSync(`${file}.tmp`, file);
-    this.#log(
-      `Forecasts: ${id}${into ? ' (new places)' : ''} for ${sites.length} points in ${Math.round((now - started) / 1000)} s, ${Math.round(gz.length / 1024)} KB`,
+    this.#event(
+      'info',
+      `${into ? 'Added new places: ' : 'Fetched: '}${sites.length} points in ${Math.round((now - started) / 1000)} s, ${Math.round(gz.length / 1024)} KB`,
+      id,
     );
   }
 
@@ -315,9 +418,17 @@ export class Feeder {
       const s = JSON.parse(readFileSync(join(this.opts.dir, 'state.json'), 'utf8')) as {
         spend?: Spend[];
         pausedUntil?: number;
+        status?: Partial<Record<FeedId, FeedStatus>>;
+        events?: FeedEvent[];
+        limitedAt?: number | null;
+        lastTickAt?: number | null;
       };
       this.#spend = s.spend ?? [];
       this.#pausedUntil = s.pausedUntil ?? 0;
+      for (const [id, st] of Object.entries(s.status ?? {})) this.#status.set(id as FeedId, st);
+      this.#events = s.events ?? [];
+      this.#limitedAt = s.limitedAt ?? null;
+      this.#lastTickAt = s.lastTickAt ?? null;
     } catch {
       // A fresh start.
     }
@@ -329,11 +440,27 @@ export class Feeder {
       const file = join(this.opts.dir, 'state.json');
       writeFileSync(
         `${file}.tmp`,
-        JSON.stringify({ spend: this.#spend, pausedUntil: this.#pausedUntil }),
+        JSON.stringify({
+          spend: this.#spend,
+          pausedUntil: this.#pausedUntil,
+          status: Object.fromEntries(this.#status),
+          events: this.#events,
+          limitedAt: this.#limitedAt,
+          lastTickAt: this.#lastTickAt,
+        }),
       );
       renameSync(`${file}.tmp`, file);
     } catch {
       // Only bookkeeping.
     }
   }
+}
+
+/** "14:05", London time, for messages. */
+function hhmm(t: number): string {
+  return new Date(t).toLocaleTimeString('en-GB', {
+    timeZone: 'Europe/London',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }

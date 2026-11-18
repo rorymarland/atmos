@@ -98,15 +98,83 @@
       #status {
         color: var(--muted);
       }
+      h2 {
+        font-size: 18px;
+        margin: 32px 0 4px;
+      }
+      .banner {
+        padding: 10px 14px;
+        border-radius: 8px;
+        margin: 12px 0;
+        font-weight: 600;
+      }
+      .banner.bad {
+        background: #fbe9e7;
+        color: var(--bad);
+      }
+      .banner.warn {
+        background: #fdf3e1;
+        color: var(--warn);
+      }
+      .banner.ok {
+        background: #e8f3ec;
+        color: var(--ok);
+      }
+      .meter {
+        height: 8px;
+        border-radius: 4px;
+        background: var(--line);
+        overflow: hidden;
+        margin: 6px 0 2px;
+        max-width: 420px;
+      }
+      .meter span {
+        display: block;
+        height: 100%;
+        background: var(--ok);
+      }
+      .meter span.warn {
+        background: var(--warn);
+      }
+      .meter span.bad {
+        background: var(--bad);
+      }
+      td.info {
+        color: var(--muted);
+      }
+      td.warn {
+        color: var(--warn);
+        font-weight: 600;
+      }
+      td.error {
+        color: var(--bad);
+        font-weight: 600;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .nowrap {
+        white-space: nowrap;
+      }
     </style>
   </head>
   <body>
     <main>
-      <h1>Atmos: browser API check</h1>
+      <h1>Atmos: data check</h1>
+
+      <h2>Shared forecasts</h2>
+      <p>
+        The Atmos server (the alerts container) pulls the forecasts for everyone, so browsers don't
+        each use up Open-Meteo's daily allowance. This updates itself every 30 seconds.
+      </p>
+      <div id="shared"><p class="muted">Loading…</p></div>
+
+      <h2>Browser API check</h2>
       <p>
         Calls each data source the way the app will, straight from this browser, and records what
-        comes back. It takes about a minute. When it finishes, press
-        <strong>Copy results</strong> and paste them into the chat.
+        comes back. It takes about a minute, and uses a few dozen of today's Open-Meteo calls from
+        this connection. When it finishes, press <strong>Copy results</strong> and paste them into
+        the chat.
       </p>
       <div class="row">
         <button id="run">Run checks</button>
@@ -163,6 +231,129 @@
       ];
       const HEIGHTS = [50, 100, 150, 200, 250, 300, 400, 500, 750, 1000, 1250, 1500, 2000];
 
+      // ---- Shared forecasts, from the alerts container ----
+      const FEEDS = {
+        met: 'Met Office (UKV and global)',
+        ecmwf: 'ECMWF',
+        harmonie: 'HARMONIE (KNMI)',
+        horizon: 'Sunrise and sunset horizons',
+      };
+      const LOOKS = {
+        fetched: 'Pulled a new run',
+        'same-run': 'No new run yet',
+        'over-budget': "Held back to save today's allowance",
+        failed: 'Failed',
+      };
+      let shared = null;
+      const sharedBox = document.querySelector('#shared');
+
+      const esc = (t) =>
+        String(t).replace(
+          /[&<>"]/g,
+          (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c],
+        );
+
+      function when(t, now) {
+        if (t == null) return '–';
+        const d = new Date(t);
+        const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        const sameDay = d.toDateString() === new Date(now).toDateString();
+        return sameDay
+          ? time
+          : `${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })} ${time}`;
+      }
+
+      function ago(t, now) {
+        const m = Math.round((now - t) / 60000);
+        if (m < 1) return 'just now';
+        if (m < 60) return `${m} min ago`;
+        const h = Math.floor(m / 60);
+        return `${h} h ${m % 60} min ago`;
+      }
+
+      function nextPull(f, now) {
+        if (f.lastCheck === 'over-budget') return "Held back to stay under today's limit";
+        const latest = `by ${when(f.latestBy, now)} at the latest`;
+        if (now < f.notBefore)
+          return `Not before ${when(f.notBefore, now)}, once a new run is out; ${latest}`;
+        return `As soon as a new run is out; ${latest}`;
+      }
+
+      function renderShared(idx) {
+        const now = idx.now;
+        const parts = [];
+        const recent = idx.limitedAt && now - idx.limitedAt < 24 * 3600e3;
+        if (idx.pausedUntil) {
+          const why = idx.events.find((e) => /refused/.test(e.text));
+          parts.push(
+            `<div class="banner bad">${why ? `${esc(why.text)}.` : `Open-Meteo refused a request. Paused until ${when(idx.pausedUntil, now)}.`}</div>`,
+          );
+        } else if (recent) {
+          parts.push(
+            `<div class="banner warn">Open-Meteo last refused a request at ${when(idx.limitedAt, now)}. Pulling normally since.</div>`,
+          );
+        } else {
+          parts.push('<div class="banner ok">No Open-Meteo limits hit in the last 24 hours.</div>');
+        }
+
+        const pct = Math.min(100, (idx.spentToday / idx.dailyLimit) * 100);
+        const level = pct > 85 ? 'bad' : pct > 65 ? 'warn' : '';
+        parts.push(
+          `<p style="margin:0"><strong>${idx.spentToday.toLocaleString('en-GB')}</strong> of about ${idx.dailyLimit.toLocaleString('en-GB')} Open-Meteo calls used in the last 24 hours (by the server; browsers falling back to Open-Meteo themselves aren't counted).</p>
+           <div class="meter"><span class="${level}" style="width:${pct.toFixed(1)}%"></span></div>
+           <p class="muted">Last look ${when(idx.lastCheckAt, now)}, next ${when(idx.nextCheckAt, now)}. It looks every 5 minutes, and pulls a feed only after its minimum gap once a new model run is out.</p>`,
+        );
+
+        const rowsHtml = Object.entries(FEEDS)
+          .map(([id, name]) => {
+            const f = idx.feeds[id];
+            if (!f)
+              return `<tr><td>${name}</td><td colspan="3" class="muted">Not pulled yet</td></tr>`;
+            const look = f.lastCheck
+              ? `${when(f.lastCheckAt, now)}: ${LOOKS[f.lastCheck]}${f.lastError ? `: ${esc(f.lastError)}` : ''}`
+              : '–';
+            const cls =
+              f.lastCheck === 'failed' ? 'fail' : f.lastCheck === 'over-budget' ? 'partial' : '';
+            return `<tr><td>${name}</td>
+              <td class="nowrap">${when(f.fetchedAt, now)} <span class="muted">(${ago(f.fetchedAt, now)}), ${f.zones} ${id === 'horizon' ? 'points' : 'places'}</span></td>
+              <td>${nextPull(f, now)}</td>
+              <td class="${cls}">${look}</td></tr>`;
+          })
+          .join('');
+        parts.push(
+          `<table><thead><tr><th>Feed</th><th>Last pulled</th><th>Next pull</th><th>Last look</th></tr></thead><tbody>${rowsHtml}</tbody></table>`,
+        );
+
+        if (idx.events.length) {
+          const ev = idx.events
+            .slice(0, 20)
+            .map(
+              (e) =>
+                `<tr><td class="nowrap">${when(e.at, now)}</td><td>${e.feed ? FEEDS[e.feed] : ''}</td><td class="${e.level}">${esc(e.text)}</td></tr>`,
+            )
+            .join('');
+          parts.push(`<p style="margin:16px 0 0"><strong>Recent events</strong></p>
+            <table><thead><tr><th>Time</th><th>Feed</th><th>What happened</th></tr></thead><tbody>${ev}</tbody></table>`);
+        }
+        sharedBox.innerHTML = parts.join('');
+      }
+
+      async function loadShared() {
+        try {
+          const res = await fetch('/api/forecasts', { cache: 'no-store' });
+          if (!res.ok) throw new Error(String(res.status));
+          shared = await res.json();
+          renderShared(shared);
+        } catch {
+          shared = null;
+          sharedBox.innerHTML =
+            '<div class="banner warn">The alerts container isn\'t running, so there are no shared forecasts: each browser fetches from Open-Meteo itself, using this connection\'s allowance.</div>';
+        }
+      }
+      loadShared();
+      setInterval(loadShared, 30_000);
+
+      // ---- Browser API check ----
       const results = [];
       const rows = document.querySelector('#rows');
       const status = document.querySelector('#status');
@@ -437,6 +628,7 @@
           ranAt: started,
           userAgent: navigator.userAgent,
           origin: location.origin,
+          shared,
           results,
         };
         document.querySelector('#out').value = JSON.stringify(out, null, 1);

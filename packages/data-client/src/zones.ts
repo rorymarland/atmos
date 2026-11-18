@@ -119,6 +119,21 @@ export interface ZoneForecasts {
   fromCache: boolean;
 }
 
+/** Open-Meteo's own words for a refusal ("Daily API request limit exceeded…"), if any. */
+export function limitReason(body: string): string | null {
+  try {
+    const r = (JSON.parse(body) as { reason?: unknown }).reason;
+    return typeof r === 'string' ? r : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether a refusal was for the day's allowance rather than the minute's. */
+export function isDailyLimit(message: string): boolean {
+  return /daily/i.test(message);
+}
+
 export class ForecastError extends Error {
   constructor(
     message: string,
@@ -182,9 +197,10 @@ export async function fetchZoneForecasts(
     const res = await doFetch(buildForecastUrl(req));
     if (!res.ok) {
       const body = await res.text().catch(() => '');
+      const said = limitReason(body);
       const reason =
         res.status === 429
-          ? 'Open-Meteo rate limit reached; try again in a minute'
+          ? `Open-Meteo rate limit reached${said ? ` (${said})` : '; try again in a minute'}`
           : body.slice(0, 200);
       throw new ForecastError(`Forecast request failed (${res.status}): ${reason}`, res.status);
     }
