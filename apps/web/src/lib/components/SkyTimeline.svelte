@@ -167,8 +167,10 @@
     {#each marks as m, i (i)}
       <g class="mark {m.verdict}">
         <title>{m.label} at its best around {formatTime(m.time)}</title>
-        <line x1={x(m.time)} x2={x(m.time)} y1={BOTTOM - 7} y2={BOTTOM} />
-        <circle cx={x(m.time)} cy={BOTTOM - 9} r="3" />
+        <line x1={x(m.time)} x2={x(m.time)} y1={BOTTOM - 8} y2={BOTTOM} />
+        <circle cx={x(m.time)} cy={BOTTOM - 11} r="4.5" />
+        <!-- A wider, invisible target so the tooltip is easy to hover. -->
+        <circle class="hit" cx={x(m.time)} cy={BOTTOM - 10} r="10" />
       </g>
     {/each}
 
@@ -304,6 +306,10 @@
   .mark.nodata line {
     fill: var(--no);
     stroke: var(--no);
+  }
+  .mark circle.hit {
+    fill: transparent;
+    stroke: none;
   }
   .tick {
     font-size: 10px;
