@@ -13,6 +13,7 @@ import {
   explain,
   formatDuration,
   planTrip,
+  trailsAt,
   type HourResult,
   type Reason,
   type ScoringConfig,
@@ -234,10 +235,13 @@ function detail(
       .filter((r) => r.status === 'good' || r.status === 'ok')
       .slice(0, 4)
       .map((r) => r.text),
-    caveats: reasons
-      .filter((r) => r.status === 'poor' || r.status === 'blocked')
-      .slice(0, 2)
-      .map((r) => r.text),
+    caveats: [
+      ...reasons
+        .filter((r) => r.status === 'poor' || r.status === 'blocked')
+        .slice(0, 2)
+        .map((r) => r.text),
+      ...trailCaveat(item, match, keyTime, data),
+    ],
     // "says GO" reads as shouting in an email.
     models: reasons
       .filter((r) => r.source === 'models')
@@ -245,6 +249,19 @@ function detail(
     confidence: confidenceLine(item),
     walk,
   };
+}
+
+/** Plane trails at the best hour, where a clean sky matters and they're a real risk. */
+function trailCaveat(
+  item: MatchItem,
+  match: Match,
+  keyTime: number | null,
+  data: SiteData,
+): string[] {
+  if (!match.upper || !(data.config.profiles[item.profileId]?.trails ?? 0)) return [];
+  const t = trailsAt(match.upper, keyTime ?? item.result.window.start);
+  if (!t || t.risk === 'low') return [];
+  return [`Plane trails, ${t.risk} risk: ${t.text.replace(/^./, (c) => c.toLowerCase())}`];
 }
 
 /** "Up from Maybe", "Now also stars", "Still on" or "New". */

@@ -29,6 +29,8 @@
   const lightPeriods = $derived(settings.periods.filter((p) => p === 'morning' || p === 'evening'));
   // "Be there for" is about light for photos: a walk has its own timing.
   const walking = $derived(ticked.has('walking'));
+  // Only where a clean sky matters: the conditions with a trails weight in profiles.yaml.
+  const trailsMatter = $derived([...ticked].some((id) => (profiles[id]?.trails ?? 0) > 0));
   const photoTicked = $derived([...ticked].some((id) => id !== 'walking'));
   const showMoment = $derived(lightPeriods.length > 0 && photoTicked);
   const walkStarts = Array.from({ length: 21 }, (_, i) => {
@@ -209,6 +211,20 @@
         {/each}
       </div>
     </div>
+    {#if trailsMatter}
+      <div class="group">
+        <span class="group-label small">Sky</span>
+        <div class="ticks">
+          <label
+            class="tick"
+            title="Rank places and times lower where plane trails are likely to linger in a clear sky. Nothing is hidden: upper-air humidity is hard to forecast."
+          >
+            <input type="checkbox" bind:checked={settings.avoidTrails} />
+            Avoid plane trails
+          </label>
+        </div>
+      </div>
+    {/if}
   </div>
   </details>
 

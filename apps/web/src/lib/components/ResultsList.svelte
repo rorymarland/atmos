@@ -106,8 +106,9 @@
   {#if hl.length || midgy(h)}
     <span class="badges">
       {#each hl as c (c.profileId + c.period)}
-        <span class="badge {c.result.verdict}" title="{conditions.label(c.profileId)}, {PERIOD_LABELS[c.period].toLowerCase()}: {pct(c.result.score)}">
-          {conditions.short(c.profileId)}{periodWord(c)}
+        {@const trails = c.trails && c.trails.risk !== 'low' ? c.trails : null}
+        <span class="badge {c.result.verdict}" title="{conditions.label(c.profileId)}, {PERIOD_LABELS[c.period].toLowerCase()}: {pct(c.result.score)}{trails ? `. Plane trails: ${trails.risk} risk` : ''}">
+          {conditions.short(c.profileId)}{periodWord(c)}{#if trails}<span class="trail {trails.risk}" aria-label="plane trails {trails.risk} risk"> ✈</span>{/if}
         </span>
       {/each}
       {#if midgy(h)}<span class="badge midge" title="High midge risk at dawn or dusk">Midges</span>{/if}
@@ -318,6 +319,9 @@
     font-size: 1.6rem;
     font-stretch: 70%;
     font-weight: 850;
+  }
+  .trail.medium {
+    opacity: 0.6;
   }
   .badges {
     display: flex;

@@ -33,6 +33,8 @@ export interface ForecastRequest {
   surface: (keyof SurfaceSeries)[];
   /** Pressure levels in hPa. Each brings temperature, humidity, wind and geopotential height. */
   pressureLevels: number[];
+  /** Just these fields at each pressure level (all four when left out). */
+  levelFields?: (keyof typeof PRESSURE_FIELDS)[];
   /** Days ahead, including today. */
   forecastDays: number;
   /** Days of history, for overnight factors on the first morning. */
@@ -48,8 +50,10 @@ const PRESSURE_FIELDS = {
 
 export function hourlyVariables(req: ForecastRequest): string[] {
   const surface = req.surface.map((v) => SURFACE_VARIABLES[v]);
+  const fields =
+    req.levelFields ?? (Object.keys(PRESSURE_FIELDS) as (keyof typeof PRESSURE_FIELDS)[]);
   const levels = req.pressureLevels.flatMap((p) =>
-    Object.values(PRESSURE_FIELDS).map((f) => `${f}_${p}hPa`),
+    fields.map((f) => `${PRESSURE_FIELDS[f]}_${p}hPa`),
   );
   return [...surface, ...levels];
 }
@@ -123,11 +127,12 @@ function toModelForecast(
 
   const levels: LevelSeries[] = [];
   for (const p of req.pressureLevels) {
-    const heightM = series(`${PRESSURE_FIELDS.heightM}_${p}hPa`);
-    const temperatureC = series(`${PRESSURE_FIELDS.temperatureC}_${p}hPa`);
-    // A level without heights or temperatures can't be placed or used: skip it.
-    if (!heightM || !temperatureC) continue;
     const empty = time.map(() => null);
+    const wantsHeight = !req.levelFields || req.levelFields.includes('heightM');
+    const heightM = series(`${PRESSURE_FIELDS.heightM}_${p}hPa`) ?? (wantsHeight ? null : empty);
+    const temperatureC = series(`${PRESSURE_FIELDS.temperatureC}_${p}hPa`);
+    // A level without heights (when asked for) or temperatures can't be used: skip it.
+    if (!heightM || !temperatureC) continue;
     levels.push({
       kind: 'pressure',
       label: `${p}hPa`,

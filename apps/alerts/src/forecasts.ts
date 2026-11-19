@@ -21,14 +21,15 @@ import {
   limitReason,
   HORIZON_REQUEST,
   parseForecastResponse,
+  UPPER_REQUEST,
   ZONE_REQUEST,
   type ForecastRequest,
   type ForecastSite,
 } from '@atmos/data-client';
 import { horizonSites } from '../../web/src/lib/evaluate-places';
 
-export type FeedId = 'met' | 'ecmwf' | 'harmonie' | 'horizon';
-export const FEED_IDS: FeedId[] = ['met', 'ecmwf', 'harmonie', 'horizon'];
+export type FeedId = 'met' | 'ecmwf' | 'harmonie' | 'horizon' | 'upper';
+export const FEED_IDS: FeedId[] = ['met', 'ecmwf', 'harmonie', 'horizon', 'upper'];
 
 const HOUR = 3_600_000;
 
@@ -68,6 +69,15 @@ export const FEEDS: Record<FeedId, FeedSpec> = {
   harmonie: {
     request: HARMONIE_REQUEST,
     probeModel: 'knmi_harmonie_arome_europe',
+    minGapMs: 3 * HOUR,
+    maxGapMs: 12 * HOUR,
+    dailyCap: 8_000,
+    sites: (zones) => zones,
+  },
+  // Plane trails: the cruise-height air, from ECMWF, refreshed with ECMWF's own runs.
+  upper: {
+    request: UPPER_REQUEST,
+    probeModel: 'ecmwf_ifs025',
     minGapMs: 3 * HOUR,
     maxGapMs: 12 * HOUR,
     dailyCap: 8_000,
@@ -257,6 +267,8 @@ export class Feeder {
   zone(zoneId: string): {
     models: ModelForecast[];
     horizon: { am?: ModelForecast; pm?: ModelForecast };
+    /** The cruise-height air, for plane trails. */
+    upper?: ModelForecast;
   } | null {
     const met = this.#feeds.get('met')?.zones[zoneId];
     if (!met) return null;
@@ -266,6 +278,7 @@ export class Feeder {
     return {
       models: [...met, ...ecmwf, ...harmonie],
       horizon: { am: h?.[`${zoneId}|am`]?.[0], pm: h?.[`${zoneId}|pm`]?.[0] },
+      upper: this.#feeds.get('upper')?.zones[zoneId]?.[0],
     };
   }
 

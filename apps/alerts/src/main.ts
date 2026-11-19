@@ -8,7 +8,9 @@
  *   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, ALERTS_FROM   any SMTP service
  *   ATMOS_URL        the address people use, for links in emails
  *   ATMOS_DATA_URL   where the website container serves its data (default http://atmos/data)
- *   ALERTS_DATA_DIR  where alerts.json, places.json and the shared forecasts live (default /data)
+ *   ALERTS_DATA_DIR  where alerts.json, places.json, the shared forecasts and the air
+ *                    traffic samples live (default /data)
+ *   ATMOS_TRAFFIC    "off" stops sampling air traffic from OpenSky (on by default)
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { join } from 'node:path';
@@ -19,6 +21,7 @@ import { Runner } from './runner';
 import { Store } from './store';
 import { PlaceStore, placeInput } from './places';
 import { FEED_IDS, Feeder, type FeedId } from './forecasts';
+import { SAMPLE_EVERY_MS, TrafficSampler } from './traffic';
 import { gunzipSync } from 'node:zlib';
 import type { Zone } from '@atmos/engine';
 
@@ -112,6 +115,15 @@ setInterval(() => {
   runner.tick(hourly ? 'hourly' : 'minute').catch(() => undefined);
 }, 60_000);
 
+// Air traffic for plane trails, from OpenSky (no account). ATMOS_TRAFFIC=off turns it off.
+const trafficOn = (env.ATMOS_TRAFFIC ?? 'on').toLowerCase() !== 'off';
+const traffic = trafficOn ? new TrafficSampler({ dir: env.ALERTS_DATA_DIR ?? '/data', log }) : null;
+if (traffic) {
+  const sample = () => traffic.sample().catch(() => undefined);
+  setTimeout(sample, 20_000);
+  setInterval(sample, SAMPLE_EVERY_MS);
+}
+
 // Shared forecasts: a pass every five minutes (most do nothing), and one at start.
 const feedTick = () => feeder.tick().catch(() => undefined);
 setTimeout(feedTick, 5_000);
@@ -167,6 +179,10 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://x');
   const path = url.pathname.replace(/\/+$/, '');
   if (path === '/api/forecasts' && req.method === 'GET') return send(res, 200, feeder.index());
+  if (path === '/api/traffic' && req.method === 'GET')
+    return traffic
+      ? send(res, 200, traffic.summary())
+      : send(res, 404, { error: 'Traffic sampling is off' });
   const fm = path.match(/^\/api\/forecasts\/([a-z]+)$/);
   if (fm && req.method === 'GET') {
     const id = fm[1] as FeedId;

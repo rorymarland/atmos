@@ -35,6 +35,14 @@
 - **Plans the trip.** Set a home, say what to be there for (blue hour, golden hour, sunrise or
   sunset), the earliest you'll get up and how far you'll drive. Each hill gets a rough get-up and
   leave time, with a Google Maps link for the real route.
+- **Warns about plane trails.** Where a clean sky matters (clear air, golden-hour sky, drama,
+  alpenglow, and less so inversions, reflections and wave cloud), each condition shows the risk
+  of trails lingering at its best hour. It's worked out from the air where planes cruise (300 to
+  200 hPa, from ECMWF): whether it's cold enough for trails to form, saturated enough with ice
+  for them to linger and spread, and clear enough to see them. Upper-air humidity is hard to
+  forecast, so it never changes a verdict. "Avoid plane trails" ranks risky places and times
+  lower instead. The alerts container also samples aircraft above 25,000 ft over the UK from the
+  OpenSky Network every 12 minutes, building up when and where they fly, to sharpen this later.
 - **Plans hill walks.** With Walking ticked, "Your trip" asks when to start walking (when the
   weather's best, or a set time) and when to be back down (before sunset, before dark, or any
   time). Atmos tries each start time and judges walking over just the hours you'd be on the hill,
@@ -164,6 +172,8 @@ day however many people and devices use it:
 - A daily budget skips the extras before the Met Office feed if spending ever gets close to the
   limit, and it backs off for half an hour if Open-Meteo refuses a request.
 - The forecasts are kept in `./alerts/forecasts/`, so a restart costs nothing.
+- It also samples air traffic over the UK from OpenSky (free, no account) every 12 minutes
+  into `./alerts/traffic.json`, for plane trails. `ATMOS_TRAFFIC=off` in `.env` stops it.
 - Browsers check for a newer copy every 5 minutes and when the tab is shown again, so
   there's nothing to refresh by hand. The panel says when each model was last updated.
 - Without the container, each browser fetches from Open-Meteo itself, as before.

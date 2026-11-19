@@ -5,8 +5,8 @@
  */
 import type { ModelForecast } from '@atmos/engine';
 
-export type FeedId = 'met' | 'ecmwf' | 'harmonie' | 'horizon';
-export const FEED_IDS: FeedId[] = ['met', 'ecmwf', 'harmonie', 'horizon'];
+export type FeedId = 'met' | 'ecmwf' | 'harmonie' | 'horizon' | 'upper';
+export const FEED_IDS: FeedId[] = ['met', 'ecmwf', 'harmonie', 'horizon', 'upper'];
 
 export interface FeedInfo {
   version: string;

@@ -12,7 +12,9 @@
   one-call probe shows a new run, inside a daily budget, because Open-Meteo's free limit is
   about 10,000 calls a day per IP. The browser uses that copy first
   (`apps/web/src/lib/shared-forecasts.ts`) and fetches from Open-Meteo itself only without it,
-  or for zones it doesn't hold. It also keeps shared **custom places**; without it the web app
+  or for zones it doesn't hold. It also samples aircraft above 25,000 ft over the UK from
+  OpenSky's anonymous API every 12 minutes (`apps/alerts/src/traffic.ts`, about 360 of its 400
+  daily credits; `ATMOS_TRAFFIC=off` stops it), for plane trails later. It also keeps shared **custom places**; without it the web app
   keeps places in localStorage. Custom places (`packages/engine/src/places.ts`) are merged in
   with `withPlaces` by both the web app and the service: numbers from 1,000,001 (2,000,001 for
   browser-only), each with its own forecast zone appended after the generated zones. The site must keep working without it (the Alerts UI hides when
@@ -54,6 +56,11 @@
   or at container start. Rerun it from the Actions tab to refresh; it opens a pull request.
   `build-data` links each hill to still water within 3 km and writes `waters.json`. Profiles
   with `water:` in `profiles.yaml` are scored per loch, and their trips end at the lochside.
+- Plane trails (`packages/engine/src/contrails.ts`): formation by Schmidt–Appleman, lingering
+  where ECMWF's humidity (already relative to ice below −23 °C) is 90% or more, hidden by thick
+  mid or high cloud. Upper air comes from `UPPER_REQUEST` (the `upper` shared feed). A
+  condition's `trails` weight in `profiles.yaml` says how much trails matter to it. It's a
+  warning plus a ranking penalty when "Avoid plane trails" is on, never part of the verdict.
 - Every change keeps `pnpm check` green (lint, format, typecheck, tests).
 
 ## SvelteKit 3 notes (apps/web)
