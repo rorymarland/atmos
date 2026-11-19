@@ -37,17 +37,11 @@
   /** Drawn at the real pixel width so the hour labels aren't stretched. */
   let width = $state(1000);
   const W = $derived(Math.max(200, width));
-  const H = 84;
-  const TOP = 6;
-  const BOTTOM = 70;
-  /** Altitude range drawn: below -18° it's simply night. */
-  const MIN_ALT = -20;
-  const MAX_ALT = 62;
-
-  const x = (t: number) => ((t - dayStart) / DAY) * W;
-  const y = (alt: number) =>
-    TOP + ((MAX_ALT - Math.max(MIN_ALT, Math.min(MAX_ALT, alt))) / (MAX_ALT - MIN_ALT)) * (BOTTOM - TOP);
-  const horizon = y(0);
+  const H = 58;
+  const TOP = 4;
+  const BOTTOM = 46;
+  /** Below about −14° it's simply night: no need to draw deeper. */
+  const MIN_ALT = -14;
 
   /** Sun and moon every ten minutes across the day. */
   const samples = $derived.by(() => {
@@ -58,6 +52,18 @@
     }
     return out;
   });
+  /**
+   * The top of the scale follows the day's highest sun or moon, so a low winter sun still
+   * fills the height instead of hugging the horizon.
+   */
+  const MAX_ALT = $derived(
+    Math.min(64, Math.max(20, Math.ceil(Math.max(...samples.map((s) => Math.max(s.sun, s.moon))) + 4))),
+  );
+
+  const x = (t: number) => ((t - dayStart) / DAY) * W;
+  const y = (alt: number) =>
+    TOP + ((MAX_ALT - Math.max(MIN_ALT, Math.min(MAX_ALT, alt))) / (MAX_ALT - MIN_ALT)) * (BOTTOM - TOP);
+  const horizon = $derived(y(0));
   const path = (key: 'sun' | 'moon') =>
     samples.map((s, i) => `${i ? 'L' : 'M'}${x(s.t).toFixed(1)},${y(s[key]).toFixed(1)}`).join('');
   const sunPath = $derived(path('sun'));
@@ -122,7 +128,12 @@
     <span class="body moon-key">
       Moon {Math.round(now.moon.altDeg)}°{#if !moonBelow}, {compass(now.moon.azDeg)} ({Math.round(now.moon.azDeg)}°){:else}{' below the horizon'}{/if}, {Math.round(now.moonLit * 100)}% lit
     </span>
-    <span class="muted place">at {place}</span>
+    <span class="times muted" title="At {place}">
+      {#if sun.sunrise}<span>Sunrise {formatTime(sun.sunrise)}</span>{/if}
+      {#if sun.sunset}<span>Sunset {formatTime(sun.sunset)}</span>{/if}
+      {#if moon.rise}<span>Moonrise {formatTime(moon.rise)}</span>{/if}
+      {#if moon.set}<span>Moonset {formatTime(moon.set)}</span>{/if}
+    </span>
   </div>
 
   <svg
@@ -155,40 +166,32 @@
 
     {#each marks as m, i (i)}
       <g class="mark {m.verdict}">
-        <line x1={x(m.time)} x2={x(m.time)} y1={BOTTOM - 10} y2={BOTTOM} />
-        <circle cx={x(m.time)} cy={BOTTOM - 12} r="3.5" />
+        <title>{m.label} at its best around {formatTime(m.time)}</title>
+        <line x1={x(m.time)} x2={x(m.time)} y1={BOTTOM - 7} y2={BOTTOM} />
+        <circle cx={x(m.time)} cy={BOTTOM - 9} r="3" />
       </g>
     {/each}
 
     <line class="cursor" x1={x(time)} x2={x(time)} y1="0" y2={BOTTOM} />
-    <circle class="sun-dot" cx={x(time)} cy={y(now.sun.altDeg)} r="5" />
-    <circle class="moon-dot" cx={x(time)} cy={y(now.moon.altDeg)} r="4" />
+    <circle class="sun-dot" cx={x(time)} cy={y(now.sun.altDeg)} r="4.5" />
+    <circle class="moon-dot" cx={x(time)} cy={y(now.moon.altDeg)} r="3.5" />
 
     {#each hours as h (h)}
       <text class="tick" x={x(dayStart + h * HOUR) + 3} y={H - 2}>{String(h).padStart(2, '0')}</text>
     {/each}
   </svg>
 
-  <div class="foot small muted">
-    {#if sun.sunrise}<span>Sunrise {formatTime(sun.sunrise)}</span>{/if}
-    {#if sun.sunset}<span>Sunset {formatTime(sun.sunset)}</span>{/if}
-    {#if moon.rise}<span>Moonrise {formatTime(moon.rise)}</span>{/if}
-    {#if moon.set}<span>Moonset {formatTime(moon.set)}</span>{/if}
-    {#if marks.length}
-      <span class="marks-key">Dots: when each ticked condition peaks{#if marks.length <= 4} ({marks.map((m) => `${m.label} ${formatTime(m.time)}`).join(', ')}){/if}</span>
-    {/if}
-  </div>
 </div>
 
 <style>
   .timeline {
     display: grid;
-    gap: 3px;
-    background: color-mix(in srgb, var(--paper) 94%, transparent);
+    gap: 2px;
+    background: color-mix(in srgb, var(--paper) 92%, transparent);
     border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 6px 10px 6px;
-    box-shadow: 0 4px 16px rgb(20 29 36 / 0.14);
+    border-radius: 8px;
+    padding: 4px 8px 3px;
+    box-shadow: 0 2px 8px rgb(20 29 36 / 0.1);
   }
   .readout {
     display: flex;
@@ -197,7 +200,7 @@
     align-items: baseline;
   }
   .clock {
-    font-size: 1.05rem;
+    font-size: 0.95rem;
     font-stretch: 80%;
     font-variant-numeric: tabular-nums;
   }
@@ -216,12 +219,15 @@
   .moon-key::before {
     background: #8b98a6;
   }
-  .place {
+  .times {
     margin-left: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 12px;
   }
   svg {
     width: 100%;
-    height: 84px;
+    height: 58px;
     display: block;
     cursor: ew-resize;
     touch-action: none;
@@ -300,15 +306,7 @@
     stroke: var(--no);
   }
   .tick {
-    font-size: 11px;
+    font-size: 10px;
     fill: var(--ink-soft);
-  }
-  .foot {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 2px 14px;
-  }
-  .marks-key {
-    margin-left: auto;
   }
 </style>
