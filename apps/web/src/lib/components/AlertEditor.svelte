@@ -17,6 +17,7 @@
   } from '#lib/alerts.svelte.ts';
   import { PERIOD_LABELS, type Period } from '#lib/sun.ts';
   import PlaceSearch from '#lib/components/PlaceSearch.svelte';
+  import { settings } from '#lib/settings.svelte.ts';
 
   let {
     open = $bindable(false),
@@ -59,6 +60,8 @@
       daysAhead: 2,
       delivery: { mode: 'asap' },
       paused: false,
+      // Leave times from home, if this browser has one.
+      ...(settings.home ? { start: { ...settings.home } } : {}),
     };
   }
 
@@ -78,6 +81,7 @@
             daysAhead: editing.daysAhead,
             delivery: editing.delivery,
             paused: editing.paused,
+            ...(editing.start ? { start: { ...editing.start } } : {}),
           }
         : { ...blank(), ...preset };
       form = start;
@@ -229,6 +233,26 @@
           {#each DAYS as [n, label] (n)}<option value={n}>{label}</option>{/each}
         </select>
       </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Leave times <span class="small muted">(optional)</span></legend>
+      {#if form.start}
+        <p class="small">
+          Emails say when to leave <strong>{form.start.label}</strong>, with directions.
+          <button type="button" class="link" onclick={() => (form.start = undefined)}>Remove</button>
+        </p>
+      {:else}
+        <p class="small muted">Add a start point and emails will say when to leave, and how far it is.</p>
+      {/if}
+      <PlaceSearch
+        placeholder={form.start ? 'Start from somewhere else' : 'Town, postcode or hill'}
+        onHill={(h) => (form.start = { label: h.hill.name, lat: h.lat, lon: h.lon })}
+        onPlace={(p) => (form.start = { label: p.label, lat: p.lat, lon: p.lon })}
+      />
+      {#if settings.home && (form.start?.lat !== settings.home.lat || form.start?.lon !== settings.home.lon)}
+        <button type="button" class="link small" onclick={() => (form.start = { ...settings.home! })}>Use home ({settings.home.label})</button>
+      {/if}
     </fieldset>
 
     <fieldset>

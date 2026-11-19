@@ -41,6 +41,14 @@ export const alertInput = z.strictObject({
   daysAhead: z.number().int().min(1).max(5).default(2),
   delivery: delivery.default({ mode: 'asap' }),
   paused: z.boolean().default(false),
+  /** Optional: where the trip starts, for leave times and directions in the email. */
+  start: z
+    .strictObject({
+      label: z.string().min(1).max(80),
+      lat: z.number().min(49).max(61.5),
+      lon: z.number().min(-9).max(2.5),
+    })
+    .optional(),
 });
 export type AlertInput = z.infer<typeof alertInput>;
 

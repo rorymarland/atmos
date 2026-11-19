@@ -107,13 +107,4 @@ export function loadSearchHills(): Promise<Hill[]> {
 }
 
 /** Profiles judged at each summit, rather than once for the whole zone at valley level. */
-export const MODEL_LABELS: Record<string, string> = {
-  ukmo_seamless: 'Met Office',
-  ukmo_uk_deterministic_2km: 'Met Office UKV',
-  ukmo_global_deterministic_10km: 'Met Office Global',
-  ecmwf_ifs025: 'ECMWF',
-  knmi_harmonie_arome_europe: 'KNMI HARMONIE',
-  icon_seamless: 'DWD ICON',
-};
-
-export const modelLabel = (id: string) => MODEL_LABELS[id] ?? id;
+export { MODEL_LABELS, modelLabel } from './models';
