@@ -959,7 +959,6 @@
       {/if}
       {#if places.list.length}<span aria-hidden="true"><i class="place-dot"></i>Your place</span>{/if}
       {#if settings.start}<span aria-hidden="true"><i class="start-dot"></i>Start</span>{/if}
-      {#if skyOpen}<span class="muted">Click the map or drag the pin to move the sun and moon lines</span>{/if}
       {#if pin}<button class="link" onclick={() => (placeOpen = true)}>Save this spot</button>{/if}
       <button class="link" onclick={() => (skyOpen = !skyOpen)} aria-pressed={skyOpen}>
         {skyOpen ? 'Hide sun and moon' : 'Sun and moon'}
