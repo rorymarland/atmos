@@ -24,6 +24,8 @@ export interface AlertInput {
   daysAhead: number;
   delivery: Delivery;
   paused: boolean;
+  /** Where the trip starts, for leave times in the email. */
+  start?: { label: string; lat: number; lon: number };
 }
 
 export interface AlertView extends AlertInput {

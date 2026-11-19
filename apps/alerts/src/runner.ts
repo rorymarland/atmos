@@ -163,7 +163,12 @@ export class Runner {
             html: `<p>Email from Atmos is working. Nothing matches this alert in the next ${FORECAST_DAYS} days right now.</p><p><a href="${this.opts.siteUrl}/alerts">Manage alerts</a></p>`,
           };
         } else {
-          email = composeEmail(to, items, data, { base: this.opts.siteUrl, today, tomorrow });
+          email = composeEmail(to, items, data, {
+            base: this.opts.siteUrl,
+            today,
+            tomorrow,
+            now,
+          });
           if (test) email.subject = `${email.subject} (test)`;
         }
         try {

@@ -229,7 +229,16 @@ export async function scorePlaces(
     const date = londonDate(d, now);
     for (const e of evaluated) {
       const ref = byNumber.get(e.hill.number);
-      if (ref) days.push({ place: ref, date, dayOffset: d, conditions: e.conditions });
+      if (ref)
+        days.push({
+          place: ref,
+          date,
+          dayOffset: d,
+          conditions: e.conditions,
+          hill: e.hill,
+          sun: e.sun,
+          valleyM: e.valleyM,
+        });
     }
   }
   return { days, missing };

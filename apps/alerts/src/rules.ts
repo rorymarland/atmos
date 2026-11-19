@@ -2,8 +2,9 @@
  * Matching alerts against scored forecasts, and deciding what's news. Pure: the checker
  * feeds it evaluated places, and tests feed it made-up ones.
  */
-import type { Verdict } from '@atmos/engine';
+import type { Hill, Verdict } from '@atmos/engine';
 import type { ConditionResult } from '../../web/src/lib/evaluate-places';
+import type { SunTimes } from '../../web/src/lib/sun';
 import { placeKey, type Alert, type Notified, type PlaceRef } from './model';
 
 export interface MatchItem {
@@ -24,6 +25,9 @@ export interface Match {
   /** The best verdict among the items. */
   verdict: 'go' | 'maybe';
   items: MatchItem[];
+  hill: Hill;
+  sun: SunTimes;
+  valleyM: number;
 }
 
 /** One day's conditions for one place. */
@@ -32,6 +36,10 @@ export interface DayConditions {
   date: string;
   dayOffset: number;
   conditions: ConditionResult[];
+  /** Where it is, its sun times that day and the valley floor below it, for the email. */
+  hill: Hill;
+  sun: SunTimes;
+  valleyM: number;
 }
 
 const RANK: Record<Verdict, number> = { go: 2, maybe: 1, no: 0, nodata: -1 };
@@ -81,7 +89,16 @@ export function findMatches(alert: Alert, days: DayConditions[], now: number): M
     }
     if (items.length === 0 || (alert.match === 'all' && missing)) continue;
     const verdict = items.some((i) => i.verdict === 'go') ? 'go' : 'maybe';
-    out.push({ place: day.place, date: day.date, dayOffset: day.dayOffset, verdict, items });
+    out.push({
+      place: day.place,
+      date: day.date,
+      dayOffset: day.dayOffset,
+      verdict,
+      items,
+      hill: day.hill,
+      sun: day.sun,
+      valleyM: day.valleyM,
+    });
   }
   return out.sort((a, b) => a.dayOffset - b.dayOffset || (a.place.name < b.place.name ? -1 : 1));
 }
@@ -90,6 +107,8 @@ export interface News {
   match: Match;
   /** First time, better than before, or (daily) still on. */
   kind: 'new' | 'better' | 'still';
+  /** What was said last time, for "up from Maybe". */
+  previous?: Notified;
 }
 
 export interface Cancelled {
@@ -134,7 +153,7 @@ export function decide(alert: Alert, matches: Match[], today: string, now: numbe
     )
       kind = 'better';
     else if (alert.delivery.mode === 'daily') kind = 'still';
-    if (kind) news.push({ match: m, kind });
+    if (kind) news.push({ match: m, kind, ...(before ? { previous: before } : {}) });
     notified[key] = {
       verdict: m.verdict,
       conditions,

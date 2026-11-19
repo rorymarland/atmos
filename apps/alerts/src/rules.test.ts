@@ -1,3 +1,4 @@
+import type { SunTimes } from '../../web/src/lib/sun';
 import { describe, expect, it } from 'vitest';
 import type { ConditionResult } from '../../web/src/lib/evaluate-places';
 import type { Alert } from './model';
@@ -56,6 +57,18 @@ const day = (dayOffset: number, conditions: ConditionResult[]): DayConditions =>
   date: `2026-11-${17 + dayOffset}`,
   dayOffset,
   conditions,
+  hill: {
+    number: 8055,
+    name: "Ben A'an",
+    lat: 56.23,
+    lon: -4.4,
+    metres: 454,
+    lists: 1,
+    zone: 0,
+    nations: ['scotland'],
+  },
+  sun: { sunrise: null, sunset: null, civilDawn: null, civilDusk: null } as SunTimes,
+  valleyM: 120,
 });
 
 describe('alerts', () => {
