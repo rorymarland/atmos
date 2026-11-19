@@ -10,6 +10,8 @@ import {
   distanceMiles,
   estimateDrive,
   descentMinutes,
+  trailsAt,
+  type TrailAssessment,
   estimateSummitWalk,
   hillIsOnList,
   planTrip,
@@ -37,6 +39,7 @@ import {
   fetchMetOfficeEnsemble,
   HARMONIE_REQUEST,
   HORIZON_REQUEST,
+  UPPER_REQUEST,
   type Ensemble,
   type ForecastSite,
   fetchOvation,
@@ -149,10 +152,15 @@ interface Evaluated extends EvaluatedPlace {
   searchOnly: boolean;
 }
 
+/** How far "Avoid plane trails" moves a hill down the ranking, before the profile's weight. */
+const TRAIL_PENALTY: Record<TrailAssessment['risk'], number> = { low: 0, medium: 0.12, high: 0.3 };
+
 export interface ConditionTrip extends ConditionResult {
   trip: Trip | null;
   /** Walking: the walk planned, with its times and any head-torch warning. */
   walk?: WalkPlan;
+  /** Conditions with a clean sky: plane trails at the best hour. */
+  trails?: TrailAssessment;
 }
 
 /** A hill's walking route: found, none within reach, still working, or unreachable. */
@@ -182,6 +190,8 @@ export interface HillResult {
   roadMiles: number | null;
   /** Worth going only with an earlier start: the best condition that needs one. */
   needsEarlier: ConditionTrip | null;
+  /** How far "Avoid plane trails" moves it down the ranking (0 when off). */
+  trailPenalty: number;
   /** Picked from the search (e.g. a Tump): scored, but not on the map or in the list. */
   searchOnly: boolean;
 }
@@ -237,6 +247,8 @@ class Conditions {
   harmonie = $state.raw<Map<string, ModelForecast[]>>(new Map());
   /** Cloud towards the sunrise (am) and sunset (pm) for each zone. */
   horizons = $state.raw<Map<string, { am?: ModelForecast; pm?: ModelForecast }>>(new Map());
+  /** The air where planes cruise, per zone (ECMWF), for plane trails. */
+  upper = $state.raw<Map<string, ModelForecast>>(new Map());
   /** Ensembles for hills that have been opened, by family and hill number. */
   ensembles = $state.raw<Map<number, EnsembleState>>(new Map());
   metOfficeEnsembles = $state.raw<Map<number, EnsembleState>>(new Map());
@@ -532,6 +544,8 @@ class Conditions {
       const ecmwf = this.#feeds.get('ecmwf')?.zones ?? {};
       const harm = this.#feeds.get('harmonie')?.zones ?? {};
       const hz = this.#feeds.get('horizon')?.zones ?? {};
+      const up = this.#feeds.get('upper')?.zones ?? {};
+      const upper = new Map(this.upper);
       const main = new Map(this.forecasts);
       const harmonie = new Map(this.harmonie);
       const horizons = new Map(this.horizons);
@@ -541,7 +555,10 @@ class Conditions {
         const am = hz[`${id}|am`]?.[0];
         const pm = hz[`${id}|pm`]?.[0];
         if (am || pm) horizons.set(id, { am, pm });
+        const u = up[id]?.[0];
+        if (u) upper.set(id, u);
       }
+      this.upper = upper;
       this.forecasts = main;
       this.harmonie = harmonie;
       this.horizons = horizons;
@@ -605,6 +622,22 @@ class Conditions {
     } catch (e) {
       console.warn('Horizon:', e);
     }
+    try {
+      // Plane trails: the upper air changes slowly, so three hours old is fine.
+      const res = await fetchZoneForecasts(zones, {
+        request: UPPER_REQUEST,
+        cache: forecastCache,
+        maxAgeMs: force ? 0 : 3 * 60 * 60 * 1000,
+      });
+      const next = new Map(this.upper);
+      for (const r of res) {
+        const f = r.forecasts[0];
+        if (f && this.#isNew('upper', r.zoneId, r.fetchedAt)) next.set(r.zoneId, f);
+      }
+      this.upper = next;
+    } catch (e) {
+      console.warn('Upper air:', e);
+    }
   }
 
   /** Every model for a zone: the main two plus HARMONIE when it's arrived. */
@@ -663,6 +696,19 @@ class Conditions {
       memo: this.#memo,
     }).map((e) => ({ ...e, searchOnly: addExtra && e.hill === extra }));
   });
+
+  /**
+   * Plane trails at a condition's best hour, for conditions where a clean sky matters
+   * (`trails` in profiles.yaml). Null without upper-air data.
+   */
+  #trailsFor(zoneId: string, c: ConditionResult): TrailAssessment | null {
+    const weight = this.data?.config.profiles[c.profileId]?.trails ?? 0;
+    const upper = this.upper.get(zoneId);
+    if (!weight || !upper) return null;
+    const r = c.result;
+    const at = r.byModel.find((m) => m.model === r.referenceModel)?.keyHour?.time ?? c.window.start;
+    return trailsAt(upper, at);
+  }
 
   /** The walk chosen for each hill, kept while nothing it depends on changes. */
   #walkPlans = new WeakMap<object, { key: string; plan: WalkPlan | null }>();
@@ -756,74 +802,84 @@ class Conditions {
             : -Infinity,
         ),
         dayStart,
-      }).map((c) => {
-        if (!drive) return { ...c, trip: null };
-        const ref = c.result.byModel.find((m) => m.model === c.result.referenceModel);
-        const target = targetTime(
-          c.profileId,
-          c.period,
-          settings.moment,
-          e.sun,
-          c.window,
-          ref?.keyHour?.time ?? null,
-        );
-        // Opening a hill means going to its top, so trips include the walk up. Water
-        // conditions are the exception: they're shot from the shore, so the trip ends there.
-        // A loch opened as a place: every condition is seen from its shore.
-        // A lochside place is the shore already: its trips end at the spot.
-        const lochBody =
-          e.hill.place?.kind === 'lochside' ? undefined : (c.water?.body ?? placeWater);
-        const loch = lochBody
-          ? lochsideTrip(lochBody, start!, settings.pace, c.water ? e.hill.water?.shore : undefined)
-          : null;
-        const legDrive = loch ? loch.drive : drive;
-        const walkMinutes = loch ? loch.walkMinutes : summitWalk;
-        const walkSource: Trip['walkSource'] = loch
-          ? loch.walkSource
-          : found
-            ? 'route'
-            : 'estimate';
-        const parking = loch
-          ? loch.parking
-          : found?.start.kind === 'parking'
-            ? { lat: found.start.lat, lon: found.start.lon, name: found.start.name ?? '' }
-            : undefined;
-        // A walk is planned from setting off at the car; everything else from being in place.
-        const plan = c.walk
-          ? planTrip({
-              target: c.walk.start,
+      })
+        .map((c) => {
+          const trails = this.#trailsFor(e.zone.id, c);
+          return trails ? { ...c, trails } : c;
+        })
+        .map((c) => {
+          if (!drive) return { ...c, trip: null };
+          const ref = c.result.byModel.find((m) => m.model === c.result.referenceModel);
+          const target = targetTime(
+            c.profileId,
+            c.period,
+            settings.moment,
+            e.sun,
+            c.window,
+            ref?.keyHour?.time ?? null,
+          );
+          // Opening a hill means going to its top, so trips include the walk up. Water
+          // conditions are the exception: they're shot from the shore, so the trip ends there.
+          // A loch opened as a place: every condition is seen from its shore.
+          // A lochside place is the shore already: its trips end at the spot.
+          const lochBody =
+            e.hill.place?.kind === 'lochside' ? undefined : (c.water?.body ?? placeWater);
+          const loch = lochBody
+            ? lochsideTrip(
+                lochBody,
+                start!,
+                settings.pace,
+                c.water ? e.hill.water?.shore : undefined,
+              )
+            : null;
+          const legDrive = loch ? loch.drive : drive;
+          const walkMinutes = loch ? loch.walkMinutes : summitWalk;
+          const walkSource: Trip['walkSource'] = loch
+            ? loch.walkSource
+            : found
+              ? 'route'
+              : 'estimate';
+          const parking = loch
+            ? loch.parking
+            : found?.start.kind === 'parking'
+              ? { lat: found.start.lat, lon: found.start.lon, name: found.start.name ?? '' }
+              : undefined;
+          // A walk is planned from setting off at the car; everything else from being in place.
+          const plan = c.walk
+            ? planTrip({
+                target: c.walk.start,
+                driveMinutes: legDrive.minutes,
+                walkMinutes: 0,
+                earlyMinutes: 0,
+                readyMinutes: settings.readyMinutes,
+              })
+            : planTrip({
+                target: target.at,
+                driveMinutes: legDrive.minutes,
+                walkMinutes,
+                earlyMinutes: settings.earlyMinutes,
+                readyMinutes: settings.readyMinutes,
+              });
+          return {
+            ...c,
+            trip: {
+              plan,
               driveMinutes: legDrive.minutes,
-              walkMinutes: 0,
-              earlyMinutes: 0,
-              readyMinutes: settings.readyMinutes,
-            })
-          : planTrip({
-              target: target.at,
-              driveMinutes: legDrive.minutes,
+              roadMiles: legDrive.roadMiles,
               walkMinutes,
-              earlyMinutes: settings.earlyMinutes,
-              readyMinutes: settings.readyMinutes,
-            });
-        return {
-          ...c,
-          trip: {
-            plan,
-            driveMinutes: legDrive.minutes,
-            roadMiles: legDrive.roadMiles,
-            walkMinutes,
-            walkSource,
-            destination: loch
-              ? 'lochside'
-              : e.hill.place && e.hill.place.kind !== 'high'
-                ? 'spot'
-                : 'summit',
-            ...(loch ? { shore: loch.shore } : {}),
-            ...(parking ? { parking } : {}),
-            targetLabel: c.walk ? 'setting off' : target.label,
-            problem: tripProblem(plan, legDrive.minutes, limits),
-          },
-        };
-      });
+              walkSource,
+              destination: loch
+                ? 'lochside'
+                : e.hill.place && e.hill.place.kind !== 'high'
+                  ? 'spot'
+                  : 'summit',
+              ...(loch ? { shore: loch.shore } : {}),
+              ...(parking ? { parking } : {}),
+              targetLabel: c.walk ? 'setting off' : target.label,
+              problem: tripProblem(plan, legDrive.minutes, limits),
+            },
+          };
+        });
       conditions.sort((a, b) => (b.result.score ?? -1) - (a.result.score ?? -1));
       return {
         ...e,
@@ -886,13 +942,18 @@ class Conditions {
         early && !worthGoing(verdict) && (early.result.score ?? 0) > (best?.result.score ?? 0)
           ? early
           : null;
-      const result = { ...h, counted, score, verdict, best, needsEarlier };
+      // "Avoid plane trails": rank lower (never hide) where they'd spoil the best condition.
+      const trailPenalty =
+        settings.avoidTrails && best?.trails
+          ? (data.config.profiles[best.profileId]?.trails ?? 0) * TRAIL_PENALTY[best.trails.risk]
+          : 0;
+      const result = { ...h, counted, score, verdict, best, needsEarlier, trailPenalty };
       (h.searchOnly ? searched : hills).push(result);
     }
 
     const byScore = (a: HillResult, b: HillResult) =>
       ORDER[a.verdict] - ORDER[b.verdict] ||
-      (b.score ?? -1) - (a.score ?? -1) ||
+      (b.score ?? -1) - b.trailPenalty - ((a.score ?? -1) - a.trailPenalty) ||
       (a.driveMinutes ?? 0) - (b.driveMinutes ?? 0);
     const sorters: Record<typeof settings.sort, (a: HillResult, b: HillResult) => number> = {
       best: byScore,

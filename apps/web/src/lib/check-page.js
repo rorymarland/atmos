@@ -44,6 +44,7 @@ export function startCheck(root) {
     ecmwf: 'ECMWF',
     harmonie: 'HARMONIE (KNMI)',
     horizon: 'Sunrise and sunset horizons',
+    upper: 'Upper air (plane trails)',
   };
   const LOOKS = {
     fetched: 'Pulled a new run',
@@ -156,8 +157,79 @@ export function startCheck(root) {
         '<div class="banner warn">The alerts container isn\'t running, so there are no shared forecasts: each browser fetches from Open-Meteo itself, using this connection\'s allowance.</div>';
     }
   }
-  loadShared();
-  const timer = setInterval(loadShared, 30_000);
+  // ---- Air traffic, sampled from OpenSky by the alerts container ----
+  const trafficBox = root.querySelector('#traffic');
+
+  function renderTraffic(t, now) {
+    const parts = [];
+    if (t.lastError) {
+      parts.push(`<div class="banner warn">${esc(t.lastError)}</div>`);
+    }
+    if (!t.samples) {
+      parts.push(
+        '<p class="muted">No samples yet: the first comes about 20 seconds after the container starts.</p>',
+      );
+      trafficBox.innerHTML = parts.join('');
+      return;
+    }
+    const credits = t.creditsLeft != null ? `, ${t.creditsLeft} OpenSky credits left today` : '';
+    parts.push(
+      `<p style="margin:0"><strong>${t.samples.toLocaleString('en-GB')}</strong> snapshot${t.samples === 1 ? '' : 's'} over ${t.days} day${t.days === 1 ? '' : 's'}, since ${when(t.since, now)}; ${t.hoursCovered} of 24 hours covered.</p>
+       <p class="muted">Last snapshot ${when(t.lastSampleAt, now)}: ${t.lastCount} aircraft above 25,000 ft. Next ${when(t.nextAt, now)} (every ${t.everyMinutes} min${credits}).</p>`,
+    );
+    // UK clock hours, from the UTC hours the server counts in.
+    const today = new Date(now);
+    const ukHour = (h) =>
+      Number(
+        new Date(
+          Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), h),
+        ).toLocaleString('en-GB', {
+          timeZone: 'Europe/London',
+          hour: '2-digit',
+          hourCycle: 'h23',
+        }),
+      );
+    const hours = t.byHour.map((v, h) => ({ v, uk: ukHour(h) })).sort((a, b) => a.uk - b.uk);
+    const max = Math.max(1, ...hours.map((x) => x.v ?? 0));
+    const bars = hours
+      .map((x) =>
+        x.v == null
+          ? `<span class="none" style="height:4%" title="${String(x.uk).padStart(2, '0')}:00: no samples yet"></span>`
+          : `<span style="height:${Math.max(3, (x.v / max) * 100).toFixed(0)}%" title="${String(x.uk).padStart(2, '0')}:00: ${x.v} aircraft on average"></span>`,
+      )
+      .join('');
+    const labels = hours
+      .map((x) => `<span>${x.uk % 3 === 0 ? String(x.uk).padStart(2, '0') : ''}</span>`)
+      .join('');
+    parts.push(
+      `<p style="margin:12px 0 0"><strong>Average aircraft above 25,000 ft over the UK, by hour (UK time)</strong></p>
+       <div class="bars">${bars}</div><div class="bar-labels">${labels}</div>`,
+    );
+    trafficBox.innerHTML = parts.join('');
+  }
+
+  async function loadTraffic() {
+    try {
+      const res = await fetch('/api/traffic', { cache: 'no-store' });
+      if (res.status === 404) {
+        trafficBox.innerHTML =
+          '<p class="muted">Traffic sampling is turned off (ATMOS_TRAFFIC=off).</p>';
+        return;
+      }
+      if (!res.ok) throw new Error(String(res.status));
+      renderTraffic(await res.json(), Date.now());
+    } catch {
+      trafficBox.innerHTML =
+        '<p class="muted">The alerts container isn\'t running, so there\'s no traffic sampling.</p>';
+    }
+  }
+
+  const refresh = () => {
+    loadShared();
+    loadTraffic();
+  };
+  refresh();
+  const timer = setInterval(refresh, 30_000);
 
   // ---- Browser API check ----
   const results = [];

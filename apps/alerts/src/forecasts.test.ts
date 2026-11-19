@@ -82,7 +82,13 @@ describe('Feeder', () => {
     const { feeder, om } = setup();
     await feeder.tick();
     expect(om.full.sort()).toEqual(
-      ['ecmwf_ifs025', 'knmi_harmonie_arome_europe', 'ukmo_seamless', 'ukmo_seamless'].sort(),
+      [
+        'ecmwf_ifs025',
+        'ecmwf_ifs025',
+        'knmi_harmonie_arome_europe',
+        'ukmo_seamless',
+        'ukmo_seamless',
+      ].sort(),
     );
     const z = feeder.zone('z1')!;
     expect(z.models.map((m) => m.model)).toEqual([
@@ -91,6 +97,7 @@ describe('Feeder', () => {
       'knmi_harmonie_arome_europe',
     ]);
     expect(z.horizon.am?.model).toBe('ukmo_seamless');
+    expect(z.upper?.model).toBe('ecmwf_ifs025');
     expect(feeder.index().feeds.met?.zones).toBe(3);
   });
 
@@ -144,7 +151,7 @@ describe('Feeder', () => {
     expect(feeder.feed('met')!.fetchedAt).toBe(before.fetchedAt);
     // One point per feed: never a full refetch.
     expect(om.probes).toEqual([]);
-    expect(om.full).toHaveLength(4);
+    expect(om.full).toHaveLength(5);
   });
 
   it('keeps what it fetched across a restart, without fetching again', async () => {
@@ -202,7 +209,7 @@ describe('Feeder', () => {
     expect(met.notBefore - met.fetchedAt).toBe(2 * HOUR);
     expect(met.latestBy - met.fetchedAt).toBe(6 * HOUR);
     expect(idx.nextCheckAt).toBe(idx.lastCheckAt! + 5 * 60_000);
-    expect(idx.events.filter((e) => e.text.startsWith('Fetched'))).toHaveLength(4);
+    expect(idx.events.filter((e) => e.text.startsWith('Fetched'))).toHaveLength(5);
     expect(idx.spentToday).toBeGreaterThan(0);
     // Two hours on with no new run: checked, same run.
     clock.t += 2 * HOUR;

@@ -62,6 +62,20 @@ export const HORIZON_REQUEST: Omit<ForecastRequest, 'points'> = {
   pastDays: 0,
 };
 
+/**
+ * The air where planes cruise (300, 250 and 200 hPa, about 9 to 12 km up), for plane trails.
+ * ECMWF, because its humidity up there is measured against ice, which is what decides
+ * whether a trail lingers. Mid and high cloud say whether trails would be seen at all.
+ */
+export const UPPER_REQUEST: Omit<ForecastRequest, 'points'> = {
+  models: ['ecmwf_ifs025'],
+  surface: ['cloudCoverMid', 'cloudCoverHigh'],
+  pressureLevels: [300, 250, 200],
+  levelFields: ['temperatureC', 'relativeHumidity'],
+  forecastDays: 5,
+  pastDays: 0,
+};
+
 /** Anything with an id and a point to forecast: a zone, or a horizon point. */
 export interface ForecastSite {
   id: string;

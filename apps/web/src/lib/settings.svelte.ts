@@ -55,6 +55,8 @@ export interface Settings {
   walkStart: WalkStart;
   /** For hill walks: be back at the car before sunset, before dark, or whenever. */
   downBy: DownBy;
+  /** Rank lower where plane trails are likely to spoil a clean sky. */
+  avoidTrails: boolean;
 }
 
 const KEY = 'atmos.settings';
@@ -89,6 +91,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pace: 'steady',
   walkStart: 'best',
   downBy: 'sunset',
+  avoidTrails: false,
 };
 
 function load(): Settings {
@@ -141,6 +144,7 @@ export function resetFilters(): void {
     maxDriveMiles: d.maxDriveMiles,
     walkStart: d.walkStart,
     downBy: d.downBy,
+    avoidTrails: d.avoidTrails,
   });
 }
 
@@ -159,7 +163,8 @@ export function filtersChanged(): boolean {
     settings.earliestUp !== d.earliestUp ||
     settings.maxDriveMiles !== d.maxDriveMiles ||
     settings.walkStart !== d.walkStart ||
-    settings.downBy !== d.downBy
+    settings.downBy !== d.downBy ||
+    settings.avoidTrails !== d.avoidTrails
   );
 }
 

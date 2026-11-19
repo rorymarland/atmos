@@ -38,6 +38,11 @@ const profile = z.strictObject({
   /** A hazard to warn about (midges), not a condition to look for: higher means worse. */
   risk: z.boolean().default(false),
   /**
+   * How much plane trails spoil it, 0 to 1: 1 where a clean sky is the subject, lower where
+   * the sky is only part of the frame. Shown as a warning, and used by "Avoid plane trails".
+   */
+  trails: z.number().min(0).max(1).default(0),
+  /**
    * Needs still water: only scored at a loch, and these factors' limits scale with the
    * water's size (see water.ts).
    */

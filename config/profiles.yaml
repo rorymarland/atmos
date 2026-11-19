@@ -51,6 +51,7 @@ profiles:
     short: Inversion
     blurb: 'Standing above a sea of cloud at dawn, with warm air over a cold, foggy valley.'
     scope: summit
+    trails: 0.4
     periods: [morning]
     aggregate: best-hour
     factors:
@@ -70,6 +71,7 @@ profiles:
     short: Sky
     blurb: 'Mid and high cloud to catch colour at sunrise or sunset, with a clear horizon.'
     scope: valley
+    trails: 0.7
     periods: [morning, evening]
     aggregate: best-hour
     factors:
@@ -87,6 +89,7 @@ profiles:
     short: Reflections
     blurb: 'Calm, dry air for mirror reflections on lochs and lakes.'
     scope: valley
+    trails: 0.4
     periods: [morning, evening]
     # Only near still water; a long loch needs calmer air than a lochan.
     water: { fetchScaled: [wind, gusts] }
@@ -146,6 +149,7 @@ profiles:
     short: Clear air
     blurb: 'Crisp, dry air for distant views, often just behind a cold front.'
     scope: summit
+    trails: 1
     periods: [day]
     aggregate: best-hour
     factors:
@@ -160,6 +164,7 @@ profiles:
     short: Drama
     blurb: 'Broken cloud and passing showers with a low sun: shafts of light, rainbows, moving skies.'
     scope: valley
+    trails: 0.7
     periods: [morning, evening]
     aggregate: best-hour
     factors:
@@ -219,6 +224,7 @@ profiles:
     short: Alpenglow
     blurb: 'Snowy summits lit pink and gold by a low sun, with a clear horizon towards it.'
     scope: summit
+    trails: 1
     periods: [morning, evening]
     aggregate: best-hour
     factors:
@@ -235,6 +241,7 @@ profiles:
     short: Wave cloud
     blurb: 'Lens-shaped clouds over the hills: strong winds across the ridges with a moist, stable layer above.'
     scope: valley
+    trails: 0.4
     periods: [morning, day, evening]
     aggregate: best-hour
     factors:

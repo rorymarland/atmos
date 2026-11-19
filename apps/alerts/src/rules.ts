@@ -2,7 +2,7 @@
  * Matching alerts against scored forecasts, and deciding what's news. Pure: the checker
  * feeds it evaluated places, and tests feed it made-up ones.
  */
-import type { Hill, Verdict } from '@atmos/engine';
+import type { Hill, ModelForecast, Verdict } from '@atmos/engine';
 import type { ConditionResult } from '../../web/src/lib/evaluate-places';
 import type { SunTimes } from '../../web/src/lib/sun';
 import { placeKey, type Alert, type Notified, type PlaceRef } from './model';
@@ -28,6 +28,8 @@ export interface Match {
   hill: Hill;
   sun: SunTimes;
   valleyM: number;
+  /** The zone's cruise-height air, for plane trails, when the shared forecasts have it. */
+  upper?: ModelForecast;
 }
 
 /** One day's conditions for one place. */
@@ -40,6 +42,8 @@ export interface DayConditions {
   hill: Hill;
   sun: SunTimes;
   valleyM: number;
+  /** The zone's cruise-height air, for plane trails, when the shared forecasts have it. */
+  upper?: ModelForecast;
 }
 
 const RANK: Record<Verdict, number> = { go: 2, maybe: 1, no: 0, nodata: -1 };
@@ -98,6 +102,7 @@ export function findMatches(alert: Alert, days: DayConditions[], now: number): M
       hill: day.hill,
       sun: day.sun,
       valleyM: day.valleyM,
+      ...(day.upper ? { upper: day.upper } : {}),
     });
   }
   return out.sort((a, b) => a.dayOffset - b.dayOffset || (a.place.name < b.place.name ? -1 : 1));

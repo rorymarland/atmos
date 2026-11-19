@@ -415,6 +415,13 @@
             {#each reasons as r, i (i)}
               <li class={r.status}><span class="status">{STATUS_WORD[r.status]}</span><span>{r.text}</span></li>
             {/each}
+            {#if chosen.trails}
+              {@const t = chosen.trails}
+              <li class={t.risk === 'high' ? 'poor' : t.risk === 'medium' ? 'ok' : 'good'} title="Plane trails at the best hour, from the air where planes cruise (ECMWF). Upper-air humidity is hard to forecast, so this is a risk, not a promise; it doesn't change the verdict.">
+                <span class="status">Trails</span>
+                <span>{t.risk === 'high' ? 'High risk. ' : t.risk === 'medium' ? 'Some risk. ' : 'Low risk. '}{t.text}</span>
+              </li>
+            {/if}
           </ul>
           <p class="models small">
             {#each result.byModel as m (m.model)}

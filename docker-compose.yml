@@ -53,6 +53,8 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       ALERTS_FROM: ${ALERTS_FROM:-}
+      # Samples air traffic from OpenSky (no account) for plane trails; "off" to stop.
+      ATMOS_TRAFFIC: ${ATMOS_TRAFFIC:-on}
     volumes:
       - ./alerts:/data
     # No ports: Atmos's nginx passes /api/alerts to it over this compose network. If you

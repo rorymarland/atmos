@@ -17,6 +17,14 @@
   </p>
   <div id="shared"><p class="muted">Loading…</p></div>
 
+  <h2>Air traffic</h2>
+  <p>
+    For plane trails, the Atmos server samples aircraft above 25,000 ft over the UK from the
+    OpenSky Network every 12 minutes, building up a picture of when and where they fly. It
+    needs a few weeks of samples before it's used for trail risk.
+  </p>
+  <div id="traffic"><p class="muted">Loading…</p></div>
+
   <h2>Browser API check</h2>
   <p>
     Calls each data source the way the app will, straight from this browser, and records what
@@ -168,6 +176,35 @@
   }
   .check :global(.meter span.bad) {
     background: var(--no);
+  }
+  .check :global(.bars) {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 90px;
+    margin: 12px 0 2px;
+    max-width: 620px;
+  }
+  .check :global(.bars span) {
+    flex: 1;
+    background: var(--ink-soft);
+    opacity: 0.55;
+    border-radius: 2px 2px 0 0;
+    min-height: 1px;
+  }
+  .check :global(.bars span.none) {
+    background: var(--line);
+    opacity: 1;
+  }
+  .check :global(.bar-labels) {
+    display: flex;
+    gap: 3px;
+    max-width: 620px;
+    font-size: 0.7rem;
+    color: var(--ink-soft);
+  }
+  .check :global(.bar-labels span) {
+    flex: 1;
   }
   .check :global(.nowrap) {
     white-space: nowrap;
