@@ -95,12 +95,53 @@
     dark: { skyTop: '#0e1822', skyLow: '#26323d', near: [20, 26, 30], far: [74, 88, 102], line: '#93a3b0', text: '#e6edf2', faint: 'rgba(230,237,242,0.35)', sunInk: '#ffb45e', moonInk: '#a9b8ff' },
   } as const;
 
-  /** Land colour by distance: dark and green close in, pale and blue far off. */
-  function landColour(km: number): string {
+  /**
+   * Land colour: dark and green close in, pale and blue far off (the air between), and
+   * darker where the ground is steep, so crags and buttresses stand out from moor.
+   */
+  function landRgb(km: number, steep: number): [number, number, number] {
     const c = COLOURS[theme];
     const f = Math.min(1, Math.sqrt(km / 120));
-    const mix = c.near.map((v, i) => Math.round(v + (c.far[i]! - v) * f));
-    return `rgb(${mix.join(',')})`;
+    // Steepness shows less through more air.
+    const shade = 1 - steep * 0.55 * (1 - f * 0.7);
+    return c.near.map((v, i) => Math.round((v + (c.far[i]! - v) * f) * shade)) as [number, number, number];
+  }
+  function landColour(km: number, steep = 0): string {
+    return `rgb(${landRgb(km, steep).join(',')})`;
+  }
+
+  /** The shading picture as an image, made once per view, slice and theme. */
+  const images = new WeakMap<Panorama, { theme: string; image: HTMLCanvasElement | OffscreenCanvas }>();
+  function shadeImage(p: Panorama): HTMLCanvasElement | OffscreenCanvas | null {
+    const sh = p.shade;
+    if (!sh) return null;
+    const known = images.get(p);
+    if (known && known.theme === theme) return known.image;
+    const cols = p.skyline.length;
+    const image = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(cols, sh.rows) : Object.assign(document.createElement('canvas'), { width: cols, height: sh.rows });
+    const ctx = image.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+    if (!ctx) return null;
+    const data = ctx.createImageData(cols, sh.rows);
+    // Colours for every steepness and distance step, worked out once.
+    const table = new Uint8Array(32 * 32 * 3);
+    for (let si = 0; si < 32; si++) {
+      for (let di = 0; di < 32; di++) {
+        const km = ((di + 0.5) / 32) ** 2 * 150;
+        const rgb = landRgb(km, (si + 0.5) / 32);
+        table.set(rgb, (si * 32 + di) * 3);
+      }
+    }
+    for (let k = 0; k < cols * sh.rows; k++) {
+      if (sh.sky[k]) continue;
+      const t = ((sh.steep[k]! >> 3) * 32 + (sh.dist[k]! >> 3)) * 3;
+      data.data[k * 4] = table[t]!;
+      data.data[k * 4 + 1] = table[t + 1]!;
+      data.data[k * 4 + 2] = table[t + 2]!;
+      data.data[k * 4 + 3] = 255;
+    }
+    ctx.putImageData(data, 0, 0);
+    images.set(p, { theme, image });
+    return image;
   }
 
   function sunColour(alt: number): string {
@@ -263,63 +304,73 @@
       }
     }
 
-    // The land: the skyline, then each ridgeline from far to near, each filled down.
-    const fill = (pts: [number, number][], colour: string) => {
-      if (pts.length < 2) return;
-      ctx.beginPath();
-      ctx.moveTo(pts[0]![0], height + 1);
-      for (const [px, py] of pts) ctx.lineTo(px, py);
-      ctx.lineTo(pts[pts.length - 1]![0], height + 1);
-      ctx.closePath();
-      ctx.fillStyle = colour;
-      ctx.fill();
-    };
-    const sky0: [number, number][] = [];
-    let farKm = 0;
-    for (let px = -1; px <= width + 1; px += 2) {
-      const az = viewer.heading + (px - width / 2) / pxPerDeg;
-      sky0.push([px, y(skylineAt(panorama, az))]);
-      const i = Math.round((((az % 360) + 360) % 360) / panorama.stepDeg) % panorama.skylineKm.length;
-      farKm = Math.max(farKm, panorama.skylineKm[i]!);
-    }
-    fill(sky0, landColour(farKm));
-
+    // The land: the shading picture (steep faces darker, far hills paler), then the
+    // ridgelines on top. A finer slice is used when it covers the view (long lenses).
     const half = viewer.fov / 2 + 2;
-    const segments: { pts: [number, number][]; km: number }[] = [];
-    for (const line of panorama.ridges) {
-      let seg: [number, number][] = [];
-      let kmSum = 0;
-      let n = 0;
-      const flush = () => {
-        if (seg.length >= 2) segments.push({ pts: seg, km: kmSum / n });
-        seg = [];
-        kmSum = 0;
-        n = 0;
-      };
+    const slice = viewer.slice;
+    const sliceCovers =
+      !!slice &&
+      Math.abs(slice.lat - panorama.lat) < 1e-9 &&
+      Math.abs(slice.lon - panorama.lon) < 1e-9 &&
+      (((viewer.heading - viewer.fov / 2 - slice.startAz) % 360) + 360) % 360 + viewer.fov <=
+        (slice.skyline.length - 1) * slice.stepDeg;
+    const land = sliceCovers ? slice! : panorama;
+    const picture = shadeImage(land);
+    if (picture && land.shade) {
+      const sh = land.shade;
+      const cols = land.skyline.length;
+      const cw = land.stepDeg * pxPerDeg;
+      const top = y(sh.altTop);
+      const tall = sh.rows * sh.binDeg * pxPerDeg;
+      const full = land === panorama;
+      ctx.imageSmoothingEnabled = cw > 1.5;
+      for (const k of full ? [-1, 0, 1] : [0]) {
+        const x0 = width / 2 + (delta(land.startAz) + k * 360) * pxPerDeg - cw / 2;
+        const c0 = Math.max(0, Math.floor(-x0 / cw));
+        const c1 = Math.min(cols, Math.ceil((width - x0) / cw));
+        if (c1 <= c0) continue;
+        ctx.drawImage(picture, c0, 0, c1 - c0, sh.rows, x0 + c0 * cw, top, (c1 - c0) * cw, tall);
+      }
+      // Below the picture (looking steeply down): the near ground.
+      if (top + tall < height) {
+        ctx.fillStyle = landColour(0, 0.3);
+        ctx.fillRect(0, top + tall - 1, width, height - top - tall + 1);
+      }
+    } else {
+      // No shading: fill under the skyline.
+      ctx.beginPath();
+      ctx.moveTo(-1, height + 1);
+      for (let px = -1; px <= width + 1; px += 2) {
+        ctx.lineTo(px, y(skylineAt(panorama, viewer.heading + (px - width / 2) / pxPerDeg)));
+      }
+      ctx.lineTo(width + 1, height + 1);
+      ctx.closePath();
+      ctx.fillStyle = landColour(60);
+      ctx.fill();
+    }
+
+    for (const line of land.ridges) {
+      ctx.beginPath();
+      let pen = false;
       let lastX = NaN;
+      let kmSum = 0;
       for (const p of line) {
-        const az = p.ray * panorama.stepDeg;
+        const az = land.startAz + p.ray * land.stepDeg;
+        kmSum += p.km;
         if (Math.abs(delta(az)) > half) {
-          flush();
+          pen = false;
           continue;
         }
         const px = x(az);
-        if (seg.length && Math.abs(px - lastX) > width / 2) flush();
-        seg.push([px, y(p.altDeg)]);
-        kmSum += p.km;
-        n++;
+        if (pen && Math.abs(px - lastX) < width / 2) ctx.lineTo(px, y(p.altDeg));
+        else ctx.moveTo(px, y(p.altDeg));
+        pen = true;
         lastX = px;
       }
-      flush();
-    }
-    segments.sort((a, b) => b.km - a.km);
-    for (const s of segments) {
-      fill(s.pts, landColour(s.km));
-      ctx.beginPath();
-      s.pts.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+      const km = kmSum / line.length;
       ctx.strokeStyle = c.line;
-      ctx.globalAlpha = Math.max(0.25, 0.9 - s.km / 150);
-      ctx.lineWidth = 1;
+      ctx.globalAlpha = Math.max(0.2, 0.85 - km / 120);
+      ctx.lineWidth = km < 5 ? 1.3 : 1;
       ctx.stroke();
       ctx.globalAlpha = 1;
     }
@@ -413,10 +464,22 @@
   let frame = 0;
   $effect(() => {
     // Everything draw() reads, so any change redraws on the next frame.
-    void [panorama, time, width, height, viewer.heading, viewer.lens, tilt, theme, paths, now, altTop];
+    void [panorama, viewer.slice, time, width, height, viewer.heading, viewer.lens, tilt, theme, paths, now, altTop];
     cancelAnimationFrame(frame);
     frame = requestAnimationFrame(draw);
   });
+  // Long lenses: a finer slice across the view, asked for once turning pauses.
+  let sliceTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    const lens = viewer.lens;
+    const heading = viewer.heading;
+    const fov = viewer.fov;
+    void [panorama, viewer.status];
+    if (lens < 100) return;
+    clearTimeout(sliceTimer);
+    sliceTimer = setTimeout(() => viewer.requestSlice(heading, fov, lens >= 200 ? 0.01 : 0.02), 180);
+  });
+
   // A new view or lens resets looking up or down.
   $effect(() => {
     void [panorama, viewer.lens];

@@ -29,7 +29,7 @@ const TRIES = [
 ];
 
 /** Decodes one Terrarium tile to RGBA pixels, or null where there's no tile (the sea). */
-async function loadTile(z: number, x: number, y: number): Promise<TerrainTile | null> {
+export async function loadTile(z: number, x: number, y: number): Promise<TerrainTile | null> {
   const res = await fetch(`https://tiles.mapterhorn.com/${z}/${x}/${y}.webp`);
   if (!res.ok) return null;
   // No colour management or premultiplying: the colours are data, not a picture.

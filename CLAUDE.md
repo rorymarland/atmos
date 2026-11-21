@@ -60,8 +60,12 @@
   with `water:` in `profiles.yaml` are scored per loch, and their trips end at the lochside.
 - The viewer (`packages/engine/src/panorama.ts`, `apps/web/src/lib/panorama.worker.ts`,
   `PanoramaStrip.svelte`) and Line it up (`alignment.ts`) share the same curve and refraction
-  maths (`elevationAngle`); a test checks they agree. Terrain is Mapterhorn at zoom 11, 10 and 8
-  by distance, loaded in a worker only for the view being looked at.
+  maths (`elevationAngle`); a test checks they agree. Terrain is Mapterhorn at zoom 11 (to
+  25 km), 10 (to 60 km) and 8 (to 150 km), decoded to decimetre heights (`HeightTile`) in a
+  worker that keeps the current standpoint's terrain. Steps never pass a terrain pixel; the
+  full circle is every 0.1°, and the 100 and 200 mm lenses get a 0.02° or 0.01° slice across
+  the view. The land is drawn from a steepness and distance picture (`PanoramaShade`) under
+  the ridgelines. It's the hot loop: keep it free of per-sample trig and allocation.
 - Plane trails (`packages/engine/src/contrails.ts`): formation by Schmidt–Appleman, lingering
   where ECMWF's humidity (already relative to ice below −23 °C) is 90% or more, hidden by thick
   mid or high cloud. Upper air comes from `UPPER_REQUEST` (the `upper` shared feed). A
