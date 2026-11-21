@@ -59,6 +59,8 @@ const feeder: Feeder = new Feeder({
 const runner: Runner = new Runner({
   store,
   forecasts: feeder,
+  // Defined further down; only asked for when an email is written.
+  traffic: () => traffic?.grid() ?? null,
   dataUrl: DATA_URL,
   siteUrl: SITE_URL,
   log,
@@ -179,6 +181,10 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://x');
   const path = url.pathname.replace(/\/+$/, '');
   if (path === '/api/forecasts' && req.method === 'GET') return send(res, 200, feeder.index());
+  if (path === '/api/traffic/grid' && req.method === 'GET')
+    return traffic
+      ? send(res, 200, traffic.grid())
+      : send(res, 404, { error: 'Traffic sampling is off' });
   if (path === '/api/traffic' && req.method === 'GET')
     return traffic
       ? send(res, 200, traffic.summary())

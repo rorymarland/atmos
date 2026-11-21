@@ -14,6 +14,7 @@ import {
   formatDuration,
   planTrip,
   trailsAt,
+  withTraffic,
   type HourResult,
   type Reason,
   type ScoringConfig,
@@ -22,6 +23,7 @@ import { modelLabel } from '../../web/src/lib/models';
 import { moonTimes, PERIOD_LABELS, skyPositions } from '../../web/src/lib/sun';
 import { londonMidnight } from '../../web/src/lib/time';
 import { chooseWalk, type WalkPlan } from '../../web/src/lib/walk';
+import { trafficAt, type TrafficGrid } from '../../web/src/lib/traffic-grid';
 import type { Alert, PlaceRef } from './model';
 import type { Cancelled, Match, MatchItem, News } from './rules';
 import type { SiteData } from './check';
@@ -46,6 +48,8 @@ export interface EmailOptions {
   tomorrow: string;
   wind?: 'kmh' | 'mph';
   now?: number;
+  /** Air traffic, when sampled long enough to sharpen the trail risk. */
+  traffic?: TrafficGrid | null;
 }
 
 const HOUR = 3_600_000;
@@ -240,7 +244,7 @@ function detail(
         .filter((r) => r.status === 'poor' || r.status === 'blocked')
         .slice(0, 2)
         .map((r) => r.text),
-      ...trailCaveat(item, match, keyTime, data),
+      ...trailCaveat(item, match, keyTime, data, opts.traffic ?? null),
     ],
     // "says GO" reads as shouting in an email.
     models: reasons
@@ -257,9 +261,12 @@ function trailCaveat(
   match: Match,
   keyTime: number | null,
   data: SiteData,
+  traffic: TrafficGrid | null,
 ): string[] {
   if (!match.upper || !(data.config.profiles[item.profileId]?.trails ?? 0)) return [];
-  const t = trailsAt(match.upper, keyTime ?? item.result.window.start);
+  const at = keyTime ?? item.result.window.start;
+  const raw = trailsAt(match.upper, at);
+  const t = raw && withTraffic(raw, trafficAt(traffic, match.hill.lat, match.hill.lon, at));
   if (!t || t.risk === 'low') return [];
   return [`Plane trails, ${t.risk} risk: ${t.text.replace(/^./, (c) => c.toLowerCase())}`];
 }

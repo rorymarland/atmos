@@ -142,3 +142,23 @@ export function trailsAt(
     forecast.surface.cloudCoverHigh?.[i] ?? null,
   );
 }
+
+/**
+ * The trail risk with what's known about air traffic near the place at that hour: quiet
+ * airspace lowers a lingering risk a step; busy airspace says so. Without traffic data, the
+ * assessment is unchanged.
+ */
+export function withTraffic(
+  a: TrailAssessment,
+  traffic: { level: 'quiet' | 'typical' | 'busy'; aircraft: number } | null,
+): TrailAssessment {
+  if (!traffic || a.hidden || (a.linger !== 'likely' && a.linger !== 'may')) return a;
+  if (traffic.level === 'quiet') {
+    const risk: TrailRisk = a.risk === 'high' ? 'medium' : 'low';
+    return { ...a, risk, text: `${a.text} Quiet airspace at that hour, though.` };
+  }
+  if (traffic.level === 'busy') {
+    return { ...a, text: `${a.text} Busy airspace at that hour.` };
+  }
+  return a;
+}

@@ -174,6 +174,11 @@ export function startCheck(root) {
     }
     const credits = t.creditsLeft != null ? `, ${t.creditsLeft} OpenSky credits left today` : '';
     parts.push(
+      t.usedForTrails
+        ? '<div class="banner ok">Used for the plane trail risk.</div>'
+        : `<p class="muted">Not used for the plane trail risk yet: it starts by itself after ${t.readyDays} days of samples covering every hour.</p>`,
+    );
+    parts.push(
       `<p style="margin:0"><strong>${t.samples.toLocaleString('en-GB')}</strong> snapshot${t.samples === 1 ? '' : 's'} over ${t.days} day${t.days === 1 ? '' : 's'}, since ${when(t.since, now)}; ${t.hoursCovered} of 24 hours covered.</p>
        <p class="muted">Last snapshot ${when(t.lastSampleAt, now)}: ${t.lastCount} aircraft above 25,000 ft. Next ${when(t.nextAt, now)} (every ${t.everyMinutes} min${credits}).</p>`,
     );

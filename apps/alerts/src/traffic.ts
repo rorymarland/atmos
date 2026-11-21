@@ -9,6 +9,12 @@
  */
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import {
+  READY_DAYS,
+  READY_SAMPLES_PER_HOUR,
+  trafficThresholds,
+  type TrafficGrid,
+} from '../../web/src/lib/traffic-grid';
 
 const HOUR = 3_600_000;
 
@@ -166,8 +172,47 @@ export class TrafficSampler {
       everyMinutes: SAMPLE_EVERY_MS / 60_000,
       /** Average aircraft above 25,000 ft over the box, by UTC hour. */
       byHour,
+      /** Whether the trail risk uses it yet, and what it needs. */
+      usedForTrails: s.since
+        ? (this.#now() - s.since) / (24 * HOUR) >= READY_DAYS &&
+          s.samples.every((n) => n >= READY_SAMPLES_PER_HOUR)
+        : false,
+      readyDays: READY_DAYS,
     };
   }
+
+  /**
+   * Average aircraft per snapshot by hour and cell, for the trail risk. `ready` once there
+   * are three weeks of samples with every hour well covered; kept for a minute between asks.
+   */
+  grid(): TrafficGrid {
+    const now = this.#now();
+    if (this.#grid && now - this.#gridAt < 60_000) return this.#grid;
+    const s = this.state;
+    const perHour = s.counts.map((row, h) => {
+      const n = s.samples[h] ?? 0;
+      return row.map((c) => (n ? Math.round((c / n) * 100) / 100 : 0));
+    });
+    const days = s.since ? (now - s.since) / (24 * HOUR) : 0;
+    const base = {
+      latMin: BOX.latMin,
+      lonMin: BOX.lonMin,
+      cellDeg: CELL_DEG,
+      rows: ROWS,
+      cols: COLS,
+      perHour,
+    };
+    this.#grid = {
+      ...base,
+      ready: days >= READY_DAYS && s.samples.every((n) => n >= READY_SAMPLES_PER_HOUR),
+      days: Math.round(days * 10) / 10,
+      thresholds: trafficThresholds(base),
+    };
+    this.#gridAt = now;
+    return this.#grid;
+  }
+  #grid: TrafficGrid | null = null;
+  #gridAt = 0;
 
   #load(): TrafficState {
     try {
