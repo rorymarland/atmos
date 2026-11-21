@@ -22,21 +22,25 @@ import {
   HORIZON_REQUEST,
   parseForecastResponse,
   UPPER_REQUEST,
+  AIR_REQUEST,
   ZONE_REQUEST,
   type ForecastRequest,
   type ForecastSite,
 } from '@atmos/data-client';
 import { horizonSites } from '../../web/src/lib/evaluate-places';
 
-export type FeedId = 'met' | 'ecmwf' | 'harmonie' | 'horizon' | 'upper';
-export const FEED_IDS: FeedId[] = ['met', 'ecmwf', 'harmonie', 'horizon', 'upper'];
+export type FeedId = 'met' | 'ecmwf' | 'harmonie' | 'horizon' | 'upper' | 'air';
+export const FEED_IDS: FeedId[] = ['met', 'ecmwf', 'harmonie', 'horizon', 'upper', 'air'];
 
 const HOUR = 3_600_000;
 
 export interface FeedSpec {
   request: Omit<ForecastRequest, 'points'>;
-  /** The model whose new runs the probe watches. */
-  probeModel: string;
+  /**
+   * The model whose new runs the probe watches. Without one the feed is simply refetched
+   * every `maxGapMs` (the air forecast, which isn't on the weather API the probe asks).
+   */
+  probeModel?: string;
   /** Never sooner than this after the last fetch. */
   minGapMs: number;
   /** Fetched by now even if the probe sees nothing new (a stuck probe mustn't freeze it). */
@@ -90,6 +94,14 @@ export const FEEDS: Record<FeedId, FeedSpec> = {
     maxGapMs: 12 * HOUR,
     dailyCap: 8_000,
     sites: (zones, now) => zones.flatMap((z) => horizonSites(z, now)),
+  },
+  // Haze and dust (CAMS): updated once or twice a day, so twice a day is plenty.
+  air: {
+    request: AIR_REQUEST,
+    minGapMs: 12 * HOUR,
+    maxGapMs: 12 * HOUR,
+    dailyCap: 9_000,
+    sites: (zones) => zones,
   },
 };
 
@@ -269,6 +281,8 @@ export class Feeder {
     horizon: { am?: ModelForecast; pm?: ModelForecast };
     /** The cruise-height air, for plane trails. */
     upper?: ModelForecast;
+    /** Haze and dust (CAMS), for sunset colour and long views. */
+    air?: ModelForecast;
   } | null {
     const met = this.#feeds.get('met')?.zones[zoneId];
     if (!met) return null;
@@ -279,6 +293,7 @@ export class Feeder {
       models: [...met, ...ecmwf, ...harmonie],
       horizon: { am: h?.[`${zoneId}|am`]?.[0], pm: h?.[`${zoneId}|pm`]?.[0] },
       upper: this.#feeds.get('upper')?.zones[zoneId]?.[0],
+      air: this.#feeds.get('air')?.zones[zoneId]?.[0],
     };
   }
 
@@ -313,10 +328,9 @@ export class Feeder {
           if (missing.length) await this.#fetchFeed(id, spec, missing, last!.probe, last);
           continue;
         }
-        if (!probes.has(spec.probeModel)) {
-          probes.set(spec.probeModel, await this.#probe(spec.probeModel, zones[0]!));
-        }
-        const reading = probes.get(spec.probeModel) ?? null;
+        const model = spec.probeModel;
+        if (model && !probes.has(model)) probes.set(model, await this.#probe(model, zones[0]!));
+        const reading = model ? (probes.get(model) ?? null) : null;
         // Same reading as the data we hold: no new run yet.
         if (due === 'probe' && reading !== null && reading === last?.probe) {
           this.#note(id, 'same-run');

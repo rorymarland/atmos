@@ -6,7 +6,7 @@
 import { kpNeeded } from '../astro.js';
 import { freezingLevelAt } from '../vertical.js';
 import type { HourContext } from '../context.js';
-import { cloudBase, dewPointAt2m, horizonClear, mean, round } from './shared.js';
+import { cloudBase, dewPointAt2m, haze, horizonClear, mean, round } from './shared.js';
 import type { FactorDefinition, ProfileDefinition } from './types.js';
 
 /** Snow usually falls to about 300 m below the freezing level. */
@@ -177,6 +177,7 @@ export const clarity: ProfileDefinition = {
     },
     cloudBase: cloudBaseMargin,
     rain: rainNow,
+    haze,
   },
   gates: {},
 };
@@ -202,6 +203,7 @@ export const dramatic: ProfileDefinition = {
     },
     dryNow: rainNow,
     horizonClear,
+    haze,
     movingSky: {
       label: 'Wind (moving sky)',
       unit: 'kmh',

@@ -109,3 +109,30 @@ export const horizonClear: FactorDefinition = {
     };
   },
 };
+
+/** Dust above this (µg/m³ near the ground) is named as dust rather than haze. */
+const DUST_NAMED = 40;
+
+/**
+ * Haze through the whole depth of the air, as aerosol optical depth at 550 nm (CAMS). Clean
+ * UK air is about 0.05 to 0.15; above about 0.3 the low sun is dimmed and reddened and
+ * colour on the clouds goes muted, and distant hills fade. Saharan dust and wildfire smoke
+ * are the usual causes. Null without the air forecast, so it then counts for nothing.
+ */
+export const haze: FactorDefinition = {
+  label: 'Haze in the air (aerosol optical depth)',
+  unit: 'aod',
+  read: (ctx) => {
+    const a = ctx.extras.air?.(ctx.time) ?? null;
+    if (!a || a.aod === null) return { value: null };
+    const detail =
+      a.dust !== null && a.dust >= DUST_NAMED
+        ? `Saharan dust, about ${Math.round(a.dust)} µg/m³`
+        : a.aod >= 0.3
+          ? 'hazy: dust, smoke or pollution'
+          : a.aod <= 0.1
+            ? 'very clean air'
+            : undefined;
+    return { value: Math.round(a.aod * 100) / 100, ...(detail ? { detail } : {}) };
+  },
+};

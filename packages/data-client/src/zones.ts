@@ -76,6 +76,19 @@ export const UPPER_REQUEST: Omit<ForecastRequest, 'points'> = {
   pastDays: 0,
 };
 
+/**
+ * Haze, dust and smoke from CAMS (Open-Meteo's air quality forecast): how much the air dims
+ * a low sun, for sunset colour and long views. One model, two variables: one call a zone.
+ */
+export const AIR_REQUEST: Omit<ForecastRequest, 'points'> = {
+  endpoint: 'air',
+  models: ['cams'],
+  surface: ['aerosolOpticalDepth', 'dust'],
+  pressureLevels: [],
+  forecastDays: 5,
+  pastDays: 0,
+};
+
 /** Anything with an id and a point to forecast: a zone, or a horizon point. */
 export interface ForecastSite {
   id: string;

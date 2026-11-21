@@ -169,6 +169,8 @@ day however many people and devices use it:
   a new model run has come out, so ECMWF (new runs every 6 hours) isn't downloaded again until
   it changes. The Met Office's open data already runs about 4 hours behind, so the gap adds
   little.
+- Haze and dust (CAMS, through Open-Meteo's air quality API) are fetched twice a day: about
+  200 calls, one per zone each time.
 - A daily budget skips the extras before the Met Office feed if spending ever gets close to the
   limit, and it backs off for half an hour if Open-Meteo refuses a request.
 - The forecasts are kept in `./alerts/forecasts/`, so a restart costs nothing.
@@ -204,6 +206,7 @@ Atmos on your LAN or VPN.
 | [Open-Meteo](https://open-meteo.com/) (UK Met Office, ECMWF, DWD ICON models)                                                                                                              | Forecasts, fetched by the alerts container or live by the browser                    | CC BY 4.0; free API is for non-commercial use |
 | [Database of British and Irish Hills](https://www.hills-database.co.uk/) (DoBIH)                                                                                                           | Hill names, heights, positions, lists                                                | CC BY 4.0                                     |
 | [Postcodes.io](https://postcodes.io/) (OS, Royal Mail and ONS data)                                                                                                                        | Finding home from a postcode                                                         | OGL v3.0                                      |
+| [Copernicus Atmosphere Monitoring Service](https://atmosphere.copernicus.eu/) (CAMS) via Open-Meteo                                                                                        | Haze and Saharan dust, for sunset colour and long views                              | CC BY 4.0                                     |
 | [GeoNames](https://www.geonames.org/) via Open-Meteo geocoding                                                                                                                             | Finding home from a place name                                                       | CC BY 4.0                                     |
 | [NOAA SWPC](https://www.swpc.noaa.gov/)                                                                                                                                                    | Kp forecast and OVATION nowcast                                                      | Public domain                                 |
 | [OpenStreetMap](https://www.openstreetmap.org/copyright) via [OpenFreeMap](https://openfreemap.org/), [Overpass](https://overpass-api.de/) and [Geofabrik](https://download.geofabrik.de/) | Basemap; paths and car parks for walking routes; lochs, lakes and lochside car parks | ODbL                                          |

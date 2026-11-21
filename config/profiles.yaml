@@ -78,6 +78,9 @@ profiles:
       midHighCloud: { weight: 3, band: [20, 70], zero: [0, 95] }
       # The low sun needs a gap towards it to light the cloud overhead.
       horizonClear: { weight: 3, good: 20, bad: 75 }
+      # Heavy haze (dust, smoke) dims and reddens the low sun and mutes colour on the cloud.
+      # Clean UK air is about 0.05 to 0.15; only real haze counts against.
+      haze: { weight: 1, good: 0.25, bad: 0.9 }
       lowCloud: { weight: 2, good: 30, bad: 70 }
       precipitation: { weight: 2, good: 0, bad: 0.5 }
       visibility: { weight: 1, good: 15, bad: 5 }
@@ -158,6 +161,8 @@ profiles:
       summitHumidity: { weight: 1, good: 55, bad: 90 }
       cloudBase: { weight: 2, good: 300, bad: 0 }
       rain: { weight: 1, good: 0, bad: 0.3 }
+      # Long views need clean air: distant hills fade well before visibility says so.
+      haze: { weight: 2, good: 0.1, bad: 0.5 }
 
   dramatic:
     label: Dramatic light
@@ -173,6 +178,7 @@ profiles:
       showersNearby: { weight: 2, good: 1, bad: -1.5 }
       dryNow: { weight: 2, good: 0, bad: 1 }
       horizonClear: { weight: 2, good: 30, bad: 85 }
+      haze: { weight: 1, good: 0.25, bad: 0.9 }
       movingSky: { weight: 1, good: 20, bad: 3 }
       visibility: { weight: 1, good: 20, bad: 5 }
     gates:

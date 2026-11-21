@@ -50,6 +50,21 @@ export type HorizonLookup = (time: number) => { low: number | null; mid: number 
 
 export type HorizonSource = { am?: ModelForecast; pm?: ModelForecast } | undefined;
 
+export type AirLookup = (time: number) => { aod: number | null; dust: number | null } | null;
+
+/** The haze lookup the engine uses, from a zone's CAMS air forecast. */
+export function airLookup(f: ModelForecast | undefined): AirLookup {
+  if (!f) return () => null;
+  return (time) => {
+    const i = f.time.indexOf(Math.floor(time / 3_600_000) * 3_600_000);
+    if (i < 0) return null;
+    return {
+      aod: f.surface.aerosolOpticalDepth?.[i] ?? null,
+      dust: f.surface.dust?.[i] ?? null,
+    };
+  };
+}
+
 export interface EvaluateInput {
   hills: Hill[];
   data: { zones: Zone[]; config: ScoringConfig; waters: WaterBody[] | null };
@@ -62,6 +77,8 @@ export interface EvaluateInput {
   modelsFor: (zoneId: string) => ModelForecast[];
   /** The zone's sunrise and sunset horizon forecasts (same object while unchanged). */
   horizonsFor: (zoneId: string) => HorizonSource;
+  /** The zone's haze forecast (CAMS), when there is one (same object while unchanged). */
+  airFor?: (zoneId: string) => ModelForecast | undefined;
   kp: KpBin[];
   /**
    * Results kept between calls. Scoring every hill is the costly part of the app, and most
@@ -170,7 +187,7 @@ export function horizonLookup(
 
 /** Every condition and period for each hill with a forecast, on day `dayOffset`. */
 export function evaluatePlaces(input: EvaluateInput): EvaluatedPlace[] {
-  const { hills, data, dayOffset, now, modelsFor, horizonsFor, kp } = input;
+  const { hills, data, dayOffset, now, modelsFor, horizonsFor, airFor, kp } = input;
   const memo = input.memo ?? createEvaluateMemo();
   // Day boundaries and the "beyond the reliable horizon" test move by the hour, not the second.
   const hour = Math.floor(now / 3_600_000);
@@ -192,8 +209,12 @@ export function evaluatePlaces(input: EvaluateInput): EvaluatedPlace[] {
     const forecasts = modelsFor(zone.id);
     if (forecasts.length === 0) continue;
     const horizon = horizonsFor(zone.id);
-    const zoneDeps = [forecasts, horizon, zone];
-    const zoneOpts = { ...opts, extras: { ...opts.extras, horizon: horizonLookup(horizon) } };
+    const air = airFor?.(zone.id);
+    const zoneDeps = [forecasts, horizon, air, zone];
+    const zoneOpts = {
+      ...opts,
+      extras: { ...opts.extras, horizon: horizonLookup(horizon), air: airLookup(air) },
+    };
     const p = zone.forecastPoint;
 
     const z = remember(memo.zones, zone.id, zoneDeps, () => {

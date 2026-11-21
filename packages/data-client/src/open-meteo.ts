@@ -7,6 +7,8 @@
 import type { LevelSeries, ModelForecast, Series, SurfaceSeries } from '@atmos/engine';
 
 export const OPEN_METEO_FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
+/** Same service, same terms: CAMS air quality, haze and dust. */
+export const OPEN_METEO_AIR_URL = 'https://air-quality-api.open-meteo.com/v1/air-quality';
 
 /** Engine surface variable -> Open-Meteo hourly variable. */
 export const SURFACE_VARIABLES: Record<keyof SurfaceSeries, string> = {
@@ -25,9 +27,13 @@ export const SURFACE_VARIABLES: Record<keyof SurfaceSeries, string> = {
   pressureMsl: 'pressure_msl',
   freezingLevelHeight: 'freezing_level_height',
   showers: 'showers',
+  aerosolOpticalDepth: 'aerosol_optical_depth',
+  dust: 'dust',
 };
 
 export interface ForecastRequest {
+  /** The weather forecast (default), or the air quality forecast (CAMS, no model choice). */
+  endpoint?: 'forecast' | 'air';
   points: { lat: number; lon: number }[];
   models: string[];
   surface: (keyof SurfaceSeries)[];
@@ -69,6 +75,19 @@ export function estimateCallWeight(req: ForecastRequest): number {
 }
 
 export function buildForecastUrl(req: ForecastRequest): string {
+  if (req.endpoint === 'air') {
+    // One combined source (CAMS Europe where it covers, global beyond), so no models.
+    const air = new URLSearchParams({
+      latitude: req.points.map((p) => p.lat.toFixed(4)).join(','),
+      longitude: req.points.map((p) => p.lon.toFixed(4)).join(','),
+      hourly: hourlyVariables(req).join(','),
+      forecast_days: String(req.forecastDays),
+      past_days: String(req.pastDays),
+      timeformat: 'unixtime',
+      timezone: 'GMT',
+    });
+    return `${OPEN_METEO_AIR_URL}?${air.toString()}`;
+  }
   const params = new URLSearchParams({
     latitude: req.points.map((p) => p.lat.toFixed(4)).join(','),
     longitude: req.points.map((p) => p.lon.toFixed(4)).join(','),

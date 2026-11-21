@@ -14,6 +14,8 @@ export interface HourExtras {
    * point about 60 km along the sunrise (morning) or sunset (evening) bearing.
    */
   horizon?: (time: number) => { low: number | null; mid: number | null } | null;
+  /** Haze in the air at an instant (CAMS): aerosol optical depth and dust near the ground. */
+  air?: (time: number) => { aod: number | null; dust: number | null } | null;
 }
 
 const profileCache = new WeakMap<ModelForecast, Map<number, VerticalProfile>>();
