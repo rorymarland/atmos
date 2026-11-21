@@ -61,12 +61,14 @@
       <span class="name">Atmos</span>
       <span class="tagline">Find the conditions. Capture the moment.</span>
     </a>
-    <nav aria-label="Main">
-      {#each NAV as item (item.href)}
-        <a href={item.href} aria-current={page.url.pathname === item.href ? 'page' : undefined}>
-          {item.label}
-        </a>
-      {/each}
+    <div class="right">
+      <nav aria-label="Main">
+        {#each NAV as item (item.href)}
+          <a href={item.href} aria-current={page.url.pathname === item.href ? 'page' : undefined}>
+            {item.label}
+          </a>
+        {/each}
+      </nav>
       <button
         class="theme"
         onclick={() => (settings.theme = settings.theme === 'dark' ? 'light' : 'dark')}
@@ -79,7 +81,7 @@
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="currentColor" /></svg>
         {/if}
       </button>
-    </nav>
+    </div>
   </header>
 
   <!-- Opening a hill or zone sheet keeps the page where it is. -->
@@ -153,9 +155,16 @@
     color: var(--ink-soft);
     font-size: 0.9rem;
   }
+  .right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
   nav {
     display: flex;
     gap: 4px;
+    min-width: 0;
   }
   nav a {
     text-decoration: none;
@@ -177,16 +186,37 @@
     border-top: 1px solid var(--line);
   }
 
-  /* Phones: the tagline goes; the header stays one compact row. */
+  /* Phones: just the logo, a compact menu that scrolls sideways if it must, and the theme
+     button always in reach. */
   @media (max-width: 640px) {
-    .tagline {
+    .tagline,
+    .name {
       display: none;
     }
     .top {
-      padding: 10px 12px;
+      height: 50px;
+      gap: 8px;
+      padding: 0 10px;
+    }
+    .logo {
+      width: 28px;
+      height: 28px;
+    }
+    nav {
+      gap: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    nav::-webkit-scrollbar {
+      display: none;
     }
     nav a {
-      padding: 6px 8px;
+      padding: 6px 7px;
+      font-size: 0.92rem;
+      white-space: nowrap;
+    }
+    .theme {
+      flex: none;
     }
   }
 </style>

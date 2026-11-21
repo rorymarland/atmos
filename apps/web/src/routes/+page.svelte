@@ -42,6 +42,8 @@
   let picking = $state(false);
   let panelOpen = $state(true);
   let narrow = $state(false);
+  /** Phones: the colour key folds away behind a "Key" button. */
+  let keyOpen = $state(false);
 
   const ranking = $derived(conditions.ranking);
   const best = $derived(ranking.go[0] ?? null);
@@ -75,6 +77,33 @@
     return `https://tiles.openfreemap.org/styles/${theme === 'dark' ? 'dark' : 'liberty'}`;
   }
 
+  /**
+   * OpenFreeMap's Dark has land almost black (12,12,12) and water barely different (27,27,29),
+   * lighter than the land. Lift the land to a dark slate in Atmos's own dark palette, sink the
+   * water below it with a little blue so coasts and lochs read, and give woods, parks, roads
+   * and borders just enough to see. Still a dark map.
+   */
+  const DARK_LIFT: Record<string, Record<string, string>> = {
+    background: { 'background-color': '#1b252d' },
+    water: { 'fill-color': '#0b1621' },
+    waterway: { 'line-color': '#0e1b27' },
+    landcover_ice_shelf: { 'fill-color': '#26313a' },
+    landcover_glacier: { 'fill-color': '#26313a' },
+    landuse_residential: { 'fill-color': '#252e36' },
+    landcover_wood: { 'fill-color': '#1d2b25' },
+    landuse_park: { 'fill-color': '#1f2c27' },
+    building: { 'fill-color': '#202a32', 'fill-outline-color': '#2c3842' },
+    'aeroway-area': { 'fill-color': '#202930' },
+    highway_path: { 'line-color': '#34404a' },
+    highway_minor: { 'line-color': '#2a353e' },
+    highway_major_inner: { 'line-color': '#34414b' },
+    highway_major_subtle: { 'line-color': '#2e3a43' },
+    highway_motorway_subtle: { 'line-color': '#2e3a43' },
+    boundary_state: { 'line-color': '#4d5c68' },
+    'boundary_country_z0-4': { 'line-color': '#5a6a77' },
+    'boundary_country_z5-': { 'line-color': '#5a6a77' },
+  };
+
   /** Atmos's own colours that need to change with the basemap. */
   function applyThemePaint(m: import('maplibre-gl').Map, theme: 'light' | 'dark') {
     const dark = theme === 'dark';
@@ -85,8 +114,18 @@
     ) => {
       if (m.getLayer(layer)) m.setPaintProperty(layer, prop, value);
     };
-    set('hillshade', 'hillshade-shadow-color', dark ? '#000000' : '#4c5b67');
-    set('hillshade', 'hillshade-highlight-color', dark ? '#5a6672' : '#ffffff');
+    // The light basemap is reloaded fresh, so only the dark one needs lifting.
+    if (dark) {
+      for (const [layer, paint] of Object.entries(DARK_LIFT)) {
+        for (const [prop, value] of Object.entries(paint)) {
+          set(layer, prop as Parameters<typeof m.setPaintProperty>[1], value);
+        }
+      }
+    }
+    // A touch more relief in the dark, so the hills show against the slate.
+    set('hillshade', 'hillshade-exaggeration', dark ? 0.5 : 0.35);
+    set('hillshade', 'hillshade-shadow-color', dark ? '#05090c' : '#4c5b67');
+    set('hillshade', 'hillshade-highlight-color', dark ? '#7f8e9b' : '#ffffff');
     set('targets', 'circle-stroke-color', ['case', ['==', ['get', 'custom'], 1], dark ? '#f2f5f7' : '#1d2830', dark ? '#1b2731' : '#ffffff']);
     set('ray-labels', 'text-color', dark
       ? ['match', ['get', 'kind'], 'sunrise', '#ffcf7a', 'sunset', '#ff9f80', 'sun', '#ffd98f', 'moonrise', '#c9d6e8', 'moonset', '#dde6f2', '#e8edf2']
@@ -939,7 +978,10 @@
         />
       </div>
     {/if}
-    <div class="legend small">
+    <div class="legend small" class:folded={narrow && !keyOpen} class:hidden-under-panel={narrow && panelOpen}>
+      {#if narrow}
+        <button class="link key-toggle" onclick={() => (keyOpen = !keyOpen)} aria-expanded={keyOpen}>Key</button>
+      {/if}
       <span aria-hidden="true"><i style="background: var(--go)"></i>Go</span>
       <span aria-hidden="true"><i style="background: var(--maybe)"></i>Maybe</span>
       <span aria-hidden="true"><i style="background: var(--no)"></i>No</span>
@@ -982,18 +1024,23 @@
       <header class="panel-head">
         <h1>{hillOpen ? (Number(page.url.searchParams.get('hill')) < 0 ? 'Loch' : isCustomNumber(Number(page.url.searchParams.get('hill'))) ? 'Place' : 'Hill') : 'Where to go'}</h1>
         <div class="head-buttons">
-          <button
-            class="hide"
-            onclick={() => (quizOpen = true)}
-            title="Answer a few questions and Atmos fills in the filters for you."
-          >Filter quiz</button>
-          <button
-            class="hide"
-            onclick={resetAll}
-            disabled={!filtersChanged() && !hillOpen}
-            title="Put the search back to its defaults and close any open hill. Home and start point stay."
-          >Reset filters</button>
-          <button class="hide" onclick={() => (panelOpen = false)} aria-label="Hide the panel">Hide</button>
+          <!-- On a phone a hill's sheet only needs closing: it has its own way back. -->
+          {#if !(narrow && hillOpen)}
+            <button
+              class="hide"
+              onclick={() => (quizOpen = true)}
+              title="Answer a few questions and Atmos fills in the filters for you."
+            ><span class="long">Filter&nbsp;</span><span class="cap-on-phone">quiz</span></button>
+            <button
+              class="hide"
+              onclick={resetAll}
+              disabled={!filtersChanged() && !hillOpen}
+              title="Put the search back to its defaults and close any open hill. Home and start point stay."
+            >Reset<span class="long">&nbsp;filters</span></button>
+          {/if}
+          <button class="hide close" onclick={() => (panelOpen = false)} aria-label="Hide the panel">
+            <span class="long">Hide</span><span class="phone-only" aria-hidden="true">✕</span>
+          </button>
         </div>
       </header>
       <div class="panel-body">
@@ -1305,17 +1352,61 @@
     max-width: min(90vw, 520px);
   }
 
+  .phone-only {
+    display: none;
+  }
+
   /* Phones: the panel becomes a drawer from the bottom. */
   @media (max-width: 640px) {
+    .map-page {
+      height: calc(100dvh - 50px);
+    }
     .panel {
       top: auto;
       left: 0;
       right: 0;
       bottom: 0;
       width: auto;
-      height: 72dvh;
+      height: 64dvh;
       border-radius: 14px 14px 0 0;
       border-bottom: none;
+    }
+    /* A grab handle, so it reads as a drawer. */
+    .panel::before {
+      content: '';
+      position: absolute;
+      top: 5px;
+      left: 50%;
+      width: 36px;
+      height: 4px;
+      margin-left: -18px;
+      border-radius: 2px;
+      background: var(--line);
+    }
+    .panel-head {
+      padding: 14px 12px 8px;
+    }
+    .head-buttons {
+      gap: 4px;
+    }
+    .long {
+      display: none;
+    }
+    .phone-only {
+      display: inline;
+    }
+    .cap-on-phone {
+      text-transform: capitalize;
+    }
+    .hide.close {
+      padding: 4px 9px;
+    }
+    /* The key folds to a "Key" button; with the drawer open it gets out of the way. */
+    .legend.folded > :not(.key-toggle):not(button) {
+      display: none;
+    }
+    .legend.hidden-under-panel {
+      display: none;
     }
     .panel-tab {
       top: auto;
