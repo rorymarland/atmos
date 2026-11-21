@@ -5,6 +5,7 @@
   import type { ExpressionSpecification, GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from 'maplibre-gl';
   import 'maplibre-gl/dist/maplibre-gl.css';
   import { conditions } from '#lib/conditions.svelte.ts';
+  import { alignment } from '#lib/alignment.svelte.ts';
   import { settings } from '#lib/settings.svelte.ts';
   import { ageLabel, dayLabel, formatTime } from '#lib/time.ts';
   import Controls from '#lib/components/Controls.svelte';
@@ -257,6 +258,27 @@
         }
       : empty;
     if (map && loaded) setSource('route', data);
+  });
+
+  // Where to stand to line the sun or moon up with the open hill's summit.
+  const openAlignment = $derived.by(() => {
+    const a = alignment.current;
+    return a && a.status === 'ready' && openHill && a.hill === openHill.hill.number && a.dayOffset === settings.dayOffset ? a : null;
+  });
+  $effect(() => {
+    const a = openAlignment;
+    const data = a
+      ? {
+          type: 'FeatureCollection' as const,
+          features: a.points.map((p) => ({
+            type: 'Feature' as const,
+            geometry: { type: 'Point' as const, coordinates: [p.lon, p.lat] },
+            // A time label every ten minutes; the rest are just dots.
+            properties: { body: a.body, label: Math.round(p.time / 60_000) % 10 === 0 ? formatTime(p.time) : '' },
+          })),
+        }
+      : empty;
+    if (map && loaded) setSource('alignment', data);
   });
 
   // The sun and moon timeline.
@@ -556,6 +578,36 @@
         });
         // The best bet (always) and whatever's hovered in the list: a bright blue ring on a
         // white halo, which stands out from the green, amber and red points and the map.
+        // Where to stand for the sun or moon on the summit: small dots, a time every ten minutes.
+        m.addSource('alignment', { type: 'geojson', data: empty });
+        m.addLayer({
+          id: 'alignment-dots',
+          type: 'circle',
+          source: 'alignment',
+          paint: {
+            'circle-radius': 3.5,
+            'circle-color': ['match', ['get', 'body'], 'moon', '#5a6fd0', '#e08a1e'],
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-width': 1,
+          },
+        });
+        try {
+          m.addLayer({
+            id: 'alignment-times',
+            type: 'symbol',
+            source: 'alignment',
+            filter: ['!=', ['get', 'label'], ''],
+            layout: {
+              'text-field': ['get', 'label'],
+              'text-font': ['Noto Sans Bold'],
+              'text-size': 11,
+              'text-offset': [0, -1.1],
+            },
+            paint: { 'text-color': '#2a2a2a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 },
+          });
+        } catch (e) {
+          console.warn('Alignment labels unavailable', e);
+        }
         // The open hill's walking route: a purple line on a white casing, and its start.
         m.addSource('route', { type: 'geojson', data: empty });
         m.addLayer({
