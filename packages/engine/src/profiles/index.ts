@@ -13,6 +13,7 @@ import {
   snow,
   waterfalls,
 } from './photo.js';
+import { bluebird, brocken, noctilucent, rainbow } from './optics.js';
 import { reflections } from './reflections.js';
 import { sky } from './sky.js';
 import type { ProfileDefinition } from './types.js';
@@ -34,6 +35,10 @@ export const PROFILE_DEFINITIONS: Record<string, ProfileDefinition> = {
   alpenglow,
   lenticular,
   frozen,
+  brocken,
+  rainbow,
+  bluebird,
+  noctilucent,
   midges,
 };
 
