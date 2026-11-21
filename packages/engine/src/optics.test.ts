@@ -106,3 +106,34 @@ describe('noctilucent clouds', () => {
     expect(run(forecastAt(clear, at), at, 2, north, 'noctilucent').verdict).toBe('no');
   });
 });
+
+describe('haze', () => {
+  const glen: Target = { id: 'v', name: 'Glen', altitudeM: 50, lat: 56.5, lon: -4.5 };
+  const sunset: ForecastSpec = {
+    surface: {
+      cloudCover: 50,
+      cloudCoverLow: 10,
+      cloudCoverMid: 40,
+      cloudCoverHigh: 30,
+      precipitation: 0,
+      visibility: 30_000,
+    },
+    levels,
+  };
+  const at = Date.UTC(2026, 11, 1, 15);
+  const score = (aod: number | null, dust: number | null = null) =>
+    evaluateTarget([forecastAt(sunset, at)], { start: at, end: at + HOUR }, glen, 'sky', config, {
+      now: at - 12 * HOUR,
+      extras: { air: () => (aod === null ? null : { aod, dust }) },
+    });
+
+  it("doesn't count clean or ordinary air against a sunset", () => {
+    expect(score(0.08).score).toBeCloseTo(score(null).score!, 5);
+  });
+  it('marks a sunset down in heavy haze, and names Saharan dust', () => {
+    const dusty = score(0.6, 80);
+    expect(dusty.score!).toBeLessThan(score(0.08).score!);
+    const f = dusty.byModel[0]!.keyHour!.factors.find((x) => x.id === 'haze')!;
+    expect(f.detail).toMatch(/Saharan dust/);
+  });
+});

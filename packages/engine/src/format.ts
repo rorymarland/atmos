@@ -39,5 +39,7 @@ export function formatValue(
       return `${Math.round(value)} h`;
     case 'kp':
       return `Kp ${value.toFixed(1)}`;
+    case 'aod':
+      return `AOD ${value.toFixed(2)}`;
   }
 }

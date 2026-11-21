@@ -45,6 +45,7 @@ export function startCheck(root) {
     harmonie: 'HARMONIE (KNMI)',
     horizon: 'Sunrise and sunset horizons',
     upper: 'Upper air (plane trails)',
+    air: 'Haze and dust (CAMS)',
   };
   const LOOKS = {
     fetched: 'Pulled a new run',

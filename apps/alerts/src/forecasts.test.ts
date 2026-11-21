@@ -26,12 +26,16 @@ function fakeOpenMeteo(clock: { t: number }) {
   let status = 200;
   let reason = '';
   const fetch = (async (input: string | URL) => {
-    const q = new URL(String(input)).searchParams;
-    const model = q.get('models')!;
+    const url = new URL(String(input));
+    const q = url.searchParams;
+    // The air quality API takes no model: it's CAMS.
+    const model = q.get('models') ?? (url.hostname.startsWith('air-quality') ? 'cams' : '?');
     const lats = q.get('latitude')!.split(',');
     const hourly = q.get('hourly')!.split(',');
     const hours = (Number(q.get('forecast_days')) + Number(q.get('past_days'))) * 24;
-    (lats.length > 1 || hourly.length > 3 ? full : probes).push(model);
+    // A probe is one point and three variables on the weather API.
+    const probe = lats.length === 1 && hourly.length === 3 && model !== 'cams';
+    (probe ? probes : full).push(model);
     clock.t += 20_000;
     if (status !== 200) return new Response(JSON.stringify({ error: true, reason }), { status });
     const run = runs[model] ?? 1;
@@ -88,6 +92,7 @@ describe('Feeder', () => {
         'knmi_harmonie_arome_europe',
         'ukmo_seamless',
         'ukmo_seamless',
+        'cams',
       ].sort(),
     );
     const z = feeder.zone('z1')!;
@@ -98,6 +103,7 @@ describe('Feeder', () => {
     ]);
     expect(z.horizon.am?.model).toBe('ukmo_seamless');
     expect(z.upper?.model).toBe('ecmwf_ifs025');
+    expect(z.air?.surface.aerosolOpticalDepth?.length).toBeGreaterThan(0);
     expect(feeder.index().feeds.met?.zones).toBe(3);
   });
 
@@ -136,6 +142,19 @@ describe('Feeder', () => {
     expect(om.full).toContain('ecmwf_ifs025');
   });
 
+  it('refetches haze twice a day without probing for it', async () => {
+    const { feeder, om, clock } = setup();
+    await feeder.tick();
+    om.full.length = 0;
+    clock.t += 11 * HOUR;
+    await feeder.tick();
+    expect(om.full).not.toContain('cams');
+    clock.t += HOUR;
+    await feeder.tick();
+    expect(om.full).toContain('cams');
+    expect(om.probes).not.toContain('cams');
+  });
+
   it('fetches a zone added since on its own, not the whole feed', async () => {
     const zones = [zone(0), zone(1)];
     const { om, clock, make } = setup(zones);
@@ -151,7 +170,7 @@ describe('Feeder', () => {
     expect(feeder.feed('met')!.fetchedAt).toBe(before.fetchedAt);
     // One point per feed: never a full refetch.
     expect(om.probes).toEqual([]);
-    expect(om.full).toHaveLength(5);
+    expect(om.full).toHaveLength(6);
   });
 
   it('keeps what it fetched across a restart, without fetching again', async () => {
@@ -209,7 +228,7 @@ describe('Feeder', () => {
     expect(met.notBefore - met.fetchedAt).toBe(2 * HOUR);
     expect(met.latestBy - met.fetchedAt).toBe(6 * HOUR);
     expect(idx.nextCheckAt).toBe(idx.lastCheckAt! + 5 * 60_000);
-    expect(idx.events.filter((e) => e.text.startsWith('Fetched'))).toHaveLength(5);
+    expect(idx.events.filter((e) => e.text.startsWith('Fetched'))).toHaveLength(6);
     expect(idx.spentToday).toBeGreaterThan(0);
     // Two hours on with no new run: checked, same run.
     clock.t += 2 * HOUR;

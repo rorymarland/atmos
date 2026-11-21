@@ -12,7 +12,9 @@
   one-call probe shows a new run, inside a daily budget, because Open-Meteo's free limit is
   about 10,000 calls a day per IP. The browser uses that copy first
   (`apps/web/src/lib/shared-forecasts.ts`) and fetches from Open-Meteo itself only without it,
-  or for zones it doesn't hold. It also samples aircraft above 25,000 ft over the UK from
+  or for zones it doesn't hold. Haze and dust come from Open-Meteo's air quality API (CAMS,
+  `AIR_REQUEST`, the `air` feed, every 12 hours, no probe) and feed the `haze` factor
+  (sky, drama, clear air). It also samples aircraft above 25,000 ft over the UK from
   OpenSky's anonymous API every 12 minutes (`apps/alerts/src/traffic.ts`, about 360 of its 400
   daily credits; `ATMOS_TRAFFIC=off` stops it), for plane trails later. It also keeps shared **custom places**; without it the web app
   keeps places in localStorage. Custom places (`packages/engine/src/places.ts`) are merged in

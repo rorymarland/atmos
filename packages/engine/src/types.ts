@@ -27,6 +27,10 @@ export interface SurfaceSeries {
   freezingLevelHeight?: Series;
   /** Convective (shower) precipitation, mm per hour. */
   showers?: Series;
+  /** Aerosol optical depth at 550 nm through the whole air (CAMS): haze, dust and smoke. */
+  aerosolOpticalDepth?: Series;
+  /** Saharan dust near the ground, µg/m³ (CAMS). */
+  dust?: Series;
 }
 
 export type SurfaceVariable = keyof SurfaceSeries;
@@ -91,4 +95,6 @@ export type Unit =
   | 'km'
   | 'degrees'
   | 'kp'
-  | 'hours';
+  | 'hours'
+  /** Aerosol optical depth: no unit. */
+  | 'aod';

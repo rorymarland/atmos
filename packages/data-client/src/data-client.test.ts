@@ -429,3 +429,16 @@ describe('Overpass time limit', () => {
     expect(MIRROR_TIMEOUT_MS).toBeLessThan(OVERPASS_TIMEOUT_MS);
   });
 });
+
+describe('the air quality request', () => {
+  it('asks the air quality API for haze and dust, without models or wind units', async () => {
+    const { AIR_REQUEST, buildForecastUrl, estimateCallWeight } = await import('./index.js');
+    const req = { ...AIR_REQUEST, points: [{ lat: 56.5, lon: -4.5 }] };
+    const url = new URL(buildForecastUrl(req));
+    expect(url.hostname).toBe('air-quality-api.open-meteo.com');
+    expect(url.searchParams.get('hourly')).toBe('aerosol_optical_depth,dust');
+    expect(url.searchParams.has('models')).toBe(false);
+    expect(url.searchParams.has('wind_speed_unit')).toBe(false);
+    expect(estimateCallWeight(req)).toBe(1);
+  });
+});

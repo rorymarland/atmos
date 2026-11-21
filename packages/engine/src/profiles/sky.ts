@@ -1,4 +1,4 @@
-import { horizonClear } from './shared.js';
+import { haze, horizonClear } from './shared.js';
 import type { ProfileDefinition } from './types.js';
 
 export const sky: ProfileDefinition = {
@@ -17,6 +17,7 @@ export const sky: ProfileDefinition = {
       },
     },
     horizonClear,
+    haze,
     lowCloud: {
       label: 'Low cloud',
       unit: 'percent',

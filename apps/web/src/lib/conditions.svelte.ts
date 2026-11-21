@@ -41,6 +41,7 @@ import {
   HARMONIE_REQUEST,
   HORIZON_REQUEST,
   UPPER_REQUEST,
+  AIR_REQUEST,
   type Ensemble,
   type ForecastSite,
   fetchOvation,
@@ -253,6 +254,8 @@ class Conditions {
   horizons = $state.raw<Map<string, { am?: ModelForecast; pm?: ModelForecast }>>(new Map());
   /** The air where planes cruise, per zone (ECMWF), for plane trails. */
   upper = $state.raw<Map<string, ModelForecast>>(new Map());
+  /** Haze and dust per zone (CAMS), for sunset colour and long views. */
+  air = $state.raw<Map<string, ModelForecast>>(new Map());
   /** Air traffic from the alerts container's OpenSky samples, once there's enough of it. */
   traffic = $state.raw<TrafficGrid | null>(null);
   #trafficAt = 0;
@@ -520,6 +523,13 @@ class Conditions {
     try {
       const held = await this.#refreshShared();
       const direct = held ? zones.filter((z) => !held.has(z.id)) : zones;
+      // An older alerts container without the haze feed: fetch haze for its zones here.
+      if (held && !this.#feeds.has('air')) {
+        void this.#refreshAir(
+          zones.filter((z) => held.has(z.id)),
+          force,
+        );
+      }
       if (direct.length) await this.#refreshDirect(direct, force);
       this.now = Date.now();
     } catch (e) {
@@ -573,7 +583,9 @@ class Conditions {
       const harm = this.#feeds.get('harmonie')?.zones ?? {};
       const hz = this.#feeds.get('horizon')?.zones ?? {};
       const up = this.#feeds.get('upper')?.zones ?? {};
+      const aq = this.#feeds.get('air')?.zones ?? {};
       const upper = new Map(this.upper);
+      const air = new Map(this.air);
       const main = new Map(this.forecasts);
       const harmonie = new Map(this.harmonie);
       const horizons = new Map(this.horizons);
@@ -585,8 +597,11 @@ class Conditions {
         if (am || pm) horizons.set(id, { am, pm });
         const u = up[id]?.[0];
         if (u) upper.set(id, u);
+        const a = aq[id]?.[0];
+        if (a) air.set(id, a);
       }
       this.upper = upper;
+      this.air = air;
       this.forecasts = main;
       this.harmonie = harmonie;
       this.horizons = horizons;
@@ -666,6 +681,27 @@ class Conditions {
     } catch (e) {
       console.warn('Upper air:', e);
     }
+    await this.#refreshAir(zones, force);
+  }
+
+  /** Haze and dust: CAMS updates once or twice a day, so six hours old is fine. */
+  async #refreshAir(zones: Zone[], force: boolean) {
+    if (!zones.length) return;
+    try {
+      const res = await fetchZoneForecasts(zones, {
+        request: AIR_REQUEST,
+        cache: forecastCache,
+        maxAgeMs: force ? 0 : 6 * HOUR_MS,
+      });
+      const next = new Map(this.air);
+      for (const r of res) {
+        const f = r.forecasts[0];
+        if (f && this.#isNew('air', r.zoneId, r.fetchedAt)) next.set(r.zoneId, f);
+      }
+      this.air = next;
+    } catch (e) {
+      console.warn('Haze:', e);
+    }
   }
 
   /** Every model for a zone: the main two plus HARMONIE when it's arrived. */
@@ -720,6 +756,7 @@ class Conditions {
       now: this.now,
       modelsFor: (zoneId) => this.modelsFor(zoneId),
       horizonsFor: (zoneId) => this.horizons.get(zoneId),
+      airFor: (zoneId) => this.air.get(zoneId),
       kp: this.kp,
       memo: this.#memo,
     }).map((e) => ({ ...e, searchOnly: addExtra && e.hill === extra }));

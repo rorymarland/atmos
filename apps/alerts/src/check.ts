@@ -193,12 +193,14 @@ export async function scorePlaces(
   const sharedModels = new Map<string, ModelForecast[]>();
   const horizons = new Map<string, { am?: ModelForecast; pm?: ModelForecast }>();
   const upper = new Map<string, ModelForecast>();
+  const air = new Map<string, ModelForecast>();
   for (const z of zones) {
     const s = shared?.zone(z.id);
     if (!s) continue;
     sharedModels.set(z.id, s.models);
     horizons.set(z.id, s.horizon);
     if (s.upper) upper.set(z.id, s.upper);
+    if (s.air) air.set(z.id, s.air);
   }
   const direct = await fetchDirect(
     zones.filter((z) => !sharedModels.has(z.id)),
@@ -225,6 +227,7 @@ export async function scorePlaces(
       now,
       modelsFor,
       horizonsFor: (id) => horizons.get(id),
+      airFor: (id) => air.get(id),
       kp,
       memo,
     });
