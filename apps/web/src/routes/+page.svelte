@@ -12,12 +12,14 @@
   import DetailSheet from '#lib/components/DetailSheet.svelte';
   import PlaceSearch from '#lib/components/PlaceSearch.svelte';
   import SkyTimeline, { type KeyMark } from '#lib/components/SkyTimeline.svelte';
+  import PanoramaStrip from '#lib/components/PanoramaStrip.svelte';
+  import { viewer } from '#lib/panorama.svelte.ts';
   import { page } from '$app/state';
   import { moonTimes, skyPositions, sunTimes } from '#lib/sun.ts';
   import { londonMidnight } from '#lib/time.ts';
   import { filtersChanged, resetFilters, type StartPoint } from '#lib/settings.svelte.ts';
   import { loadSearchHills } from '#lib/static-data.ts';
-  import { isCustomNumber, waterAsPlace, waterIndexOf } from '@atmos/engine';
+  import { bodyAt, destination, isCustomNumber, waterAsPlace, waterIndexOf } from '@atmos/engine';
   import type { Hill } from '@atmos/engine';
   import ResultsList, { type Pick } from '#lib/components/ResultsList.svelte';
   import VerdictMark from '#lib/components/VerdictMark.svelte';
@@ -340,6 +342,39 @@
     skyTime = t && t >= start && t <= start + 86_400_000 ? t : (skySun.sunrise ?? start + 8 * 3_600_000);
   });
 
+  // The viewer: the view from the pin, or from the summit when the pin is on an open hill.
+  const viewShown = $derived(hillOpen || pin !== null);
+  const viewEyeM = $derived(pin === null && selectedHill ? selectedHill.hill.metres + 1.7 : undefined);
+  let viewTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    const p = skyPlace;
+    const eye = viewEyeM;
+    const hills = conditions.data?.hills;
+    if (!viewer.open || !viewShown || !hills) return;
+    // Wait for the pin to settle: dragging it would otherwise ask for a view at every step.
+    clearTimeout(viewTimer);
+    viewTimer = setTimeout(
+      () => viewer.request(p.lat, p.lon, eye, hills.map((h) => ({ id: h.number, name: h.name, lat: h.lat, lon: h.lon, metres: h.metres }))),
+      350,
+    );
+  });
+  // A new hill: face the sun at the timeline's time (or the moon, if the sun's down). Keyed on
+  // the hill's number, so fresh forecasts (a new ranking object) don't turn the view back.
+  const selectedNumber = $derived(selectedHill?.hill.number);
+  $effect(() => {
+    if (selectedNumber === undefined) return;
+    untrack(() => {
+      const h = selectedHill?.hill;
+      if (!h) return;
+      const sun = bodyAt('sun', skyTime, h.lat, h.lon);
+      const moon = bodyAt('moon', skyTime, h.lat, h.lon);
+      viewer.heading = sun.alt > -2 || moon.alt < 0 ? sun.az : moon.az;
+    });
+  });
+  function openHillNumber(n: number) {
+    goto(`?hill=${n}`, { reset: false });
+  }
+
   /**
    * Bearing lines from the pin: where the sun and moon rise and set today, and where they
    * are at the timeline's time. The lines run off the edge of the map; each label sits a
@@ -578,6 +613,36 @@
         });
         // The best bet (always) and whatever's hovered in the list: a bright blue ring on a
         // white halo, which stands out from the green, amber and red points and the map.
+        // The viewer's wedge, under everything else that's drawn from the pin.
+        m.addSource('view', { type: 'geojson', data: empty });
+        m.addLayer({
+          id: 'view-fill',
+          type: 'fill',
+          source: 'view',
+          paint: { 'fill-color': '#2f6fb3', 'fill-opacity': 0.12 },
+        });
+        m.addLayer({
+          id: 'view-edge',
+          type: 'line',
+          source: 'view',
+          paint: { 'line-color': '#2f6fb3', 'line-width': 1.5, 'line-opacity': 0.7 },
+        });
+        const handle = document.createElement('div');
+        handle.className = 'view-handle';
+        handle.title = 'Drag to turn the view';
+        viewHandle = new maplibre.Marker({ element: handle, draggable: true });
+        viewHandle.on('dragstart', () => (viewHandleDragging = true));
+        viewHandle.on('drag', () => {
+          const ll = viewHandle!.getLngLat();
+          const φ1 = (skyPlace.lat * Math.PI) / 180;
+          const φ2 = (ll.lat * Math.PI) / 180;
+          const Δ = ((ll.lng - skyPlace.lon) * Math.PI) / 180;
+          const θ = Math.atan2(Math.sin(Δ) * Math.cos(φ2), Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δ));
+          viewer.heading = ((θ * 180) / Math.PI + 360) % 360;
+        });
+        // Letting go puts the handle back on the wedge's edge.
+        viewHandle.on('dragend', () => (viewHandleDragging = false));
+
         // Where to stand for the sun or moon on the summit: small dots, a time every ten minutes.
         m.addSource('alignment', { type: 'geojson', data: empty });
         m.addLayer({
@@ -937,6 +1002,48 @@
     if (map && loaded) setSource('rays', data);
   });
 
+  // The view wedge: which way the viewer faces and how much the lens takes in.
+  $effect(() => {
+    const shown = viewer.open && viewShown;
+    const { lat, lon } = skyPlace;
+    const metresPerPixel = (40_075_016.686 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** mapZoom);
+    const km = Math.min(150, (160 * metresPerPixel) / 1000);
+    const half = viewer.fov / 2;
+    const edge = (az: number) => {
+      const p = destination(lat, lon, az, km);
+      return [p.lon, p.lat];
+    };
+    const arc = Array.from({ length: 13 }, (_, i) => edge(viewer.heading - half + (i * 2 * half) / 12));
+    const data = shown
+      ? {
+          type: 'FeatureCollection' as const,
+          features: [
+            {
+              type: 'Feature' as const,
+              geometry: { type: 'Polygon' as const, coordinates: [[[lon, lat], ...arc, [lon, lat]]] },
+              properties: {},
+            },
+          ],
+        }
+      : empty;
+    if (map && loaded) setSource('view', data);
+    // The handle at the far middle of the wedge: drag it to turn.
+    if (!viewHandle || !map) return;
+    if (!shown) {
+      viewHandle.remove();
+      viewHandleOn = false;
+      return;
+    }
+    if (!viewHandleDragging) viewHandle.setLngLat(edge(viewer.heading) as [number, number]);
+    if (!viewHandleOn) {
+      viewHandle.addTo(map);
+      viewHandleOn = true;
+    }
+  });
+  let viewHandle: import('maplibre-gl').Marker | null = null;
+  let viewHandleOn = false;
+  let viewHandleDragging = $state(false);
+
   // Keep the pin on the place. It shows while the timeline is open, and also whenever a hill
   // is open or you've placed it, timeline or not. Re-adding the marker mid-drag would cut
   // the drag short, so it's added once and left alone then.
@@ -1017,6 +1124,19 @@
   {/if}
 
   <div class="bottom" class:with-panel={panelOpen && !narrow}>
+    {#if viewer.open && viewShown}
+      <div class="view-wrap">
+        <PanoramaStrip
+          panorama={viewer.current}
+          time={skyTime}
+          dayStart={skyDayStart}
+          place={pin === null && selectedHill ? `the top of ${selectedHill.hill.name.replace(/ \[.*\]$/, '')}` : skyPlace.name}
+          theme={settings.theme}
+          compact={narrow}
+          onOpenHill={openHillNumber}
+        />
+      </div>
+    {/if}
     {#if skyOpen}
       <div class="sky-wrap" bind:clientHeight={skyHeight}>
         <SkyTimeline
@@ -1054,6 +1174,16 @@
       {#if places.list.length}<span aria-hidden="true"><i class="place-dot"></i>Your place</span>{/if}
       {#if settings.start}<span aria-hidden="true"><i class="start-dot"></i>Start</span>{/if}
       {#if pin}<button class="link" onclick={() => (placeOpen = true)}>Save this spot</button>{/if}
+      {#if viewShown}
+        <button
+          class="link"
+          onclick={() => {
+            viewer.open = !viewer.open;
+            viewer.save();
+          }}
+          aria-pressed={viewer.open}>{viewer.open ? 'Hide view' : 'View'}</button
+        >
+      {/if}
       <button class="link" onclick={() => (skyOpen = !skyOpen)} aria-pressed={skyOpen}>
         {skyOpen ? 'Hide sun and moon' : 'Sun and moon'}
       </button>
@@ -1319,8 +1449,24 @@
   .bottom > * {
     pointer-events: auto;
   }
-  .bottom > .sky-wrap {
+  .bottom > .sky-wrap,
+  .bottom > .view-wrap {
     justify-self: stretch;
+  }
+  .view-wrap {
+    min-width: 0;
+    width: 100%;
+    box-shadow: var(--shadow, 0 4px 14px rgb(20 29 36 / 0.18));
+    border-radius: 10px;
+  }
+  .map-page :global(.view-handle) {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #2f6fb3;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgb(20 29 36 / 0.4);
+    cursor: grab;
   }
   .bottom.with-panel {
     right: 414px;
