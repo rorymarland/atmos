@@ -49,6 +49,7 @@
     { href: '/places', label: 'Places' },
     ...(alerts.status ? [{ href: '/alerts', label: 'Alerts' }] : []),
     { href: '/settings', label: 'Settings' },
+    { href: '/help', label: 'Help' },
     { href: '/about', label: 'About' },
   ]);
   const onMap = $derived(page.url.pathname === '/');
