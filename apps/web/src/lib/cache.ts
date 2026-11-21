@@ -49,3 +49,38 @@ export async function clearForecastCache(): Promise<void> {
 export function newestFetch(entries: { fetchedAt: number }[]): number | null {
   return entries.length ? Math.max(...entries.map((e) => e.fetchedAt)) : null;
 }
+
+/**
+ * Ensembles by place, kept an hour: ECMWF's 51 members make one hill's fetch cost about 35
+ * of Open-Meteo's daily calls, so reopening a hill (or reloading the page) shouldn't repeat it.
+ */
+const ensembleMemory = new Map<string, { at: number; value: unknown }>();
+let ensembleStore: ReturnType<typeof createStore> | null = null;
+
+export async function cachedEnsemble<T>(
+  key: string,
+  maxAgeMs: number,
+  fetchIt: () => Promise<T>,
+): Promise<T> {
+  const now = Date.now();
+  let s: ReturnType<typeof createStore> | null;
+  try {
+    s = ensembleStore ??= createStore('atmos-ensembles', 'ensembles');
+  } catch {
+    s = null;
+  }
+  let hit = ensembleMemory.get(key);
+  if (!hit && s) {
+    try {
+      hit = await get<{ at: number; value: unknown }>(key, s);
+    } catch {
+      hit = undefined;
+    }
+  }
+  if (hit && now - hit.at < maxAgeMs) return hit.value as T;
+  const value = await fetchIt();
+  const entry = { at: now, value };
+  ensembleMemory.set(key, entry);
+  if (s) set(key, entry, s).catch(() => undefined);
+  return value;
+}

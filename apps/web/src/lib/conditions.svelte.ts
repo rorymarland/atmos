@@ -11,6 +11,7 @@ import {
   estimateDrive,
   descentMinutes,
   trailsAt,
+  withTraffic,
   type TrailAssessment,
   estimateSummitWalk,
   hillIsOnList,
@@ -49,7 +50,8 @@ import {
   ForecastError,
   type KpBin,
 } from '@atmos/data-client';
-import { forecastCache, newestFetch } from './cache';
+import { cachedEnsemble, forecastCache, newestFetch } from './cache';
+import { trafficAt, type TrafficGrid } from './traffic-grid';
 import { places } from './places.svelte';
 import {
   createEvaluateMemo,
@@ -152,6 +154,8 @@ interface Evaluated extends EvaluatedPlace {
   searchOnly: boolean;
 }
 
+const HOUR_MS = 3_600_000;
+
 /** How far "Avoid plane trails" moves a hill down the ranking, before the profile's weight. */
 const TRAIL_PENALTY: Record<TrailAssessment['risk'], number> = { low: 0, medium: 0.12, high: 0.3 };
 
@@ -249,11 +253,28 @@ class Conditions {
   horizons = $state.raw<Map<string, { am?: ModelForecast; pm?: ModelForecast }>>(new Map());
   /** The air where planes cruise, per zone (ECMWF), for plane trails. */
   upper = $state.raw<Map<string, ModelForecast>>(new Map());
+  /** Air traffic from the alerts container's OpenSky samples, once there's enough of it. */
+  traffic = $state.raw<TrafficGrid | null>(null);
+  #trafficAt = 0;
+
+  /** Loads the traffic grid at most hourly; quietly nothing without the alerts container. */
+  async loadTraffic() {
+    if (Date.now() - this.#trafficAt < HOUR_MS) return;
+    this.#trafficAt = Date.now();
+    try {
+      const res = await fetch('/api/traffic/grid', { cache: 'no-store' });
+      if (!res.ok) return;
+      const g = (await res.json()) as TrafficGrid;
+      this.traffic = g.ready ? g : null;
+    } catch {
+      // No alerts container: the trail risk works from the upper air alone.
+    }
+  }
   /** Ensembles for hills that have been opened, by family and hill number. */
   ensembles = $state.raw<Map<number, EnsembleState>>(new Map());
   metOfficeEnsembles = $state.raw<Map<number, EnsembleState>>(new Map());
 
-  /** Fetches both ensembles (ECMWF and Met Office) for one place, once per page load. */
+  /** Fetches both ensembles (ECMWF and Met Office) for one place, at most once an hour. */
   loadEnsemble(hillNumber: number, lat: number, lon: number) {
     const load = async (key: 'ensembles' | 'metOfficeEnsembles', get: () => Promise<Ensemble>) => {
       if (this[key].has(hillNumber)) return;
@@ -266,8 +287,14 @@ class Conditions {
         this[key] = new Map(this[key]).set(hillNumber, 'failed');
       }
     };
-    void load('ensembles', () => fetchEnsemble(lat, lon));
-    void load('metOfficeEnsembles', () => fetchMetOfficeEnsemble(lat, lon));
+    // Kept an hour in this browser: ensembles are the costliest thing Atmos fetches.
+    const at = `${lat.toFixed(3)},${lon.toFixed(3)}`;
+    void load('ensembles', () =>
+      cachedEnsemble(`ecmwf|${at}`, HOUR_MS, () => fetchEnsemble(lat, lon)),
+    );
+    void load('metOfficeEnsembles', () =>
+      cachedEnsemble(`ukmo|${at}`, HOUR_MS, () => fetchMetOfficeEnsemble(lat, lon)),
+    );
   }
 
   /** Walking routes by hill number. */
@@ -489,6 +516,7 @@ class Conditions {
             })
             .catch((e) => console.warn('Kp forecast:', e))
         : Promise.resolve();
+    void this.loadTraffic();
     try {
       const held = await this.#refreshShared();
       const direct = held ? zones.filter((z) => !held.has(z.id)) : zones;
@@ -701,13 +729,14 @@ class Conditions {
    * Plane trails at a condition's best hour, for conditions where a clean sky matters
    * (`trails` in profiles.yaml). Null without upper-air data.
    */
-  #trailsFor(zoneId: string, c: ConditionResult): TrailAssessment | null {
+  #trailsFor(e: Evaluated, c: ConditionResult): TrailAssessment | null {
     const weight = this.data?.config.profiles[c.profileId]?.trails ?? 0;
-    const upper = this.upper.get(zoneId);
+    const upper = this.upper.get(e.zone.id);
     if (!weight || !upper) return null;
     const r = c.result;
     const at = r.byModel.find((m) => m.model === r.referenceModel)?.keyHour?.time ?? c.window.start;
-    return trailsAt(upper, at);
+    const trails = trailsAt(upper, at);
+    return trails && withTraffic(trails, trafficAt(this.traffic, e.hill.lat, e.hill.lon, at));
   }
 
   /** The walk chosen for each hill, kept while nothing it depends on changes. */
@@ -804,7 +833,7 @@ class Conditions {
         dayStart,
       })
         .map((c) => {
-          const trails = this.#trailsFor(e.zone.id, c);
+          const trails = this.#trailsFor(e, c);
           return trails ? { ...c, trails } : c;
         })
         .map((c) => {

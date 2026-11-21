@@ -19,6 +19,7 @@ import { placeKey, type Alert, type PlaceRef } from './model';
 import { decide, findMatches } from './rules';
 import type { Store } from './store';
 import type { Feeder } from './forecasts';
+import type { TrafficGrid } from '../../web/src/lib/traffic-grid';
 
 export interface RunnerOptions {
   store: Store;
@@ -29,6 +30,8 @@ export interface RunnerOptions {
   send: (email: Email) => Promise<void>;
   /** The shared forecasts, when this service fetches them. */
   forecasts?: Feeder;
+  /** Air traffic for the plane trail risk, when it's being sampled. */
+  traffic?: () => TrafficGrid | null;
   /** Custom places, scored like hills. */
   places: () => CustomPlace[];
   log?: (msg: string) => void;
@@ -168,6 +171,7 @@ export class Runner {
             today,
             tomorrow,
             now,
+            traffic: this.opts.traffic?.() ?? null,
           });
           if (test) email.subject = `${email.subject} (test)`;
         }
