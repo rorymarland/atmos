@@ -77,8 +77,10 @@
       return fallback;
     }
   }
-  let lookOpen = $state(remembered('atmos.lookOpen', true));
-  let tripOpen = $state(remembered('atmos.tripOpen', true));
+  // Phones start with the long sections folded: their one-line summaries still show.
+  const phone = typeof matchMedia === 'function' && matchMedia('(max-width: 640px)').matches;
+  let lookOpen = $state(remembered('atmos.lookOpen', !phone));
+  let tripOpen = $state(remembered('atmos.tripOpen', !phone));
   $effect(() => {
     try {
       localStorage.setItem('atmos.lookOpen', lookOpen ? '1' : '0');
