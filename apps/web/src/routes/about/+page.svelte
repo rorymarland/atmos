@@ -11,6 +11,7 @@
     and explaining every verdict. Each zone is forecast at one valley point; summit conditions come
     from the model’s upper levels at the summit’s height.
   </p>
+  <p>New to Atmos? <a href="/help">How to use it</a> walks through everything.</p>
   <p class="safety">
     Atmos is a guide, not a safety service. Inversions, fog and low cloud are among the hardest
     things for any model to forecast. Always check the
