@@ -51,6 +51,10 @@
   take a head torch.
 - **Shows the sun and moon.** A draggable pin draws sunrise, sunset, moonrise and moonset bearings;
   the timeline adds the sun and moon now, and you scrub it through the day.
+- **Lines the sun or moon up with a summit.** "Line it up" in a hill's panel works out, from
+  terrain heights, where to stand for the sun or moon to sit right on top, a few minutes at a
+  time through the day. The spots show on the map with times, skipping any where nearer ground
+  hides the summit, each with directions.
 - **Maps the aurora.** With Aurora ticked, tonight's NOAA OVATION nowcast is shaded over the UK,
   and each night has a view line from the Kp forecast showing how far south it should reach.
 - **Checks itself.** Three models (Met Office, ECMWF and, for the first two and a half days,

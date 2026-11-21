@@ -30,6 +30,7 @@
   import { SUMMIT_STOP_MINUTES } from '#lib/walk.ts';
   import { formatClock, formatTime, londonMidnight } from '#lib/time.ts';
   import AirColumn from './AirColumn.svelte';
+  import AlignFinder from './AlignFinder.svelte';
   import Spinner from './Spinner.svelte';
   import HourStrip from './HourStrip.svelte';
   import VerdictMark from './VerdictMark.svelte';
@@ -606,6 +607,8 @@
           {/each}
         </dl>
       </section>
+
+      <AlignFinder hill={hillResult.hill} dayOffset={settings.dayOffset} />
 
       <section class="links">
         <a class="button" href={googleMapsDirectionsUrl(directionsTo.point, settings.start ?? undefined)} target="_blank" rel="noopener">
