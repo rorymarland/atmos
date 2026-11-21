@@ -92,6 +92,10 @@
     clarity: ['clear', 'dry'],
     frost: ['clear', 'calm'],
     snow: ['clear', 'dry'],
+    bluebird: ['clear', 'dry'],
+    brocken: ['lowFill', 'calm'],
+    rainbow: ['noLow'],
+    noctilucent: ['clear', 'dry'],
   };
   const metOffice = $derived(hillResult ? conditions.metOfficeEnsembles.get(hillResult.hill.number) : undefined);
   const ensembleAt = $derived.by(() => {

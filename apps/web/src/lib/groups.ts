@@ -2,19 +2,23 @@
 export const CONDITION_GROUPS: { label: string; ids: string[]; hint: string }[] = [
   {
     label: 'Light and sky',
-    ids: ['sky', 'dramatic', 'clarity', 'lenticular'],
-    hint: 'Colour, drama, long views, wave clouds',
+    ids: ['sky', 'dramatic', 'clarity', 'lenticular', 'rainbow'],
+    hint: 'Colour, drama, long views, wave clouds, rainbows',
   },
   {
     label: 'Cloud and water',
-    ids: ['inversion', 'mist', 'reflections', 'waterfalls'],
-    hint: 'Inversions, mist, still lochs, waterfalls',
+    ids: ['inversion', 'brocken', 'mist', 'reflections', 'waterfalls'],
+    hint: 'Inversions, Brocken spectres, mist, still lochs, waterfalls',
   },
   {
     label: 'Winter',
-    ids: ['snow', 'alpenglow', 'frost', 'frozen'],
-    hint: 'Snow, alpenglow, hoar frost, frozen lochs',
+    ids: ['snow', 'bluebird', 'alpenglow', 'frost', 'frozen'],
+    hint: 'Snow, bluebird days, alpenglow, hoar frost, frozen lochs',
   },
-  { label: 'Night', ids: ['astro', 'aurora'], hint: 'Stars, the Milky Way and aurora' },
+  {
+    label: 'Night',
+    ids: ['astro', 'aurora', 'noctilucent'],
+    hint: 'Stars, the Milky Way, aurora, noctilucent clouds',
+  },
   { label: 'On foot', ids: ['walking'], hint: 'A good day on the hill' },
 ];

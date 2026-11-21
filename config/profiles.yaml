@@ -266,6 +266,76 @@ profiles:
       stillAir: { weight: 1, good: 5, bad: 20 }
       rain: { weight: 1, good: 0, bad: 1 }
 
+  brocken:
+    label: Brocken spectre and glory
+    short: Brocken spectre
+    blurb: 'Your shadow on the cloud below, ringed by a rainbow glory: a clear summit, a low sun behind you and cloud just beneath.'
+    scope: summit
+    periods: [morning, day, evening]
+    aggregate: best-hour
+    factors:
+      # The shadow falls as far below level as the sun is above it: low sun, near cloud.
+      sunLow: { weight: 3, band: [2, 18], zero: [-1, 30] }
+      cloudBelow: { weight: 3, band: [20, 300], zero: [-30, 800] }
+      sunVisible: { weight: 2, good: 30, bad: 85 }
+      sunGap: { weight: 2, good: 25, bad: 80 }
+      lightWind: { weight: 1, good: 20, bad: 45 }
+    gates:
+      summitClearance: { min: 0 }
+      sunUp: { min: 1 }
+
+  rainbow:
+    label: Rainbows
+    short: Rainbow
+    blurb: 'Showers about and the sun out behind you, low in the sky: the lower the sun, the higher the arc.'
+    scope: valley
+    periods: [morning, day, evening]
+    aggregate: best-hour
+    factors:
+      sunAngle: { weight: 3, band: [4, 30], zero: [0, 42] }
+      showers: { weight: 3, good: 1, bad: 0.05 }
+      dryNow: { weight: 2, good: 0, bad: 1.5 }
+      sunGap: { weight: 2, good: 25, bad: 80 }
+      brokenCloud: { weight: 1, band: [30, 75], zero: [5, 98] }
+    gates:
+      sunUp: { min: 1 }
+      sunLowEnough: { max: 42 }
+
+  bluebird:
+    label: Fresh snow, blue sky
+    short: Bluebird
+    blurb: 'The day after a snowfall: the snow has stopped, the sky is blue and the tops are cold enough to stay crisp.'
+    scope: summit
+    trails: 1
+    periods: [day]
+    aggregate: best-hour
+    factors:
+      freshSnow: { weight: 3, good: 5, bad: 0.5 }
+      snowStopped: { weight: 2, good: 0, bad: 1 }
+      blueSky: { weight: 3, good: 15, bad: 60 }
+      cold: { weight: 1, good: 200, bad: -100 }
+      visibility: { weight: 1, good: 30, bad: 10 }
+    gates:
+      rain: { max: 0.2 }
+
+  noctilucent:
+    label: Noctilucent clouds
+    short: Noctilucent
+    blurb: 'Electric-blue wisps low in the northern sky on summer nights, lit by the sun from below the horizon. Late May to early August.'
+    scope: valley
+    trails: 0.4
+    periods: [night]
+    aggregate: best-hour
+    factors:
+      season: { weight: 2, good: 100, bad: 0 }
+      sunDepth: { weight: 3, band: [6, 13], zero: [3, 17] }
+      northernSky: { weight: 3, good: 15, bad: 70 }
+      clearSky: { weight: 1, good: 20, bad: 80 }
+      # Seen across the UK, but more often the further north.
+      latitude: { weight: 1, good: 57, bad: 51 }
+    gates:
+      inSeason: { min: 1 }
+
   midges:
     label: Midges
     short: Midges

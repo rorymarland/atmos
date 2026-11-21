@@ -9,6 +9,10 @@ describe('scoring config', () => {
       [
         'alpenglow',
         'astro',
+        'bluebird',
+        'brocken',
+        'noctilucent',
+        'rainbow',
         'aurora',
         'clarity',
         'dramatic',

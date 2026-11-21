@@ -68,13 +68,13 @@
   water within 3 km, from about 20,000 UK lochs, lakes and reservoirs in OpenStreetMap. A long loch
   needs calmer air than a lochan, and those trips end at the lochside by the nearest car park.
 
-| Condition group | Conditions                                                             |
-| --------------- | ---------------------------------------------------------------------- |
-| Light and sky   | Golden-hour sky, dramatic light, clear air, wave and lenticular clouds |
-| Cloud and water | Cloud inversion, valley mist, still reflections, waterfalls in spate   |
-| Winter          | Snow on the tops, alpenglow on snow, hoar frost, frozen lochs          |
-| Night           | Milky Way and stars, aurora (NOAA Kp forecast and OVATION nowcast)     |
-| On foot         | Hill walking (not in the photo score unless ticked); midge warnings    |
+| Condition group | Conditions                                                                                      |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| Light and sky   | Golden-hour sky, dramatic light, clear air, wave and lenticular clouds, rainbows                |
+| Cloud and water | Cloud inversion, Brocken spectre and glory, valley mist, still reflections, waterfalls in spate |
+| Winter          | Snow on the tops, fresh snow and blue sky, alpenglow on snow, hoar frost, frozen lochs          |
+| Night           | Milky Way and stars, aurora (NOAA Kp forecast and OVATION nowcast), noctilucent clouds          |
+| On foot         | Hill walking (not in the photo score unless ticked); midge warnings                             |
 
 <table>
   <tr>
