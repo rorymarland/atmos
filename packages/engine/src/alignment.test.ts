@@ -55,3 +55,14 @@ describe('lining the sun up with a summit', () => {
     expect(findAlignments({ body: 'sun', peak, from, to, ground: () => null })).toEqual([]);
   });
 });
+
+describe('moon phase names', () => {
+  it('names the phase from where the moon is in its cycle', async () => {
+    const { moonPhaseName } = await import('./astro.js');
+    // Full moon 5 November 2025, new moon 20 November 2025 (UK times, to the hour).
+    expect(moonPhaseName(Date.UTC(2025, 10, 5, 13))).toBe('Full moon');
+    expect(moonPhaseName(Date.UTC(2025, 10, 20, 6))).toBe('New moon');
+    expect(moonPhaseName(Date.UTC(2025, 10, 9, 12))).toBe('Waning gibbous');
+    expect(moonPhaseName(Date.UTC(2025, 10, 25, 12))).toBe('Waxing crescent');
+  });
+});

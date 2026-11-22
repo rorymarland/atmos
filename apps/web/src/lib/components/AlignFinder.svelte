@@ -60,7 +60,17 @@
     <p class="small">Couldn’t load the terrain, so this can’t be worked out just now.</p>
   {:else if result?.status === 'ready'}
     {#if result.moonLit !== undefined}
-      <p class="small">The moon is {Math.round(result.moonLit * 100)}% lit{result.moonLit < 0.15 ? ', so it may be hard to see' : ''}.</p>
+      <p class="small">
+        {result.moonPhase ?? 'The moon'}, {Math.round(result.moonLit * 100)}% lit{result.moonLit < 0.15
+          ? ', so it may be hard to see'
+          : result.moonPhase?.startsWith('Waxing') || result.moonPhase === 'First quarter'
+            ? ': it rises in the day and sets at night'
+            : result.moonPhase?.startsWith('Waning') || result.moonPhase === 'Last quarter'
+              ? ': it rises at night and sets in the day'
+              : result.moonPhase === 'Full moon'
+                ? ': it rises around sunset and sets around sunrise'
+                : ''}.
+      </p>
     {/if}
     {#if groups.length === 0}
       <p class="small">Nowhere within 40 km lines the {WORDS[result.body].name} up with the summit that day{result.hidden ? ': nearer hills hide it from every spot that would' : ''}.</p>

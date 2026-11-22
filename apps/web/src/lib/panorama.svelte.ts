@@ -12,6 +12,7 @@ export type Lens = (typeof LENSES)[number];
 export const fieldOfView = (mm: number) => (2 * Math.atan(36 / (2 * mm)) * 180) / Math.PI;
 
 const KEY = 'atmos.viewer';
+const VIEWS_KEY = 'atmos.viewer.hills';
 const RANGE_KM = 150;
 
 function load(): { open: boolean; lens: Lens } {
@@ -43,6 +44,39 @@ class PanoramaState {
       const s = load();
       this.open = s.open;
       this.lens = s.lens;
+    }
+  }
+
+  /** The last heading and lens on each hill (up to 50), so a set-up view comes back. */
+  remembered(hill: number): { heading: number; lens: Lens } | null {
+    try {
+      const all = JSON.parse(localStorage.getItem(VIEWS_KEY) ?? '{}') as Record<
+        string,
+        { h: number; l: number }
+      >;
+      const v = all[String(hill)];
+      if (!v || !(LENSES as readonly number[]).includes(v.l)) return null;
+      return { heading: v.h, lens: v.l as Lens };
+    } catch {
+      return null;
+    }
+  }
+
+  remember(hill: number) {
+    try {
+      const all = JSON.parse(localStorage.getItem(VIEWS_KEY) ?? '{}') as Record<
+        string,
+        { h: number; l: number; t: number }
+      >;
+      all[String(hill)] = { h: Math.round(this.heading * 10) / 10, l: this.lens, t: Date.now() };
+      const keys = Object.keys(all);
+      if (keys.length > 50) {
+        keys.sort((a, b) => all[a]!.t - all[b]!.t);
+        for (const k of keys.slice(0, keys.length - 50)) delete all[k];
+      }
+      localStorage.setItem(VIEWS_KEY, JSON.stringify(all));
+    } catch {
+      // Storage can be unavailable; the view just won't come back next time.
     }
   }
 

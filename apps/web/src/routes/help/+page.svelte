@@ -1,6 +1,15 @@
 <script lang="ts">
   import { alerts } from '#lib/alerts.svelte.ts';
 
+  // Seen the Help page: the map's "New here?" pointer needn't show again.
+  $effect(() => {
+    try {
+      localStorage.setItem('atmos.helpSeen', '1');
+    } catch {
+      // No storage: nothing to remember.
+    }
+  });
+
   const SECTIONS = [
     ['start', 'Getting started'],
     ['map', 'The map'],

@@ -366,11 +366,47 @@
     untrack(() => {
       const h = selectedHill?.hill;
       if (!h) return;
+      // A view set up on this hill before comes back as it was.
+      const kept = viewer.remembered(h.number);
+      if (kept) {
+        viewer.heading = kept.heading;
+        viewer.lens = kept.lens;
+        return;
+      }
       const sun = bodyAt('sun', skyTime, h.lat, h.lon);
       const moon = bodyAt('moon', skyTime, h.lat, h.lon);
       viewer.heading = sun.alt > -2 || moon.alt < 0 ? sun.az : moon.az;
     });
   });
+  // Remember the view on this hill once turning or changing lens settles.
+  let rememberTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    void [viewer.heading, viewer.lens];
+    const n = pin === null ? selectedNumber : undefined;
+    if (n === undefined) return;
+    clearTimeout(rememberTimer);
+    rememberTimer = setTimeout(() => viewer.remember(n), 800);
+  });
+
+  // A one-time pointer to the Help page for first visits.
+  const HELP_SEEN = 'atmos.helpSeen';
+  let showHelpNudge = $state(false);
+  $effect(() => {
+    try {
+      showHelpNudge = !localStorage.getItem(HELP_SEEN);
+    } catch {
+      showHelpNudge = false;
+    }
+  });
+  function dismissHelpNudge() {
+    showHelpNudge = false;
+    try {
+      localStorage.setItem(HELP_SEEN, '1');
+    } catch {
+      // Without storage it may show again next time; harmless.
+    }
+  }
+
   function openHillNumber(n: number) {
     goto(`?hill=${n}`, { reset: false });
   }
@@ -1103,6 +1139,13 @@
 
   <div class="search-box">
     <PlaceSearch onHill={onSearchHill} onPlace={onSearchPlace} keepQuery />
+    {#if showHelpNudge}
+      <div class="found small help-nudge">
+        <span>New here?</span>
+        <a href="/help" onclick={dismissHelpNudge}>See how Atmos works</a>
+        <button class="link" onclick={dismissHelpNudge} aria-label="Dismiss">Close</button>
+      </div>
+    {/if}
     {#if found}
       <div class="found small">
         <span>{found.label}</span>
