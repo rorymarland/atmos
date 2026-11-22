@@ -2,7 +2,15 @@
  * Sun, moon and Milky Way geometry for night-sky and light conditions. Pure maths
  * (astronomy-engine), so it runs anywhere the engine does.
  */
-import { Body, Equator, Horizon, Illumination, MakeTime, Observer } from 'astronomy-engine';
+import {
+  Body,
+  Equator,
+  Horizon,
+  Illumination,
+  MakeTime,
+  MoonPhase,
+  Observer,
+} from 'astronomy-engine';
 
 export interface SkyState {
   /** Sun altitude, degrees (negative below the horizon). */
@@ -60,4 +68,36 @@ export function kpNeeded(lat: number): number {
  */
 export function viewLineLatitude(kp: number): number {
   return Math.min(62, Math.max(49, 52 + 2 * (7 - kp)));
+}
+
+export type MoonPhaseName =
+  | 'New moon'
+  | 'Waxing crescent'
+  | 'First quarter'
+  | 'Waxing gibbous'
+  | 'Full moon'
+  | 'Waning gibbous'
+  | 'Last quarter'
+  | 'Waning crescent';
+
+const PHASE_NAMES: MoonPhaseName[] = [
+  'New moon',
+  'Waxing crescent',
+  'First quarter',
+  'Waxing gibbous',
+  'Full moon',
+  'Waning gibbous',
+  'Last quarter',
+  'Waning crescent',
+];
+
+/**
+ * The moon's phase by name: eight equal slices of its cycle, each centred on its moment
+ * (full moon is within about 1.8 days of exactly full). Waxing moons rise in the day and
+ * set at night; waning ones rise at night.
+ */
+export function moonPhaseName(time: number): MoonPhaseName {
+  // 0° new, 90° first quarter, 180° full, 270° last quarter.
+  const angle = MoonPhase(MakeTime(new Date(time)));
+  return PHASE_NAMES[Math.floor(((angle + 22.5) % 360) / 45)]!;
 }

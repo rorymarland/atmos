@@ -3,7 +3,14 @@
  * summit, on the day being looked at. Worked out on demand from Mapterhorn terrain; shared
  * by the hill sheet (the list) and the map (the points).
  */
-import { findAlignments, skyAt, type AlignBody, type AlignmentPoint } from '@atmos/engine';
+import {
+  findAlignments,
+  moonPhaseName,
+  skyAt,
+  type AlignBody,
+  type AlignmentPoint,
+  type MoonPhaseName,
+} from '@atmos/engine';
 import { loadTerrain } from './route-search';
 import { londonMidnight } from './time';
 
@@ -16,8 +23,9 @@ export interface AlignmentResult {
   points: AlignmentPoint[];
   /** How many more nearer ground hides the summit from. */
   hidden: number;
-  /** The moon's lit fraction that day, 0 to 1. */
+  /** The moon's lit fraction that day, 0 to 1, and its phase by name. */
   moonLit?: number;
+  moonPhase?: MoonPhaseName;
 }
 
 /** Far enough for a 1,000 m summit with the sun just up; Terrarium zoom 10 is about 40 m. */
@@ -54,7 +62,10 @@ class AlignmentState {
         points: all.filter((p) => !p.blocked),
         hidden: all.filter((p) => p.blocked).length,
         ...(body === 'moon'
-          ? { moonLit: skyAt(from + 12 * 3_600_000, hill.lat, hill.lon).moonIllumination }
+          ? {
+              moonLit: skyAt(from + 12 * 3_600_000, hill.lat, hill.lon).moonIllumination,
+              moonPhase: moonPhaseName(from + 12 * 3_600_000),
+            }
           : {}),
       };
     } catch (e) {
