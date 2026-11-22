@@ -20,9 +20,10 @@ import { alertInput } from './model';
 import { Runner } from './runner';
 import { Store } from './store';
 import { PlaceStore, placeInput } from './places';
-import { FEED_IDS, Feeder, type FeedId } from './forecasts';
+import { DAILY_LIMIT, FEED_IDS, Feeder, type FeedId } from './forecasts';
+import { ENSEMBLE_FAMILIES, EnsembleCache, type EnsembleFamily } from './ensembles';
 import { SAMPLE_EVERY_MS, TrafficSampler } from './traffic';
-import { gunzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import type { Zone } from '@atmos/engine';
 
 const env = process.env;
@@ -55,6 +56,14 @@ const feeder: Feeder = new Feeder({
   zones: async (): Promise<Zone[]> => (await runner.data()).zones,
   tickMs: 5 * 60_000,
   log,
+});
+// Ensembles for the open hill, fetched once here and shared, from the same allowance.
+const ensembles = new EnsembleCache({
+  budget: {
+    spentToday: () => feeder.spentToday(),
+    spend: (w) => feeder.spend(w),
+    dailyLimit: DAILY_LIMIT,
+  },
 });
 const runner: Runner = new Runner({
   store,
@@ -180,7 +189,36 @@ const view = (a: ReturnType<Store['list']>[number]) => ({ ...a, notified: undefi
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://x');
   const path = url.pathname.replace(/\/+$/, '');
-  if (path === '/api/forecasts' && req.method === 'GET') return send(res, 200, feeder.index());
+  if (path === '/api/forecasts' && req.method === 'GET')
+    return send(res, 200, { ...feeder.index(), ensembles: ensembles.status() });
+  if (path === '/api/ensembles' && req.method === 'GET') {
+    const family = url.searchParams.get('family') as EnsembleFamily;
+    const lat = Number(url.searchParams.get('lat'));
+    const lon = Number(url.searchParams.get('lon'));
+    if (!ENSEMBLE_FAMILIES.includes(family) || !Number.isFinite(lat) || !Number.isFinite(lon))
+      return send(res, 400, { error: 'Need family, lat and lon' });
+    // UK and a little around it only: this isn't a general ensemble service.
+    if (lat < 48 || lat > 62 || lon < -12 || lon > 4)
+      return send(res, 400, { error: 'Outside the UK' });
+    try {
+      const data = await ensembles.get(family, lat, lon);
+      if (!data) return send(res, 503, { error: "Over today's ensemble budget" });
+      const body = gzipSync(JSON.stringify(data));
+      const headers = {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'private, max-age=600',
+        vary: 'accept-encoding',
+      };
+      if (/\bgzip\b/.test(String(req.headers['accept-encoding'] ?? ''))) {
+        res.writeHead(200, { ...headers, 'content-encoding': 'gzip' });
+        return res.end(body);
+      }
+      res.writeHead(200, headers);
+      return res.end(JSON.stringify(data));
+    } catch (e) {
+      return send(res, 502, { error: e instanceof Error ? e.message : String(e) });
+    }
+  }
   if (path === '/api/traffic/grid' && req.method === 'GET')
     return traffic
       ? send(res, 200, traffic.grid())

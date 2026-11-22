@@ -427,6 +427,11 @@ export class Feeder {
     );
   }
 
+  /** Records spending by something else on the same allowance (shared ensembles). */
+  spend(weight: number) {
+    this.#spent(weight);
+  }
+
   #spent(weight: number) {
     this.#spend.push({ at: this.#now(), weight });
   }

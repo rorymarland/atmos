@@ -157,6 +157,22 @@ interface Evaluated extends EvaluatedPlace {
 
 const HOUR_MS = 3_600_000;
 
+/** The Atmos server's shared ensemble, or null without one (or when it's over budget). */
+async function sharedEnsemble(
+  family: 'ecmwf' | 'ukmo',
+  lat: number,
+  lon: number,
+): Promise<Ensemble | null> {
+  try {
+    const res = await fetch(
+      `/api/ensembles?family=${family}&lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}`,
+    );
+    return res.ok ? ((await res.json()) as Ensemble) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** How far "Avoid plane trails" moves a hill down the ranking, before the profile's weight. */
 const TRAIL_PENALTY: Record<TrailAssessment['risk'], number> = { low: 0, medium: 0.12, high: 0.3 };
 
@@ -290,13 +306,18 @@ class Conditions {
         this[key] = new Map(this[key]).set(hillNumber, 'failed');
       }
     };
-    // Kept an hour in this browser: ensembles are the costliest thing Atmos fetches.
+    // Kept an hour in this browser: ensembles are the costliest thing Atmos fetches. The
+    // Atmos server's shared copy first (one fetch for everyone nearby), Open-Meteo without it.
     const at = `${lat.toFixed(3)},${lon.toFixed(3)}`;
     void load('ensembles', () =>
-      cachedEnsemble(`ecmwf|${at}`, HOUR_MS, () => fetchEnsemble(lat, lon)),
+      cachedEnsemble(`ecmwf|${at}`, HOUR_MS, () =>
+        sharedEnsemble('ecmwf', lat, lon).then((e) => e ?? fetchEnsemble(lat, lon)),
+      ),
     );
     void load('metOfficeEnsembles', () =>
-      cachedEnsemble(`ukmo|${at}`, HOUR_MS, () => fetchMetOfficeEnsemble(lat, lon)),
+      cachedEnsemble(`ukmo|${at}`, HOUR_MS, () =>
+        sharedEnsemble('ukmo', lat, lon).then((e) => e ?? fetchMetOfficeEnsemble(lat, lon)),
+      ),
     );
   }
 
