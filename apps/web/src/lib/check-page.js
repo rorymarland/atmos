@@ -174,11 +174,34 @@ export function startCheck(root) {
       return;
     }
     const credits = t.creditsLeft != null ? `, ${t.creditsLeft} OpenSky credits left today` : '';
-    parts.push(
-      t.usedForTrails
-        ? '<div class="banner ok">Used for the plane trail risk.</div>'
-        : `<p class="muted">Not used for the plane trail risk yet: it starts by itself after ${t.readyDays} days of samples covering every hour.</p>`,
-    );
+    const ukHourName = (h) =>
+      new Date(Date.UTC(2026, 0, 15, h)).toLocaleTimeString('en-GB', {
+        timeZone: 'Europe/London',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    if (t.usedForTrails) {
+      parts.push('<div class="banner ok">Used for the plane trail risk.</div>');
+    } else {
+      const short = t.shortHours ?? [];
+      const hoursNote = short.length
+        ? short.length > 6
+          ? `${short.length} hours of the day still need more samples.`
+          : `Still short of samples at ${short.map(ukHourName).join(', ')}.`
+        : 'Every hour of the day has enough samples.';
+      const start = t.readyAt
+        ? new Date(t.readyAt).toLocaleDateString('en-GB', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+          })
+        : null;
+      const pct = Math.min(100, Math.round((t.days / t.readyDays) * 100));
+      parts.push(
+        `<div class="banner">Not used for the plane trail risk yet: <strong>${Math.min(t.days, t.readyDays)} of ${t.readyDays} days</strong>. ${hoursNote}${start ? ` It should switch on by itself around <strong>${start}</strong>.` : ''}</div>
+         <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span style="width:${pct}%"></span></div>`,
+      );
+    }
     parts.push(
       `<p style="margin:0"><strong>${t.samples.toLocaleString('en-GB')}</strong> snapshot${t.samples === 1 ? '' : 's'} over ${t.days} day${t.days === 1 ? '' : 's'}, since ${when(t.since, now)}; ${t.hoursCovered} of 24 hours covered.</p>
        <p class="muted">Last snapshot ${when(t.lastSampleAt, now)}: ${t.lastCount} aircraft above 25,000 ft. Next ${when(t.nextAt, now)} (every ${t.everyMinutes} min${credits}).</p>`,
@@ -229,6 +252,59 @@ export function startCheck(root) {
         '<p class="muted">The alerts container isn\'t running, so there\'s no traffic sampling.</p>';
     }
   }
+
+  // ---- Terrain detail: which Mapterhorn zoom levels exist for UK hills ----
+  const terrainBox = root.querySelector('#terrain');
+  const TERRAIN_SPOTS = [
+    ['Ben Nevis', 56.7969, -5.0036],
+    ['Snowdon', 53.0685, -4.0763],
+    ['Scafell Pike', 54.4542, -3.2115],
+    ['Slieve Donard', 54.1803, -5.9206],
+  ];
+  const TERRAIN_ZOOMS = [12, 13, 14, 15, 16, 17];
+  function tileAt(lat, lon, z) {
+    const n = 2 ** z;
+    const x = Math.floor(((lon + 180) / 360) * n);
+    const φ = (lat * Math.PI) / 180;
+    const y = Math.floor(((1 - Math.log(Math.tan(φ) + 1 / Math.cos(φ)) / Math.PI) / 2) * n);
+    return { x, y };
+  }
+  async function probeTerrain() {
+    const button = root.querySelector('#terrain-run');
+    button.disabled = true;
+    terrainBox.innerHTML = '<p class="muted">Asking Mapterhorn for one tile at each zoom…</p>';
+    const rows = [];
+    for (const [name, lat, lon] of TERRAIN_SPOTS) {
+      const cells = [];
+      let finest = null;
+      for (const z of TERRAIN_ZOOMS) {
+        const { x, y } = tileAt(lat, lon, z);
+        try {
+          const res = await fetch(`https://tiles.mapterhorn.com/${z}/${x}/${y}.webp`);
+          const bytes = res.ok ? (await res.arrayBuffer()).byteLength : 0;
+          if (res.ok && bytes > 0) finest = z;
+          cells.push(
+            res.ok
+              ? `<td class="ok">${Math.round(bytes / 1024)} KB</td>`
+              : `<td class="fail">${res.status}</td>`,
+          );
+        } catch {
+          cells.push('<td class="fail">blocked</td>');
+        }
+      }
+      // Ground size of a pixel at the finest zoom.
+      const px =
+        finest == null
+          ? null
+          : (40075016.686 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** finest);
+      rows.push(
+        `<tr><td>${name}</td>${cells.join('')}<td>${px == null ? '–' : px < 10 ? `${px.toFixed(1)} m` : `${Math.round(px)} m`}</td></tr>`,
+      );
+    }
+    terrainBox.innerHTML = `<table><thead><tr><th>Hill</th>${TERRAIN_ZOOMS.map((z) => `<th>Zoom ${z}</th>`).join('')}<th>Finest pixel</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
+    button.disabled = false;
+  }
+  root.querySelector('#terrain-run').addEventListener('click', probeTerrain);
 
   const refresh = () => {
     loadShared();

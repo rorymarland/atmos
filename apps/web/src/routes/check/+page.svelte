@@ -25,6 +25,15 @@
   </p>
   <div id="traffic"><p class="muted">Loading…</p></div>
 
+  <h2>Terrain detail</h2>
+  <p>
+    The viewer, Line it up and the walking routes use Mapterhorn's terrain tiles. This asks for one
+    tile at each zoom over four hills, to show how fine the terrain is here: zoom 15 is about
+    1.4 m a pixel in Scotland. It downloads a few MB, so it only runs when you ask.
+  </p>
+  <div class="row"><button id="terrain-run">Test terrain detail</button></div>
+  <div id="terrain"></div>
+
   <h2>Browser API check</h2>
   <p>
     Calls each data source the way the app will, straight from this browser, and records what
@@ -145,6 +154,22 @@
     border-radius: 8px;
     margin: 12px 0;
     font-weight: 600;
+  }
+  .check :global(.banner:not(.bad):not(.warn):not(.ok)) {
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+    font-weight: 400;
+  }
+  .check :global(.progress) {
+    height: 6px;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--ink) 10%, transparent);
+    overflow: hidden;
+    margin: -4px 0 12px;
+  }
+  .check :global(.progress span) {
+    display: block;
+    height: 100%;
+    background: var(--go);
   }
   .check :global(.banner.bad) {
     background: color-mix(in srgb, var(--no) 14%, transparent);
