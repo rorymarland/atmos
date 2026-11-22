@@ -135,15 +135,15 @@ profiles:
   snow:
     label: Snow on the tops
     short: Snow
-    blurb: 'Fresh snow on the summit, cold enough to stay, with the tops clear of cloud.'
+    blurb: 'Snow lying on the summit and the tops out of the cloud, whatever the sky: moody or bright. For the blue-sky day after a snowfall, see Fresh snow, blue sky.'
     scope: summit
     periods: [day]
     aggregate: best-hour
     factors:
-      freshSnow: { weight: 3, good: 5, bad: 0.5 }
+      # Fallen in the last three days and not thawed since: lying, not only fresh.
+      lyingSnow: { weight: 3, good: 5, bad: 0.5 }
       snowLine: { weight: 2, good: 300, bad: -100 }
       cloudBase: { weight: 2, good: 200, bad: 0 }
-      sunshine: { weight: 1, good: 50, bad: 95 }
     gates:
       rain: { max: 0.5 }
 
@@ -310,7 +310,7 @@ profiles:
   bluebird:
     label: Fresh snow, blue sky
     short: Bluebird
-    blurb: 'The day after a snowfall: the snow has stopped, the sky is blue and the tops are cold enough to stay crisp.'
+    blurb: 'The blue-sky day after a snowfall: the snow has stopped, the sky is clear and the tops are cold enough to stay crisp.'
     scope: summit
     trails: 1
     periods: [day]

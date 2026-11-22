@@ -119,24 +119,35 @@ export const frost: ProfileDefinition = {
   gates: {},
 };
 
+/** The freezing level this far above the summit for six hours thaws lying snow. */
+const THAW_ABOVE_M = 300;
+
+/**
+ * Snow on the tops: snow lying on the summit and the tops out of the cloud, whatever the sky.
+ * A blue sky the day after a snowfall is its own condition (bluebird, in optics.ts).
+ */
 export const snow: ProfileDefinition = {
   id: 'snow',
   factors: {
-    freshSnow: {
-      label: 'Snow on the summit in the last 36 hours',
+    lyingSnow: {
+      label: 'Snow lying on the summit (last three days, not thawed since)',
       unit: 'mm',
       read: (ctx) => {
-        let total = 0;
+        // Snow adds up; six hours with the freezing level well above the top melts it away.
+        let lying = 0;
+        let warmHours = 0;
         let hours = 0;
-        for (let o = -36; o <= 0; o++) {
+        for (let o = -72; o <= 0; o++) {
           const p = ctx.surface('precipitation', o);
           const fl = freezingLevelAt(ctx.forecast, ctx.i + o);
           if (p === null || fl === null) continue;
           hours++;
-          if (fl - SNOW_BELOW_FREEZING_LEVEL_M <= ctx.target.altitudeM) total += p;
+          if (fl - SNOW_BELOW_FREEZING_LEVEL_M <= ctx.target.altitudeM) lying += p;
+          warmHours = fl > ctx.target.altitudeM + THAW_ABOVE_M ? warmHours + 1 : 0;
+          if (warmHours >= 6) lying = 0;
         }
         if (hours < 12) return { value: null };
-        return { value: total, detail: 'as rain-equivalent' };
+        return { value: lying, detail: 'as rain-equivalent' };
       },
     },
     snowLine: {
@@ -150,11 +161,6 @@ export const snow: ProfileDefinition = {
       },
     },
     cloudBase: cloudBaseMargin,
-    sunshine: {
-      label: 'Total cloud',
-      unit: 'percent',
-      read: (ctx) => ({ value: ctx.surface('cloudCover') }),
-    },
   },
   gates: {
     rain: { label: 'Rain', unit: 'mm', read: (ctx) => ctx.surface('precipitation') },

@@ -49,6 +49,37 @@ describe('frost', () => {
 });
 
 describe('snow on the tops', () => {
+  it('counts snow lying under a grey sky, which is fresh snow, blue sky’s job only when blue', () => {
+    const grey = makeForecast({
+      hoursBefore: 48,
+      surfaceBefore: { precipitation: 1, freezingLevelHeight: 600, cloudCover: 100 },
+      surface: { precipitation: 0, freezingLevelHeight: 600, cloudCover: 95, cloudCoverLow: 20 },
+      levels,
+    });
+    const w = { start: T0 + HOUR, end: T0 + 4 * HOUR };
+    expect(evaluateTarget([grey], w, summit, 'snow', config, { now }).verdict).toBe('go');
+    expect(evaluateTarget([grey], w, summit, 'bluebird', config, { now }).verdict).toBe('no');
+  });
+
+  it('forgets snow after a thaw', () => {
+    // Snow two days ago, then a mild day with the freezing level far above the top.
+    const thawed = makeForecast({
+      hoursBefore: 48,
+      surfaceBefore: { precipitation: 0, freezingLevelHeight: 2500, cloudCover: 40 },
+      surface: { precipitation: 0, freezingLevelHeight: 2500, cloudCover: 30 },
+      levels,
+    });
+    for (let i = 0; i < 12; i++) {
+      thawed.surface.precipitation![i] = 1;
+      thawed.surface.freezingLevelHeight![i] = 600;
+    }
+    const w = { start: T0 + HOUR, end: T0 + 4 * HOUR };
+    const r = evaluateTarget([thawed], w, summit, 'snow', config, { now });
+    const lying = r.byModel[0]!.keyHour!.factors.find((x) => x.id === 'lyingSnow')!;
+    expect(lying.value).toBe(0);
+    expect(r.verdict).toBe('no');
+  });
+
   it('counts precipitation that fell above the snow line as snow on the summit', () => {
     const f = makeForecast({
       hoursBefore: 36,
@@ -58,7 +89,7 @@ describe('snow on the tops', () => {
     });
     const w = { start: T0, end: T0 + 4 * HOUR };
     const r = evaluateTarget([f], w, summit, 'snow', config, { now });
-    const fresh = r.byModel[0]!.keyHour!.factors.find((x) => x.id === 'freshSnow')!;
+    const fresh = r.byModel[0]!.keyHour!.factors.find((x) => x.id === 'lyingSnow')!;
     expect(fresh.value).toBeGreaterThan(20);
     expect(r.verdict).toBe('go');
     // The same weather with the freezing level far above the summit is rain, not snow.

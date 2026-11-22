@@ -79,7 +79,7 @@ describe('snow on the tops without a published freezing level (ECMWF)', () => {
       ],
     });
     const r = evaluateTarget([f], w, summit, 'snow', config, { now });
-    const fresh = r.byModel[0]!.keyHour!.factors.find((x) => x.id === 'freshSnow')!;
+    const fresh = r.byModel[0]!.keyHour!.factors.find((x) => x.id === 'lyingSnow')!;
     expect(fresh.value).toBeGreaterThan(20);
     expect(r.verdict).toBe('go');
   });
