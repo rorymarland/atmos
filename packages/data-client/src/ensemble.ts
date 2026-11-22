@@ -18,6 +18,29 @@ export const ENSEMBLE_VARIABLES = [
 ] as const;
 export type EnsembleVariable = (typeof ENSEMBLE_VARIABLES)[number];
 
+/** Members per ensemble model: Open-Meteo counts each member's variables as calls. */
+const MEMBERS: Record<string, number> = {
+  [ENSEMBLE_MODEL]: 51,
+  [MET_OFFICE_GLOBAL]: 18,
+  [MET_OFFICE_UK]: 3,
+};
+
+/**
+ * Call-equivalents an ensemble fetch costs, counting every member's variables like
+ * separate variables (ten to a call). Errs high: better to undercount the room left.
+ */
+export function estimateEnsembleWeight(
+  model: string,
+  variables: number = ENSEMBLE_VARIABLES.length,
+): number {
+  return Math.max(1, ((MEMBERS[model] ?? 51) * variables) / 10);
+}
+/** The two families as the app fetches them: ECMWF, and the Met Office's global plus UK. */
+export const ENSEMBLE_WEIGHTS = {
+  ecmwf: estimateEnsembleWeight(ENSEMBLE_MODEL),
+  ukmo: estimateEnsembleWeight(MET_OFFICE_GLOBAL) + estimateEnsembleWeight(MET_OFFICE_UK, 1),
+};
+
 export interface Ensemble {
   model: string;
   /** Where a variable came from when it isn't `model` (the Met Office low cloud). */

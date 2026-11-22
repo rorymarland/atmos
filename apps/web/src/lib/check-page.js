@@ -112,6 +112,12 @@ export function startCheck(root) {
        <div class="meter"><span class="${level}" style="width:${pct.toFixed(1)}%"></span></div>
        <p class="muted">Last look ${when(idx.lastCheckAt, now)}, next ${when(idx.nextCheckAt, now)}. It looks every 5 minutes, and pulls a feed only after its minimum gap once a new model run is out.</p>`,
     );
+    if (idx.ensembles) {
+      const e = idx.ensembles;
+      parts.push(
+        `<p class="muted">Ensembles for opened hills: ${e.spentToday.toLocaleString('en-GB')} of ${e.dailyCap.toLocaleString('en-GB')} calls today (included above), ${e.kept} place${e.kept === 1 ? '' : 's'} kept for two hours.</p>`,
+      );
+    }
 
     const rowsHtml = Object.entries(FEEDS)
       .map(([id, name]) => {
