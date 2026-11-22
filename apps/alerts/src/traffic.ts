@@ -178,7 +178,26 @@ export class TrafficSampler {
           s.samples.every((n) => n >= READY_SAMPLES_PER_HOUR)
         : false,
       readyDays: READY_DAYS,
+      ...this.#progress(),
     };
+  }
+
+  /**
+   * How far off using traffic for trails is: UTC hours still short of samples, and a rough
+   * date it'll start (three weeks from the first sample, or later if an hour is behind).
+   */
+  #progress(): { shortHours: number[]; readyAt: number | null } {
+    const s = this.state;
+    if (!s.since) return { shortHours: [], readyAt: null };
+    const shortHours = s.samples.flatMap((n, h) => (n < READY_SAMPLES_PER_HOUR ? [h] : []));
+    // Each hour gets about one sample every SAMPLE_EVERY_MS, so this many a day.
+    const perHourPerDay = HOUR / SAMPLE_EVERY_MS;
+    const behind = Math.max(0, ...s.samples.map((n) => READY_SAMPLES_PER_HOUR - n));
+    const readyAt = Math.max(
+      s.since + READY_DAYS * 24 * HOUR,
+      this.#now() + Math.ceil(behind / perHourPerDay) * 24 * HOUR,
+    );
+    return { shortHours, readyAt };
   }
 
   /**

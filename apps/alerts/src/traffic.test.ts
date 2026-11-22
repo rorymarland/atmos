@@ -69,6 +69,24 @@ describe('traffic sampling', () => {
     expect(make().summary().samples).toBe(2);
   });
 
+  it('says how far off using traffic for trails is', async () => {
+    const { make, clock } = setup(() => new Response(JSON.stringify({ states: [] })));
+    const s = make();
+    await s.sample();
+    const start = clock.t;
+    let sum = s.summary();
+    // Only 07:00 UTC has a sample: every other hour is short, so it'll be three weeks or more.
+    expect(sum.shortHours).toHaveLength(24);
+    expect(sum.readyAt).toBeGreaterThanOrEqual(start + 21 * 24 * 3_600_000);
+    expect(sum.usedForTrails).toBe(false);
+    // Every hour well sampled and three weeks gone: it's on.
+    for (let h = 0; h < 24; h++) s.state.samples[h] = 30;
+    clock.t = start + 22 * 24 * 3_600_000;
+    sum = s.summary();
+    expect(sum.shortHours).toEqual([]);
+    expect(sum.usedForTrails).toBe(true);
+  });
+
   it('waits when OpenSky says the allowance is used up', async () => {
     const { make, clock, calls } = setup(
       () =>
