@@ -48,7 +48,7 @@
     {
       group: 'Winter',
       items: [
-        ['Snow on the tops', 'Fresh snow on the summit, cold enough to stay, with the tops clear.'],
+        ['Snow on the tops', 'Snow lying on the summit and the tops out of the cloud, whatever the sky.'],
         ['Fresh snow, blue sky', 'The day after a snowfall: the snow has stopped and the sky is blue.'],
         ['Alpenglow on snow', 'Snowy summits lit pink and gold by a low sun.'],
         ['Hoar frost', 'Frost on grass and trees after a cold, clear, still night.'],
