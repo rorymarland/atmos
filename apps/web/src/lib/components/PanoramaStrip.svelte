@@ -522,7 +522,7 @@
     const heading = viewer.heading;
     const fov = viewer.fov;
     void [panorama, viewer.status];
-    if (lens < 100) return;
+    if (lens < 70) return;
     clearTimeout(sliceTimer);
     sliceTimer = setTimeout(() => viewer.requestSlice(heading, fov, lens >= 200 ? 0.01 : 0.02), 180);
   });

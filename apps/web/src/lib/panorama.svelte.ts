@@ -7,7 +7,7 @@ import type { Panorama, PanoramaHill } from '@atmos/engine';
 import type { PanoramaReply, PanoramaRequest } from './panorama.worker';
 
 /** Full-frame focal lengths and their horizontal field of view in degrees. */
-export const LENSES = [24, 50, 100, 200] as const;
+export const LENSES = [16, 24, 50, 70, 100, 200] as const;
 export type Lens = (typeof LENSES)[number];
 export const fieldOfView = (mm: number) => (2 * Math.atan(36 / (2 * mm)) * 180) / Math.PI;
 
@@ -177,7 +177,7 @@ class PanoramaState {
   #pending = new Map<number, { kind: 'view' | 'slice'; key: string }>();
 
   /**
-   * A finer slice across what's being looked at, for the 100 and 200 mm lenses: a little
+   * A finer slice across what's being looked at, for the 70, 100 and 200 mm lenses: a little
    * wider than the view, so turning a short way doesn't need a new one.
    */
   requestSlice(heading: number, fov: number, stepDeg: number) {
