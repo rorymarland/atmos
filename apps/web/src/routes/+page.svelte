@@ -1139,7 +1139,7 @@
 
   <div class="search-box">
     <PlaceSearch onHill={onSearchHill} onPlace={onSearchPlace} keepQuery />
-    {#if showHelpNudge}
+    {#if showHelpNudge && !hillOpen}
       <div class="found small help-nudge">
         <span>New here?</span>
         <a href="/help" onclick={dismissHelpNudge}>See how Atmos works</a>
@@ -1224,7 +1224,7 @@
             viewer.open = !viewer.open;
             viewer.save();
           }}
-          aria-pressed={viewer.open}>{viewer.open ? 'Hide view' : 'View'}</button
+          aria-pressed={viewer.open}>{viewer.open ? 'Hide panorama' : 'Show panorama'}</button
         >
       {/if}
       <button class="link" onclick={() => (skyOpen = !skyOpen)} aria-pressed={skyOpen}>

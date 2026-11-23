@@ -16,7 +16,7 @@
     ['look-for', 'Choosing what to look for'],
     ['trip', 'Planning the trip'],
     ['hill', 'A hill’s panel'],
-    ['view', 'The view'],
+    ['view', 'The panorama'],
     ['line-up', 'Lining up the sun or moon'],
     ['places', 'Your own places'],
     ['alerts', 'Alerts'],
@@ -221,7 +221,7 @@
   </section>
 
   <section id="view">
-    <h2>The view</h2>
+    <h2>The panorama</h2>
     <p>
       With a hill open (or the pin dropped anywhere), a strip above the timeline shows what you’d see from there: the
       skyline and ridges out to 150 km, worked out from terrain heights, with hills named.
@@ -236,7 +236,8 @@
       <li>From an open hill the view is from its summit; drop the pin anywhere else for the view from the ground there.</li>
     </ul>
     <p class="small muted">
-      Each new spot takes a second or two to work out. <em>Hide view</em> folds it away.
+      Each new spot takes a second or two to work out. Drag the strip’s edge (the small bar) to make it
+      taller or shorter, and <em>Hide panorama</em> folds it away.
     </p>
   </section>
 
@@ -249,7 +250,7 @@
       directions. Spots where a nearer hill hides the summit are left out.
     </p>
     <p>
-      To check one: drag the pin to the spot, move the timeline to the time, and the view should show the sun or moon
+      To check one: drag the pin to the spot, move the timeline to the time, and the panorama should show the sun or moon
       on the summit. The times are for the centre of the disc, which moves its own width in about two minutes, so be
       there early.
     </p>
@@ -285,7 +286,7 @@
     <ul>
       <li>The results and a hill’s panel slide up from the bottom, over the lower part of the map.</li>
       <li><em>Look for</em> and <em>Your trip</em> start folded to save space: tap to open.</li>
-      <li>The key, the timeline and the view each fold away from the bar under the search box.</li>
+      <li>The key, the timeline and the panorama each fold away from the bar under the search box.</li>
       <li>Pinch to zoom the map.</li>
     </ul>
   </section>
