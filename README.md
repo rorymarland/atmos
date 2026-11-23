@@ -59,7 +59,7 @@
   shows what you'd see from there: the skyline and ridgelines out to 150 km from terrain heights,
   named hills, and the sun and moon at the timeline's time at their true size, hidden behind the
   hills when they're behind them, with their paths through the day. Drag it to turn (or drag the
-  handle on the map's view wedge), pick a 24, 50, 100 or 200 mm lens, and a hill's name lights up
+  handle on the map's view wedge), pick a 16, 24, 50, 70, 100 or 200 mm lens, and a hill's name lights up
   when the sun or moon sits on top of it.
 - **Maps the aurora.** With Aurora ticked, tonight's NOAA OVATION nowcast is shaded over the UK,
   and each night has a view line from the Kp forecast showing how far south it should reach.

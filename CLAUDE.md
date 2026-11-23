@@ -65,7 +65,7 @@
   maths (`elevationAngle`); a test checks they agree. Terrain is Mapterhorn at zoom 11 (to
   25 km), 10 (to 60 km) and 8 (to 150 km), decoded to decimetre heights (`HeightTile`) in a
   worker that keeps the current standpoint's terrain. Steps never pass a terrain pixel; the
-  full circle is every 0.1°, and the 100 and 200 mm lenses get a 0.02° or 0.01° slice across
+  full circle is every 0.1°, and the 70, 100 and 200 mm lenses get a 0.02° or 0.01° slice across
   the view. The land is drawn from a steepness and distance picture (`PanoramaShade`) under
   the ridgelines. It's the hot loop: keep it free of per-sample trig and allocation.
 - Plane trails (`packages/engine/src/contrails.ts`): formation by Schmidt–Appleman, lingering

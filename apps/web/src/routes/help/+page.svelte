@@ -228,7 +228,7 @@
     </p>
     <ul>
       <li><strong>Turn</strong> by dragging the strip, with the arrow keys, or by dragging the round handle on the blue wedge on the map. They always match.</li>
-      <li><strong>Lenses</strong>: 24, 50, 100 and 200 mm set how much you see, roughly what that lens would frame on a full-frame camera.</li>
+      <li><strong>Lenses</strong>: 16, 24, 50, 70, 100 and 200 mm set how much you see, roughly what that lens would frame on a full-frame camera.</li>
       <li><strong>The sun and moon</strong> follow the timeline, at their true size, hidden behind hills when they’re behind them, with the moon’s phase. Faint lines show their path through the day with the hours marked.</li>
       <li>If the sun or moon is out of view, a marker at the edge turns you to face it.</li>
       <li>A hill’s name lights up with <strong>sun on top</strong> or <strong>moon on top</strong> when either sits on its summit.</li>
