@@ -15,21 +15,38 @@ const KEY = 'atmos.viewer';
 const VIEWS_KEY = 'atmos.viewer.hills';
 const RANGE_KM = 150;
 
-function load(): { open: boolean; lens: Lens } {
+interface Saved {
+  open: boolean;
+  lens: Lens;
+  /** Heights the strip was dragged to, on a wide screen and on a phone; null for the default. */
+  height: number | null;
+  heightCompact: number | null;
+}
+
+function load(): Saved {
+  const none: Saved = { open: true, lens: 50, height: null, heightCompact: null };
   try {
-    const v = JSON.parse(localStorage.getItem(KEY) ?? '{}') as { open?: boolean; lens?: number };
+    const v = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<
+      Record<keyof Saved, unknown>
+    >;
+    const num = (x: unknown) => (typeof x === 'number' && x > 0 ? x : null);
     return {
-      open: v.open ?? true,
-      lens: (LENSES as readonly number[]).includes(v.lens ?? 0) ? (v.lens as Lens) : 50,
+      open: typeof v.open === 'boolean' ? v.open : true,
+      lens: (LENSES as readonly unknown[]).includes(v.lens) ? (v.lens as Lens) : 50,
+      height: num(v.height),
+      heightCompact: num(v.heightCompact),
     };
   } catch {
-    return { open: true, lens: 50 };
+    return none;
   }
 }
 
 class PanoramaState {
   open = $state(true);
   lens = $state<Lens>(50);
+  /** The strip's height in pixels once dragged, on a wide screen and on a phone. */
+  height = $state<number | null>(null);
+  heightCompact = $state<number | null>(null);
   /** The direction at the middle of the view, degrees from north. */
   heading = $state(180);
   current = $state.raw<Panorama | null>(null);
@@ -44,6 +61,8 @@ class PanoramaState {
       const s = load();
       this.open = s.open;
       this.lens = s.lens;
+      this.height = s.height;
+      this.heightCompact = s.heightCompact;
     }
   }
 
@@ -82,7 +101,13 @@ class PanoramaState {
 
   save() {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ open: this.open, lens: this.lens }));
+      const saved: Saved = {
+        open: this.open,
+        lens: this.lens,
+        height: this.height,
+        heightCompact: this.heightCompact,
+      };
+      localStorage.setItem(KEY, JSON.stringify(saved));
     } catch {
       // Storage can be unavailable; the defaults will do.
     }

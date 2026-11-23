@@ -29,7 +29,54 @@
 
   let canvas = $state<HTMLCanvasElement>();
   let width = $state(600);
-  const height = $derived(compact ? 132 : 176);
+  // The height: dragged by its edge (remembered), within sensible bounds for the screen.
+  const DEFAULT_HEIGHT = $derived(compact ? 132 : 176);
+  const MIN_HEIGHT = $derived(compact ? 96 : 110);
+  let maxHeight = $state(480);
+  $effect(() => {
+    const fit = () => (maxHeight = Math.max(MIN_HEIGHT + 40, Math.round(window.innerHeight * (compact ? 0.45 : 0.6))));
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  });
+  const clampHeight = (h: number) => Math.round(Math.min(maxHeight, Math.max(MIN_HEIGHT, h)));
+  const height = $derived(clampHeight((compact ? viewer.heightCompact : viewer.height) ?? DEFAULT_HEIGHT));
+  function setHeight(h: number | null) {
+    const v = h === null ? null : clampHeight(h);
+    if (compact) viewer.heightCompact = v;
+    else viewer.height = v;
+  }
+
+  // The grip: on the top edge on a wide screen (the strip sits above the timeline), the
+  // bottom edge on a phone (it hangs below the search box). Dragging away from the map's
+  // edge makes it taller.
+  let sizing: { y: number; h: number } | null = null;
+  function gripDown(e: PointerEvent) {
+    sizing = { y: e.clientY, h: height };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }
+  function gripMove(e: PointerEvent) {
+    if (!sizing) return;
+    const dy = e.clientY - sizing.y;
+    setHeight(sizing.h + (compact ? dy : -dy));
+  }
+  function gripUp() {
+    if (!sizing) return;
+    sizing = null;
+    viewer.save();
+  }
+  function gripKey(e: KeyboardEvent) {
+    const step = e.shiftKey ? 60 : 20;
+    const grow = compact ? 'ArrowDown' : 'ArrowUp';
+    const shrink = compact ? 'ArrowUp' : 'ArrowDown';
+    if (e.key === grow) setHeight(height + step);
+    else if (e.key === shrink) setHeight(height - step);
+    else if (e.key === 'Home' || e.key === 'Enter') setHeight(null);
+    else return;
+    e.preventDefault();
+    viewer.save();
+  }
   /** Looking up or down from the automatic framing, degrees. */
   let tilt = $state(0);
 
@@ -539,54 +586,113 @@
   const headingText = $derived(`${Math.round(viewer.heading) % 360}° ${compass(viewer.heading)}`);
 </script>
 
-<div class="strip" class:compact bind:clientWidth={width} style:height="{height}px">
+{#snippet grip()}
+  <!-- A focusable separator is ARIA's window-splitter pattern (a resize handle); the linter
+       treats separators as static. -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
   <div
-    class="surface"
+    class="grip"
+    role="separator"
+    aria-orientation="horizontal"
+    aria-label="Resize the panorama: drag, or use the arrow keys"
+    aria-valuemin={MIN_HEIGHT}
+    aria-valuemax={maxHeight}
+    aria-valuenow={height}
     tabindex="0"
-    role="slider"
-    aria-roledescription="view"
-    aria-label="The view from {place}. Drag or use the arrow keys to turn."
-    aria-valuemin={0}
-    aria-valuemax={359}
-    aria-valuenow={Math.round(viewer.heading) % 360}
-    aria-valuetext="Facing {headingText}"
-    onpointerdown={down}
-    onpointermove={move}
-    onpointerup={up}
-    onpointercancel={() => (drag = null)}
-    onkeydown={key}
+    title="Drag to resize (double-click for the usual size)"
+    onpointerdown={gripDown}
+    onpointermove={gripMove}
+    onpointerup={gripUp}
+    onpointercancel={gripUp}
+    ondblclick={() => {
+      setHeight(null);
+      viewer.save();
+    }}
+    onkeydown={gripKey}
   >
-    <canvas bind:this={canvas} style:height="{height}px"></canvas>
+    <span></span>
   </div>
-  <div class="bar top small">
-    <span class="where"><strong>{headingText}</strong> from {place}</span>
-    <span class="lenses" role="group" aria-label="Lens">
-      {#each LENSES as mm (mm)}
-        <button
-          type="button"
-          class:active={viewer.lens === mm}
-          aria-pressed={viewer.lens === mm}
-          onclick={() => {
-            viewer.lens = mm;
-            viewer.save();
-          }}>{mm}{compact ? '' : ' mm'}</button
-        >
-      {/each}
-    </span>
+{/snippet}
+
+<div class="pano" class:compact>
+  {#if !compact}{@render grip()}{/if}
+  <div class="strip" class:compact bind:clientWidth={width} style:height="{height}px">
+    <div
+      class="surface"
+      tabindex="0"
+      role="slider"
+      aria-roledescription="view"
+      aria-label="The view from {place}. Drag or use the arrow keys to turn."
+      aria-valuemin={0}
+      aria-valuemax={359}
+      aria-valuenow={Math.round(viewer.heading) % 360}
+      aria-valuetext="Facing {headingText}"
+      onpointerdown={down}
+      onpointermove={move}
+      onpointerup={up}
+      onpointercancel={() => (drag = null)}
+      onkeydown={key}
+    >
+      <canvas bind:this={canvas} style:height="{height}px"></canvas>
+    </div>
+    <div class="bar top small">
+      <span class="where"><strong>{headingText}</strong> from {place}</span>
+      <span class="lenses" role="group" aria-label="Lens">
+        {#each LENSES as mm (mm)}
+          <button
+            type="button"
+            class:active={viewer.lens === mm}
+            aria-pressed={viewer.lens === mm}
+            onclick={() => {
+              viewer.lens = mm;
+              viewer.save();
+            }}>{mm}{compact ? '' : ' mm'}</button
+          >
+        {/each}
+      </span>
+    </div>
+    {#if viewer.status === 'loading'}
+      <p class="status small">Loading the terrain and working out the view…</p>
+    {:else if viewer.status === 'failed'}
+      <p class="status small">Couldn’t load the terrain for this view just now.</p>
+    {/if}
   </div>
-  {#if viewer.status === 'loading'}
-    <p class="status small">Loading the terrain and working out the view…</p>
-  {:else if viewer.status === 'failed'}
-    <p class="status small">Couldn’t load the terrain for this view just now.</p>
-  {/if}
+  {#if compact}{@render grip()}{/if}
 </div>
 
 <style>
+  .pano {
+    display: grid;
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--surface, #fff);
+  }
+  .grip {
+    height: 14px;
+    display: grid;
+    place-items: center;
+    cursor: ns-resize;
+    touch-action: none;
+    background: var(--surface, #fff);
+  }
+  .grip span {
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--ink, #1b2731) 30%, transparent);
+  }
+  .grip:hover span,
+  .grip:focus-visible span {
+    background: color-mix(in srgb, var(--ink, #1b2731) 60%, transparent);
+  }
+  .grip:focus-visible {
+    outline: 2px solid var(--accent, #1f4fa0);
+    outline-offset: -2px;
+  }
   .strip {
     position: relative;
     width: 100%;
     min-width: 0;
-    border-radius: 10px;
     overflow: hidden;
     touch-action: none;
     user-select: none;
